@@ -24,6 +24,9 @@ type RouterConfig struct {
 	AssetService   *usecase.AssetService
 	MusicService   *usecase.MusicService
 	CommentService *usecase.CommentService
+	ProductService *usecase.ProductService
+	OrderService   *usecase.OrderService
+	CouponService  *usecase.CouponService
 	TokenStore     *redis.TokenStore
 }
 
@@ -61,6 +64,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		assetHandler := handler.NewAssetHandler(cfg.AssetService)
 		musicHandler := handler.NewMusicHandler(cfg.MusicService)
 		commentHandler := handler.NewCommentHandler(cfg.CommentService)
+		productHandler := handler.NewProductHandler(cfg.ProductService)
+		orderHandler := handler.NewOrderHandler(cfg.OrderService)
+		couponHandler := handler.NewCouponHandler(cfg.CouponService)
 		authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)
 
 		// Auth routes (no auth required)
@@ -93,16 +99,23 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			admin := protected.Group("/admin")
 			admin.Use(authMiddleware.RequireRole(user.RoleAdmin))
 			{
-				// User management
-				admin.GET("/users", userHandler.ListUsers)
-				admin.PUT("/users/:id/role", userHandler.UpdateUserRole)
-				admin.PUT("/users/:id/status", userHandler.UpdateUserStatus)
-				admin.DELETE("/users/:id", userHandler.DeleteUser)
+				// Dashboard stats
+				adminHandler := handler.NewAdminHandler(cfg.GameService, cfg.UserService)
+				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
+				admin.GET("/stats/popular-games", adminHandler.GetPopularGames)
 
-				// Asset management
-				admin.POST("/users/:user_id/assets", assetHandler.GrantAsset)
-				admin.GET("/users/:user_id/assets", assetHandler.GetUserAssets)
-				admin.DELETE("/users/:user_id/assets", assetHandler.RevokeAsset)
+				// Game management
+				admin.GET("/games", adminHandler.ListGames)
+				admin.GET("/games/:id", adminHandler.GetGame)
+				admin.POST("/games", adminHandler.CreateGame)
+				admin.PUT("/games/:id", adminHandler.UpdateGame)
+				admin.DELETE("/games/:id", adminHandler.DeleteGame)
+
+				// User management
+				admin.GET("/users", adminHandler.ListUsers)
+				admin.PUT("/users/:id/role", adminHandler.UpdateUserRole)
+				admin.POST("/users/:id/ban", adminHandler.BanUser)
+				admin.POST("/users/:id/unban", adminHandler.UnbanUser)
 			}
 		}
 
@@ -212,6 +225,57 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				commentsProtected.DELETE("/:comment_id", commentHandler.DeleteComment)
 				commentsProtected.POST("/:comment_id/like", commentHandler.LikeComment)
 				commentsProtected.DELETE("/:comment_id/like", commentHandler.UnlikeComment)
+			}
+		}
+
+		// Product routes (public read)
+		products := v1.Group("/products")
+		{
+			products.GET("", productHandler.ListProducts)
+			products.GET("/:id", productHandler.GetProduct)
+
+			// Protected product routes (Admin only)
+			productsProtected := products.Group("")
+			productsProtected.Use(authMiddleware.Authenticate())
+			productsProtected.Use(authMiddleware.RequireRole(user.RoleAdmin))
+			{
+				productsProtected.POST("", productHandler.CreateProduct)
+				productsProtected.PUT("/:id", productHandler.UpdateProduct)
+				productsProtected.DELETE("/:id", productHandler.DeleteProduct)
+				productsProtected.POST("/discounts", productHandler.CreateDiscount)
+			}
+		}
+
+		// Order routes (authenticated users)
+		orders := v1.Group("/orders")
+		orders.Use(authMiddleware.Authenticate())
+		{
+			orders.POST("", orderHandler.CreateOrder)
+			orders.GET("", orderHandler.ListMyOrders)
+			orders.GET("/:id", orderHandler.GetOrder)
+			orders.POST("/:id/pay", orderHandler.PayOrder)
+			orders.POST("/:id/cancel", orderHandler.CancelOrder)
+		}
+
+		// Coupon routes
+		coupons := v1.Group("/coupons")
+		{
+			// Public coupon validation (authenticated)
+			couponsAuth := coupons.Group("")
+			couponsAuth.Use(authMiddleware.Authenticate())
+			{
+				couponsAuth.GET("/validate", couponHandler.ValidateCoupon)
+				couponsAuth.POST("/redeem", couponHandler.RedeemCode)
+			}
+
+			// Admin coupon management
+			couponsAdmin := coupons.Group("")
+			couponsAdmin.Use(authMiddleware.Authenticate())
+			couponsAdmin.Use(authMiddleware.RequireRole(user.RoleAdmin))
+			{
+				couponsAdmin.POST("", couponHandler.CreateCoupon)
+				couponsAdmin.POST("/redeem-codes", couponHandler.CreateRedeemCode)
+				couponsAdmin.POST("/redeem-codes/batch", couponHandler.BatchCreateRedeemCodes)
 			}
 		}
 	}
