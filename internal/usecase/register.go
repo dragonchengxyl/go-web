@@ -1,0 +1,57 @@
+package usecase
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/user"
+	"github.com/studio/platform/internal/pkg/apperr"
+	"github.com/studio/platform/internal/pkg/crypto"
+)
+
+// Register registers a new user
+func (s *UserService) Register(ctx context.Context, input RegisterInput) (*user.User, error) {
+	// Check if email exists
+	exists, err := s.userRepo.ExistsByEmail(ctx, input.Email)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "检查邮箱失败", err)
+	}
+	if exists {
+		return nil, apperr.ErrEmailExists
+	}
+
+	// Check if username exists
+	exists, err = s.userRepo.ExistsByUsername(ctx, input.Username)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "检查用户名失败", err)
+	}
+	if exists {
+		return nil, apperr.ErrUsernameExists
+	}
+
+	// Hash password
+	passwordHash, err := crypto.HashPassword(input.Password)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "密码加密失败", err)
+	}
+
+	// Create user
+	now := time.Now()
+	u := &user.User{
+		ID:           uuid.New(),
+		Username:     input.Username,
+		Email:        input.Email,
+		PasswordHash: passwordHash,
+		Role:         user.RolePlayer,
+		Status:       user.StatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+
+	if err := s.userRepo.Create(ctx, u); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "创建用户失败", err)
+	}
+
+	return u, nil
+}
