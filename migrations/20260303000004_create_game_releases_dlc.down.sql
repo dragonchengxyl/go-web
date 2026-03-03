@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS dlc;
+DROP TABLE IF EXISTS game_releases;

@@ -37,6 +37,7 @@ type User struct {
 	PasswordHash      string     `json:"-"`
 	AvatarKey         *string    `json:"avatar_key,omitempty"`
 	Bio               *string    `json:"bio,omitempty"`
+	Website           *string    `json:"website,omitempty"`
 	Location          *string    `json:"location,omitempty"`
 	Role              Role       `json:"role"`
 	Status            Status     `json:"status"`

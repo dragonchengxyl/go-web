@@ -35,7 +35,7 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 }
 
 const getUserByIDSQL = `
-	SELECT id, username, email, password_hash, avatar_key, bio, location, role, status,
+	SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
 	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE id = $1
 `
@@ -43,7 +43,7 @@ const getUserByIDSQL = `
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User, error) {
 	var u user.User
 	err := r.pool.QueryRow(ctx, getUserByIDSQL, id).Scan(
-		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Location,
+		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
 		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -57,7 +57,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 }
 
 const getUserByEmailSQL = `
-	SELECT id, username, email, password_hash, avatar_key, bio, location, role, status,
+	SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
 	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE email = $1
 `
@@ -65,7 +65,7 @@ const getUserByEmailSQL = `
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
 	var u user.User
 	err := r.pool.QueryRow(ctx, getUserByEmailSQL, email).Scan(
-		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Location,
+		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
 		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -79,7 +79,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 }
 
 const getUserByUsernameSQL = `
-	SELECT id, username, email, password_hash, avatar_key, bio, location, role, status,
+	SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
 	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE username = $1
 `
@@ -87,7 +87,7 @@ const getUserByUsernameSQL = `
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*user.User, error) {
 	var u user.User
 	err := r.pool.QueryRow(ctx, getUserByUsernameSQL, username).Scan(
-		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Location,
+		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
 		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -102,14 +102,14 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*u
 
 const updateUserSQL = `
 	UPDATE users
-	SET username = $2, email = $3, avatar_key = $4, bio = $5, location = $6,
-	    role = $7, status = $8, updated_at = $9
+	SET username = $2, email = $3, avatar_key = $4, bio = $5, website = $6, location = $7,
+	    role = $8, status = $9, updated_at = $10
 	WHERE id = $1
 `
 
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 	_, err := r.pool.Exec(ctx, updateUserSQL,
-		u.ID, u.Username, u.Email, u.AvatarKey, u.Bio, u.Location,
+		u.ID, u.Username, u.Email, u.AvatarKey, u.Bio, u.Website, u.Location,
 		u.Role, u.Status, u.UpdatedAt,
 	)
 	if err != nil {
@@ -152,4 +152,99 @@ func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) 
 		return false, fmt.Errorf("failed to check username existence: %w", err)
 	}
 	return exists, nil
+}
+
+// List retrieves users with pagination and filters
+func (r *UserRepository) List(ctx context.Context, filter user.ListFilter) ([]*user.User, int64, error) {
+	// Build query
+	query := `
+		SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
+		       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
+		FROM users
+		WHERE 1=1
+	`
+	countQuery := `SELECT COUNT(*) FROM users WHERE 1=1`
+	args := []interface{}{}
+	argIndex := 1
+
+	// Apply filters
+	if filter.Role != nil {
+		query += fmt.Sprintf(" AND role = $%d", argIndex)
+		countQuery += fmt.Sprintf(" AND role = $%d", argIndex)
+		args = append(args, *filter.Role)
+		argIndex++
+	}
+
+	if filter.Status != nil {
+		query += fmt.Sprintf(" AND status = $%d", argIndex)
+		countQuery += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *filter.Status)
+		argIndex++
+	}
+
+	if filter.Search != "" {
+		searchPattern := "%" + filter.Search + "%"
+		query += fmt.Sprintf(" AND (username ILIKE $%d OR email ILIKE $%d)", argIndex, argIndex)
+		countQuery += fmt.Sprintf(" AND (username ILIKE $%d OR email ILIKE $%d)", argIndex, argIndex)
+		args = append(args, searchPattern)
+		argIndex++
+	}
+
+	// Get total count
+	var total int64
+	err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count users: %w", err)
+	}
+
+	// Apply pagination
+	query += " ORDER BY created_at DESC"
+	if filter.PageSize > 0 {
+		offset := (filter.Page - 1) * filter.PageSize
+		query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+		args = append(args, filter.PageSize, offset)
+	}
+
+	// Execute query
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list users: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]*user.User, 0)
+	for rows.Next() {
+		var u user.User
+		err := rows.Scan(
+			&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
+			&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
+			&u.CreatedAt, &u.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &u)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("rows error: %w", err)
+	}
+
+	return users, total, nil
+}
+
+const deleteUserSQL = `DELETE FROM users WHERE id = $1`
+
+// Delete deletes a user by ID
+func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	result, err := r.pool.Exec(ctx, deleteUserSQL, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return user.ErrNotFound
+	}
+
+	return nil
 }

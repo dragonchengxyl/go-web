@@ -6,6 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// ListFilter represents filters for listing users
+type ListFilter struct {
+	Page     int
+	PageSize int
+	Role     *Role
+	Status   *Status
+	Search   string // Search by username or email
+}
+
 // Repository defines the interface for user data access
 type Repository interface {
 	// Create creates a new user
@@ -31,4 +40,10 @@ type Repository interface {
 
 	// ExistsByUsername checks if username exists
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
+
+	// List retrieves users with pagination and filters
+	List(ctx context.Context, filter ListFilter) ([]*User, int64, error)
+
+	// Delete deletes a user by ID
+	Delete(ctx context.Context, id uuid.UUID) error
 }

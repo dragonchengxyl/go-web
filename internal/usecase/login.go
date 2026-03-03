@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/studio/platform/internal/domain/permission"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/crypto"
@@ -59,7 +60,7 @@ func (s *UserService) Login(ctx context.Context, input LoginInput) (*AuthOutput,
 // generateTokens generates access and refresh tokens
 func (s *UserService) generateTokens(ctx context.Context, u *user.User, device, ip string) (*TokenOutput, error) {
 	userID := u.ID.String()
-	permissions := []string{} // TODO: load from role
+	permissions := permission.GetPermissionStrings(u.Role)
 
 	// Generate access token
 	accessToken, _, err := crypto.GenerateToken(

@@ -43,3 +43,14 @@ func (e *AppError) WithDetail(detail string) *AppError {
 	e.Detail = detail
 	return e
 }
+
+// BadRequest creates a bad request error
+func BadRequest(message string) *AppError {
+	return New(CodeInvalidParam, message)
+}
+
+// NotFound creates a not found error
+func NotFound(resource, field, value string) *AppError {
+	return New(CodeNotFound, fmt.Sprintf("%s not found: %s=%s", resource, field, value))
+}
+

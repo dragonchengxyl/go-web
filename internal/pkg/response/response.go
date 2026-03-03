@@ -28,6 +28,31 @@ func Success(c *gin.Context, data interface{}) {
 	})
 }
 
+// PaginationData represents paginated response data
+type PaginationData struct {
+	Items interface{} `json:"items"`
+	Total int         `json:"total"`
+	Page  int         `json:"page"`
+	Size  int         `json:"size"`
+}
+
+// SuccessWithPagination sends a success response with pagination info
+func SuccessWithPagination(c *gin.Context, items interface{}, total, page, pageSize int) {
+	requestID, _ := c.Get("request_id")
+	c.JSON(200, Response{
+		Code:    apperr.CodeSuccess,
+		Message: "success",
+		Data: PaginationData{
+			Items: items,
+			Total: total,
+			Page:  page,
+			Size:  pageSize,
+		},
+		RequestID: requestID.(string),
+		Timestamp: time.Now().Unix(),
+	})
+}
+
 // Error sends an error response
 func Error(c *gin.Context, err error) {
 	requestID, _ := c.Get("request_id")

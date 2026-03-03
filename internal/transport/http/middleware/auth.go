@@ -4,7 +4,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/domain/permission"
+	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/redis"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/crypto"
@@ -75,3 +78,83 @@ func (a *Auth) Authenticate() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RequirePermission checks if user has required permission
+func (a *Auth) RequirePermission(perm permission.Permission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get role from context
+		roleStr, exists := c.Get("role")
+		if !exists {
+			response.Error(c, apperr.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		role := user.Role(roleStr.(string))
+
+		// Check permission
+		if !permission.HasPermission(role, perm) {
+			response.Error(c, apperr.ErrForbidden)
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// RequireRole checks if user has required role or higher
+func (a *Auth) RequireRole(requiredRole user.Role) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get role from context
+		roleStr, exists := c.Get("role")
+		if !exists {
+			response.Error(c, apperr.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		role := user.Role(roleStr.(string))
+
+		// Check role hierarchy
+		if !hasRoleOrHigher(role, requiredRole) {
+			response.Error(c, apperr.ErrForbidden)
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// hasRoleOrHigher checks if user role is equal or higher than required role
+func hasRoleOrHigher(userRole, requiredRole user.Role) bool {
+	roleHierarchy := map[user.Role]int{
+		user.RoleSuperAdmin: 7,
+		user.RoleAdmin:      6,
+		user.RoleModerator:  5,
+		user.RoleCreator:    4,
+		user.RolePremium:    3,
+		user.RolePlayer:     2,
+		user.RoleGuest:      1,
+	}
+
+	userLevel := roleHierarchy[userRole]
+	requiredLevel := roleHierarchy[requiredRole]
+
+	return userLevel >= requiredLevel
+}
+
+// GetUserID extracts user ID from context
+func GetUserID(c *gin.Context) uuid.UUID {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		return uuid.Nil
+	}
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		return uuid.Nil
+	}
+	return userID
+}
+

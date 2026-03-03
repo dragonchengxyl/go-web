@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(go mod:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(go version:*)",
+      "Bash(/usr/local/go/bin/go version:*)",
+      "Bash(GOTOOLCHAIN=local go build:*)",
+      "Bash(GOTOOLCHAIN=go1.23.0 go build:*)",
+      "Bash(export:*)"
     ]
   }
 }

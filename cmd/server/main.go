@@ -51,20 +51,39 @@ func main() {
 
 	// Initialize repositories
 	userRepo := postgres.NewUserRepository(pool)
+	gameRepo := postgres.NewGameRepository(pool)
+	branchRepo := postgres.NewBranchRepository(pool)
+	releaseRepo := postgres.NewReleaseRepository(pool)
+	assetRepo := postgres.NewAssetRepository(pool)
+	albumRepo := postgres.NewAlbumRepository(pool)
+	trackRepo := postgres.NewTrackRepository(pool)
+	commentRepo := postgres.NewCommentRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
 
 	// Initialize services
 	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT)
+	gameService := usecase.NewGameService(gameRepo)
+	branchService := usecase.NewBranchService(branchRepo, gameRepo)
+	releaseService := usecase.NewReleaseService(releaseRepo, branchRepo)
+	assetService := usecase.NewAssetService(assetRepo, gameRepo, branchRepo, releaseRepo)
+	musicService := usecase.NewMusicService(albumRepo, trackRepo)
+	commentService := usecase.NewCommentService(commentRepo)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
-		Config:      cfg,
-		Logger:      logger,
-		RedisClient: redisClient,
-		UserService: userService,
-		TokenStore:  tokenStore,
+		Config:         cfg,
+		Logger:         logger,
+		RedisClient:    redisClient,
+		UserService:    userService,
+		GameService:    gameService,
+		BranchService:  branchService,
+		ReleaseService: releaseService,
+		AssetService:   assetService,
+		MusicService:   musicService,
+		CommentService: commentService,
+		TokenStore:     tokenStore,
 	})
 
 	// Start server
