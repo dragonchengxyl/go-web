@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"go-web/internal/domain/coupon"
-	"go-web/internal/pkg/response"
-	"go-web/internal/transport/http/middleware"
-	"go-web/internal/usecase"
+	"github.com/studio/platform/internal/domain/coupon"
+	"github.com/studio/platform/internal/pkg/apperr"
+	"github.com/studio/platform/internal/pkg/response"
+	"github.com/studio/platform/internal/transport/http/middleware"
+	"github.com/studio/platform/internal/usecase"
 )
 
 type CouponHandler struct {
@@ -26,12 +25,12 @@ func NewCouponHandler(couponService *usecase.CouponService) *CouponHandler {
 func (h *CouponHandler) CreateCoupon(c *gin.Context) {
 	var req coupon.Coupon
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
 		return
 	}
 
 	if err := h.couponService.CreateCoupon(c.Request.Context(), &req); err != nil {
-		response.Error(c, http.StatusInternalServerError, "failed to create coupon", err)
+		response.Error(c, err)
 		return
 	}
 
@@ -44,13 +43,13 @@ func (h *CouponHandler) ValidateCoupon(c *gin.Context) {
 	code := c.Query("code")
 
 	if code == "" {
-		response.Error(c, http.StatusBadRequest, "coupon code is required", nil)
+		response.Error(c, apperr.BadRequest("coupon code is required"))
 		return
 	}
 
 	couponEntity, err := h.couponService.ValidateCoupon(c.Request.Context(), code, userID)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid coupon", err)
+		response.Error(c, err)
 		return
 	}
 
@@ -61,12 +60,12 @@ func (h *CouponHandler) ValidateCoupon(c *gin.Context) {
 func (h *CouponHandler) CreateRedeemCode(c *gin.Context) {
 	var req coupon.RedeemCode
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
 		return
 	}
 
 	if err := h.couponService.CreateRedeemCode(c.Request.Context(), &req); err != nil {
-		response.Error(c, http.StatusInternalServerError, "failed to create redeem code", err)
+		response.Error(c, err)
 		return
 	}
 
@@ -83,13 +82,13 @@ func (h *CouponHandler) BatchCreateRedeemCodes(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
 		return
 	}
 
 	codes, err := h.couponService.BatchCreateRedeemCodes(c.Request.Context(), req.ProductID, req.Description, req.Count, req.ExpiresAt)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "failed to batch create redeem codes", err)
+		response.Error(c, err)
 		return
 	}
 
@@ -105,13 +104,13 @@ func (h *CouponHandler) RedeemCode(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
 		return
 	}
 
 	rc, err := h.couponService.RedeemCode(c.Request.Context(), req.Code, userID)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "failed to redeem code", err)
+		response.Error(c, err)
 		return
 	}
 

@@ -40,3 +40,18 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Frontend / Node.js
+node_modules/
+.pnp
+.pnp.js
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+.turbo
+.vercel
+coverage/
+

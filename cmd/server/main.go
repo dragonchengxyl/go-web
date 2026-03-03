@@ -58,6 +58,9 @@ func main() {
 	albumRepo := postgres.NewAlbumRepository(pool)
 	trackRepo := postgres.NewTrackRepository(pool)
 	commentRepo := postgres.NewCommentRepository(pool)
+	productRepo := postgres.NewProductRepository(pool)
+	orderRepo := postgres.NewOrderRepository(pool)
+	couponRepo := postgres.NewCouponRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
@@ -70,6 +73,9 @@ func main() {
 	assetService := usecase.NewAssetService(assetRepo, gameRepo, branchRepo, releaseRepo)
 	musicService := usecase.NewMusicService(albumRepo, trackRepo)
 	commentService := usecase.NewCommentService(commentRepo)
+	productService := usecase.NewProductService(productRepo)
+	orderService := usecase.NewOrderService(orderRepo, productRepo, couponRepo)
+	couponService := usecase.NewCouponService(couponRepo, productRepo)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
@@ -83,6 +89,9 @@ func main() {
 		AssetService:   assetService,
 		MusicService:   musicService,
 		CommentService: commentService,
+		ProductService: productService,
+		OrderService:   orderService,
+		CouponService:  couponService,
 		TokenStore:     tokenStore,
 	})
 

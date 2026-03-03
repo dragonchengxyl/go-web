@@ -1,16 +1,16 @@
 package handler
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"go-web/internal/domain/order"
-	"go-web/internal/pkg/response"
-	"go-web/internal/transport/http/middleware"
-	"go-web/internal/usecase"
+	"github.com/studio/platform/internal/domain/order"
+	"github.com/studio/platform/internal/pkg/apperr"
+	"github.com/studio/platform/internal/pkg/response"
+	"github.com/studio/platform/internal/transport/http/middleware"
+	"github.com/studio/platform/internal/usecase"
 )
 
 type OrderHandler struct {
@@ -34,7 +34,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 	o, err := h.orderService.CreateOrder(c.Request.Context(), createReq)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "failed to create order", err)
+		response.Error(c, err)
 		return
 	}
 
@@ -61,19 +61,19 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid order id", err)
+		response.Error(c, apperr.BadRequest("invalid order id"))
 		return
 	}
 
 	o, err := h.orderService.GetOrder(c.Request.Context(), id)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "order not found", err)
+		response.Error(c, err)
 		return
 	}
 
 	// 检查订单是否属于当前用户
 	if o.UserID != userID {
-		response.Error(c, http.StatusForbidden, "access denied", nil)
+		response.Error(c, apperr.ErrForbidden)
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *OrderHandler) ListMyOrders(c *gin.Context) {
 
 	orders, total, err := h.orderService.ListUserOrders(c.Request.Context(), userID, page, pageSize)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, "failed to list orders", err)
+		response.Error(c, err)
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *OrderHandler) PayOrder(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid order id", err)
+		response.Error(c, apperr.BadRequest("invalid order id"))
 		return
 	}
 
@@ -112,24 +112,24 @@ func (h *OrderHandler) PayOrder(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request", err)
+		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
 		return
 	}
 
 	// 检查订单是否属于当前用户
 	o, err := h.orderService.GetOrder(c.Request.Context(), id)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "order not found", err)
+		response.Error(c, err)
 		return
 	}
 
 	if o.UserID != userID {
-		response.Error(c, http.StatusForbidden, "access denied", nil)
+		response.Error(c, apperr.ErrForbidden)
 		return
 	}
 
 	if err := h.orderService.PayOrder(c.Request.Context(), id, req.PaymentMethod); err != nil {
-		response.Error(c, http.StatusInternalServerError, "failed to pay order", err)
+		response.Error(c, err)
 		return
 	}
 
@@ -143,24 +143,24 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid order id", err)
+		response.Error(c, apperr.BadRequest("invalid order id"))
 		return
 	}
 
 	// 检查订单是否属于当前用户
 	o, err := h.orderService.GetOrder(c.Request.Context(), id)
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "order not found", err)
+		response.Error(c, err)
 		return
 	}
 
 	if o.UserID != userID {
-		response.Error(c, http.StatusForbidden, "access denied", nil)
+		response.Error(c, apperr.ErrForbidden)
 		return
 	}
 
 	if err := h.orderService.CancelOrder(c.Request.Context(), id); err != nil {
-		response.Error(c, http.StatusInternalServerError, "failed to cancel order", err)
+		response.Error(c, err)
 		return
 	}
 
