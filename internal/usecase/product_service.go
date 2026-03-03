@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"go-web/internal/domain/product"
+	"github.com/studio/platform/internal/domain/product"
 )
 
 type ProductService struct {

@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"go-web/internal/domain/product"
-	"go-web/pkg/apperr"
+	"github.com/studio/platform/internal/domain/product"
+	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 type productRepo struct {

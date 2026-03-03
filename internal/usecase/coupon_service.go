@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"go-web/internal/domain/coupon"
-	"go-web/internal/domain/product"
-	"go-web/pkg/apperr"
+	"github.com/studio/platform/internal/domain/coupon"
+	"github.com/studio/platform/internal/domain/product"
+	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 type CouponService struct {

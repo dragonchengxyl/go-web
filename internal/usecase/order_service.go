@@ -7,10 +7,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"go-web/internal/domain/coupon"
-	"go-web/internal/domain/order"
-	"go-web/internal/domain/product"
-	"go-web/pkg/apperr"
+	"github.com/studio/platform/internal/domain/coupon"
+	"github.com/studio/platform/internal/domain/order"
+	"github.com/studio/platform/internal/domain/product"
+	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 type OrderService struct {

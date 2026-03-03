@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useCartStore } from '@/lib/store/cart';
+import { GlobalSearch } from '@/components/search/global-search';
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -31,15 +32,20 @@ export function Header() {
       )}
     >
       <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
+          <Link href="/" className="flex items-center space-x-2 flex-shrink-0">
             <div className="w-8 h-8 bg-primary rounded-lg" />
             <span className="font-bold text-xl">Studio</span>
           </Link>
 
+          {/* Search Bar - Desktop */}
+          <div className="hidden md:block flex-1 max-w-2xl mx-4">
+            <GlobalSearch />
+          </div>
+
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
+          <nav className="hidden md:flex items-center space-x-8 flex-shrink-0">
             <Link
               href="/games"
               className="text-sm font-medium hover:text-primary transition-colors"

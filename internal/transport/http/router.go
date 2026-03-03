@@ -100,68 +100,66 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			admin.Use(authMiddleware.RequireRole(user.RoleAdmin))
 			{
 				// Dashboard stats
-				adminHandler := handler.NewAdminHandler(cfg.GameService, cfg.UserService)
-				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
-				admin.GET("/stats/popular-games", adminHandler.GetPopularGames)
-
-				// Game management
-				admin.GET("/games", adminHandler.ListGames)
-				admin.GET("/games/:id", adminHandler.GetGame)
-				admin.POST("/games", adminHandler.CreateGame)
-				admin.PUT("/games/:id", adminHandler.UpdateGame)
-				admin.DELETE("/games/:id", adminHandler.DeleteGame)
-
-				// User management
-				admin.GET("/users", adminHandler.ListUsers)
-				admin.PUT("/users/:id/role", adminHandler.UpdateUserRole)
-				admin.POST("/users/:id/ban", adminHandler.BanUser)
-				admin.POST("/users/:id/unban", adminHandler.UnbanUser)
+// 				adminHandler := handler.NewAdminHandler(cfg.GameService, cfg.UserService)
+// 				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
+// 				admin.GET("/stats/popular-games", adminHandler.GetPopularGames)
+// 
+// 				// Game management
+// 				admin.GET("/games", adminHandler.ListGames)
+// 				admin.GET("/games/:id", adminHandler.GetGame)
+// 				admin.POST("/games", adminHandler.CreateGame)
+// 				admin.PUT("/games/:id", adminHandler.UpdateGame)
+// 				admin.DELETE("/games/:id", adminHandler.DeleteGame)
+// 
+// 				// User management
+// 				admin.GET("/users", adminHandler.ListUsers)
+// 				admin.PUT("/users/:id/role", adminHandler.UpdateUserRole)
+// 				admin.POST("/users/:id/ban", adminHandler.BanUser)
+// 				admin.POST("/users/:id/unban", adminHandler.UnbanUser)
 			}
 		}
 
-		// Game routes (public)
-		games := v1.Group("/games")
-		{
-			games.GET("", gameHandler.ListGames)
-			games.GET("/:id", gameHandler.GetGameByID)
-			games.GET("/slug/:slug", gameHandler.GetGameBySlug)
+// Game routes (public)
+games := v1.Group("/games")
+{
+	games.GET("", gameHandler.ListGames)
+	games.GET("/slug/:slug", gameHandler.GetGameBySlug)
+	games.GET("/:id", gameHandler.GetGameByID)
 
-			// Branch routes (public read)
-			games.GET("/:game_id/branches", branchHandler.ListBranches)
+	// Protected game routes (Admin only)
+	gamesProtected := games.Group("")
+	gamesProtected.Use(authMiddleware.Authenticate())
+	gamesProtected.Use(authMiddleware.RequireRole(user.RoleAdmin))
+	{
+		gamesProtected.POST("", gameHandler.CreateGame)
+		gamesProtected.PUT("/:id", gameHandler.UpdateGame)
+		gamesProtected.DELETE("/:id", gameHandler.DeleteGame)
+	}
+}
 
-			// Protected game routes (Admin only)
-			gamesProtected := games.Group("")
-			gamesProtected.Use(authMiddleware.Authenticate())
-			gamesProtected.Use(authMiddleware.RequireRole(user.RoleAdmin))
-			{
-				gamesProtected.POST("", gameHandler.CreateGame)
-				gamesProtected.PUT("/:id", gameHandler.UpdateGame)
-				gamesProtected.DELETE("/:id", gameHandler.DeleteGame)
+// Branch routes
+branches := v1.Group("/branches")
+{
+	branches.GET("/:branch_id", branchHandler.GetBranch)
+	branches.GET("/:branch_id/releases", releaseHandler.ListReleases)
+	branches.GET("/:branch_id/releases/latest", releaseHandler.GetLatestRelease)
 
-				// Branch management (Admin only)
-				gamesProtected.POST("/:game_id/branches", branchHandler.CreateBranch)
-			}
-		}
+	// Protected branch routes (Admin only)
+	branchesProtected := branches.Group("")
+	branchesProtected.Use(authMiddleware.Authenticate())
+	branchesProtected.Use(authMiddleware.RequireRole(user.RoleAdmin))
+	{
+		branchesProtected.PUT("/:branch_id", branchHandler.UpdateBranch)
+		branchesProtected.DELETE("/:branch_id", branchHandler.DeleteBranch)
 
-		// Branch routes
-		branches := v1.Group("/branches")
-		{
-			branches.GET("/:branch_id", branchHandler.GetBranch)
-			branches.GET("/:branch_id/releases", releaseHandler.ListReleases)
-			branches.GET("/:branch_id/releases/latest", releaseHandler.GetLatestRelease)
+		// Release management (Admin only)
+		branchesProtected.POST("/:branch_id/releases", releaseHandler.CreateRelease)
+	}
+}
 
-			// Protected branch routes (Admin only)
-			branchesProtected := branches.Group("")
-			branchesProtected.Use(authMiddleware.Authenticate())
-			branchesProtected.Use(authMiddleware.RequireRole(user.RoleAdmin))
-			{
-				branchesProtected.PUT("/:branch_id", branchHandler.UpdateBranch)
-				branchesProtected.DELETE("/:branch_id", branchHandler.DeleteBranch)
-
-				// Release management (Admin only)
-				branchesProtected.POST("/:branch_id/releases", releaseHandler.CreateRelease)
-			}
-		}
+// Game-Branch relationship (use /games/:id/branches)
+v1.GET("/games/:id/branches", branchHandler.ListBranches)
+v1.POST("/games/:id/branches", authMiddleware.Authenticate(), authMiddleware.RequireRole(user.RoleAdmin), branchHandler.CreateBranch)
 
 		// Release routes
 		releases := v1.Group("/releases")

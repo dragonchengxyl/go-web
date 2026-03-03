@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"go-web/internal/domain/coupon"
-	"go-web/pkg/apperr"
+	"github.com/studio/platform/internal/domain/coupon"
+	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 type couponRepo struct {

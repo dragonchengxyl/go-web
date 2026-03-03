@@ -7,7 +7,22 @@
       "Bash(/usr/local/go/bin/go version:*)",
       "Bash(GOTOOLCHAIN=local go build:*)",
       "Bash(GOTOOLCHAIN=go1.23.0 go build:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(test:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker:*)",
+      "Bash(psql:*)",
+      "Bash(PGPASSWORD=password psql:*)",
+      "Bash(do:*)",
+      "Bash(redis-cli ping:*)",
+      "Bash(lsof:*)",
+      "Bash(./bin/server:*)",
+      "Bash(curl:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm dev:*)"
     ]
   }
 }
