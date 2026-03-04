@@ -2,6 +2,7 @@ package http
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/redis"
@@ -16,6 +17,7 @@ import (
 type RouterConfig struct {
 	Config         *configs.Config
 	Logger         *zap.Logger
+	Pool           *pgxpool.Pool
 	RedisClient    *redisClient.Client
 	UserService    *usecase.UserService
 	GameService    *usecase.GameService
@@ -41,14 +43,15 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.Use(middleware.Recovery())
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger(cfg.Logger))
-	r.Use(middleware.CORS())
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.CORS(cfg.Config.Server.AllowOrigins))
 
 	// Rate limiter
 	rateLimiter := middleware.NewRateLimiter(cfg.RedisClient, cfg.Config.RateLimit)
 	r.Use(rateLimiter.Limit())
 
 	// Health check endpoints (no auth required)
-	healthHandler := handler.NewHealthHandler()
+	healthHandler := handler.NewHealthHandler(cfg.Pool, cfg.RedisClient)
 	r.GET("/health", healthHandler.Health)
 	r.GET("/ready", healthHandler.Ready)
 

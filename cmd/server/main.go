@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -81,6 +82,7 @@ func main() {
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
 		Config:         cfg,
 		Logger:         logger,
+		Pool:           pool,
 		RedisClient:    redisClient,
 		UserService:    userService,
 		GameService:    gameService,
@@ -99,8 +101,13 @@ func main() {
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	logger.Info("Starting server", zap.String("addr", addr))
 
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: router,
+	}
+
 	go func() {
-		if err := router.Run(addr); err != nil {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("Failed to start server", zap.Error(err))
 		}
 	}()
@@ -112,11 +119,15 @@ func main() {
 
 	logger.Info("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = ctx // TODO: implement graceful shutdown
 
-	logger.Info("Server stopped")
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("Server forced to shutdown", zap.Error(err))
+	}
+
+	logger.Info("Server stopped gracefully")
 }
 
 func initLogger(mode string) (*zap.Logger, error) {

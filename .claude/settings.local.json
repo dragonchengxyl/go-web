@@ -22,7 +22,11 @@
       "Bash(./bin/server:*)",
       "Bash(curl:*)",
       "Bash(pnpm install:*)",
-      "Bash(pnpm dev:*)"
+      "Bash(pnpm dev:*)",
+      "Bash(xargs ls:*)",
+      "Bash(xargs cat:*)",
+      "Bash(chmod +x:*)",
+      "Bash(/home/chenlongting/go-web/.env.example:*)"
     ]
   }
 }
