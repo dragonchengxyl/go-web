@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Button } from '@/components/ui/button';
@@ -10,70 +11,40 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCartStore } from '@/lib/store/cart';
 import { formatPrice } from '@/lib/utils';
 import { CreditCard, Smartphone, Loader2 } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, getTotalPrice, clearCart } = useCartStore();
-  const [isProcessing, setIsProcessing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'alipay' | 'wechat' | 'stripe'>('alipay');
   const [couponCode, setCouponCode] = useState('');
 
   const totalPrice = getTotalPrice();
-  const discount = 0; // TODO: Implement coupon logic
+  const discount = 0;
   const finalPrice = totalPrice - discount;
 
-  const handleCheckout = async () => {
-    setIsProcessing(true);
+  const checkoutMutation = useMutation({
+    mutationFn: async () => {
+      const order = await apiClient.createOrder(
+        items.map(item => ({ product_id: item.productId })),
+        couponCode || undefined,
+        `order_${Date.now()}`
+      );
 
-    try {
-      // Create order
-      const response = await fetch('/api/v1/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-        body: JSON.stringify({
-          items: items.map(item => ({
-            product_id: item.productId,
-            quantity: item.quantity,
-          })),
-          coupon_code: couponCode || undefined,
-          idempotency_key: `order_${Date.now()}`,
-        }),
-      });
+      await apiClient.payOrder(order.id, paymentMethod);
+      return order;
+    },
+    onSuccess: (order) => {
+      clearCart();
+      router.push(`/orders/${order.id}?success=true`);
+    },
+    onError: (error: any) => {
+      alert(error.message || '结账失败，请重试');
+    },
+  });
 
-      if (response.ok) {
-        const data = await response.json();
-        const orderId = data.data.id;
-
-        // Process payment
-        const paymentResponse = await fetch(`/api/v1/orders/${orderId}/pay`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-          },
-          body: JSON.stringify({
-            payment_method: paymentMethod,
-          }),
-        });
-
-        if (paymentResponse.ok) {
-          clearCart();
-          router.push(`/orders/${orderId}?success=true`);
-        } else {
-          throw new Error('Payment failed');
-        }
-      } else {
-        throw new Error('Order creation failed');
-      }
-    } catch (error) {
-      console.error('Checkout error:', error);
-      alert('结账失败，请重试');
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleCheckout = () => {
+    checkoutMutation.mutate();
   };
 
   if (items.length === 0) {
@@ -223,11 +194,11 @@ export default function CheckoutPage() {
 
                   <Button
                     onClick={handleCheckout}
-                    disabled={isProcessing}
+                    disabled={checkoutMutation.isPending}
                     className="w-full"
                     size="lg"
                   >
-                    {isProcessing ? (
+                    {checkoutMutation.isPending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         处理中...

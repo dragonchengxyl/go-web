@@ -35,14 +35,9 @@ export default function SearchPage() {
   const searchParams = useSearchParams()
   const query = searchParams.get('q') || ''
 
-  const { data: results, isLoading } = useQuery<SearchResult>({
+  const { data: results, isLoading } = useQuery({
     queryKey: ['search', query],
-    queryFn: async () => {
-      const response = await apiClient.get('/search', {
-        params: { q: query },
-      })
-      return response.data.data
-    },
+    queryFn: () => apiClient.searchAll(query),
     enabled: !!query,
   })
 

@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mail, Lock, User } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,8 +18,17 @@ export default function RegisterPage() {
     password: '',
     confirmPassword: '',
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const registerMutation = useMutation({
+    mutationFn: () => apiClient.register(formData.username, formData.email, formData.password),
+    onSuccess: () => {
+      router.push('/login?registered=true');
+    },
+    onError: (err: any) => {
+      setError(err.message || '注册失败，请重试');
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,33 +39,7 @@ export default function RegisterPage() {
       return;
     }
 
-    setIsLoading(true);
-
-    try {
-      // TODO: Implement actual registration API call
-      const response = await fetch('/api/v1/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-        }),
-      });
-
-      if (response.ok) {
-        router.push('/login?registered=true');
-      } else {
-        const data = await response.json();
-        setError(data.message || '注册失败，请重试');
-      }
-    } catch (err) {
-      setError('网络错误，请稍后重试');
-    } finally {
-      setIsLoading(false);
-    }
+    registerMutation.mutate();
   };
 
   return (
@@ -156,8 +141,8 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? '注册中...' : '注册'}
+            <Button type="submit" className="w-full" disabled={registerMutation.isPending}>
+              {registerMutation.isPending ? '注册中...' : '注册'}
             </Button>
           </form>
         </CardContent>

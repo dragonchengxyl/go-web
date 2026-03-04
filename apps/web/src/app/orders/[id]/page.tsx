@@ -3,6 +3,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
+import { Header } from '@/components/layout/header'
+import { Footer } from '@/components/layout/footer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,19 +37,14 @@ export default function OrderDetailPage() {
   const router = useRouter()
   const orderId = params.id as string
 
-  const { data: order, isLoading } = useQuery<OrderDetail>({
+  const { data: order, isLoading } = useQuery({
     queryKey: ['order', orderId],
-    queryFn: async () => {
-      const response = await apiClient.get(`/orders/${orderId}`)
-      return response.data.data
-    },
+    queryFn: () => apiClient.getOrder(orderId),
   })
 
   const handlePayment = async () => {
     try {
-      await apiClient.post(`/orders/${orderId}/pay`, {
-        payment_method: order?.payment_method || 'alipay',
-      })
+      await apiClient.payOrder(orderId, order?.payment_method || 'alipay')
       alert('支付成功！')
       router.push('/orders')
     } catch (error) {
@@ -69,25 +66,40 @@ export default function OrderDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">加载中...</div>
+      <div className="min-h-screen">
+        <Header />
+        <main className="pt-16">
+          <div className="container mx-auto px-4 py-8">
+            <div className="text-center">加载中...</div>
+          </div>
+        </main>
+        <Footer />
       </div>
     )
   }
 
   if (!order) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">订单不存在</div>
+      <div className="min-h-screen">
+        <Header />
+        <main className="pt-16">
+          <div className="container mx-auto px-4 py-8">
+            <div className="text-center">订单不存在</div>
+          </div>
+        </main>
+        <Footer />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <Button variant="outline" onClick={() => router.back()} className="mb-4">
-        返回
-      </Button>
+    <div className="min-h-screen">
+      <Header />
+      <main className="pt-16">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          <Button variant="outline" onClick={() => router.back()} className="mb-4">
+            返回
+          </Button>
 
       <Card className="mb-6">
         <CardHeader>
@@ -144,10 +156,10 @@ export default function OrderDetailPage() {
               <div key={item.id} className="flex justify-between items-center pb-4 border-b last:border-b-0">
                 <div>
                   <p className="font-medium">{item.product_name}</p>
-                  <p className="text-sm text-gray-500">单价: ¥{item.price.toFixed(2)}</p>
+                  <p className="text-sm text-gray-500">单价: ¥{(item.price / 100).toFixed(2)}</p>
                   <p className="text-sm text-gray-500">数量: {item.quantity}</p>
                 </div>
-                <p className="font-bold">¥{item.subtotal.toFixed(2)}</p>
+                <p className="font-bold">¥{(item.subtotal / 100).toFixed(2)}</p>
               </div>
             ))}
           </div>
@@ -162,17 +174,17 @@ export default function OrderDetailPage() {
           <div className="space-y-2">
             <div className="flex justify-between">
               <span>商品总额</span>
-              <span>¥{order.total_amount.toFixed(2)}</span>
+              <span>¥{(order.total_amount / 100).toFixed(2)}</span>
             </div>
             {order.discount_amount > 0 && (
               <div className="flex justify-between text-green-600">
                 <span>优惠金额</span>
-                <span>-¥{order.discount_amount.toFixed(2)}</span>
+                <span>-¥{(order.discount_amount / 100).toFixed(2)}</span>
               </div>
             )}
             <div className="border-t pt-2 flex justify-between font-bold text-lg">
               <span>实付金额</span>
-              <span className="text-red-600">¥{order.final_amount.toFixed(2)}</span>
+              <span className="text-red-600">¥{(order.final_amount / 100).toFixed(2)}</span>
             </div>
           </div>
 
@@ -190,6 +202,9 @@ export default function OrderDetailPage() {
           </div>
         </CardContent>
       </Card>
+        </div>
+      </main>
+      <Footer />
     </div>
   )
 }

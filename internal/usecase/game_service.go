@@ -264,3 +264,26 @@ func (s *GameService) DeleteGame(ctx context.Context, gameID uuid.UUID) error {
 
 	return nil
 }
+
+// SearchGames searches games by query string
+func (s *GameService) SearchGames(ctx context.Context, query string, limit int) ([]*game.Game, error) {
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	input := ListGamesInput{
+		Page:     1,
+		PageSize: limit,
+		Search:   query,
+	}
+
+	output, err := s.ListGames(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	return output.Games, nil
+}

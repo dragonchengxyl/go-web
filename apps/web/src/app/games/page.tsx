@@ -1,75 +1,49 @@
-import { Metadata } from 'next';
+'use client';
+
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { GameCard } from '@/components/game/game-card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
-
-export const metadata: Metadata = {
-  title: '游戏列表 - 独立游戏工作室',
-  description: '探索我们的所有游戏作品',
-};
-
-// Mock data - would come from API
-const games = [
-  {
-    id: '1',
-    title: '神秘森林',
-    slug: 'mystery-forest',
-    description: '探索充满谜题的神秘森林，揭开隐藏的秘密',
-    coverImage: '/images/games/game1.jpg',
-    price: 4900,
-    tags: ['冒险', '解谜'],
-  },
-  {
-    id: '2',
-    title: '像素王国',
-    slug: 'pixel-kingdom',
-    description: '建造你的像素王国，成为最强大的统治者',
-    coverImage: '/images/games/game2.jpg',
-    price: 3900,
-    tags: ['策略', '建造'],
-  },
-  {
-    id: '3',
-    title: '星际旅行',
-    slug: 'space-journey',
-    description: '驾驶飞船穿越星系，探索未知的宇宙',
-    coverImage: '/images/games/game3.jpg',
-    price: 5900,
-    tags: ['科幻', '探索'],
-  },
-  {
-    id: '4',
-    title: '地下城冒险',
-    slug: 'dungeon-adventure',
-    description: '深入危险的地下城，寻找传说中的宝藏',
-    coverImage: '/images/games/game4.jpg',
-    price: 4500,
-    tags: ['RPG', '冒险'],
-  },
-  {
-    id: '5',
-    title: '时间旅行者',
-    slug: 'time-traveler',
-    description: '穿越时空，改变历史的进程',
-    coverImage: '/images/games/game5.jpg',
-    price: 5500,
-    tags: ['冒险', '科幻'],
-  },
-  {
-    id: '6',
-    title: '魔法学院',
-    slug: 'magic-academy',
-    description: '在魔法学院学习魔法，成为最强大的魔法师',
-    coverImage: '/images/games/game6.jpg',
-    price: 4200,
-    tags: ['RPG', '魔法'],
-  },
-];
+import { apiClient } from '@/lib/api-client';
 
 export default function GamesPage() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
+  // Fetch games
+  const { data: gamesData, isLoading: gamesLoading } = useQuery({
+    queryKey: ['games', page, searchQuery, selectedTag],
+    queryFn: () => apiClient.getGames({
+      page,
+      page_size: 12,
+      search: searchQuery || undefined,
+      tag: selectedTag || undefined,
+    }),
+  });
+
+  // Fetch products to get prices
+  const { data: productsData } = useQuery({
+    queryKey: ['products', 'game'],
+    queryFn: () => apiClient.getProducts({ product_type: 'game', is_active: true }),
+  });
+
+  // Merge games with product prices
+  const games = gamesData?.games?.map(game => {
+    const product = productsData?.products?.find(p => p.entity_id === game.id);
+    return {
+      ...game,
+      price: product?.price_cents || 0,
+      productId: product?.id,
+    };
+  }) || [];
+
+  const tags = ['冒险', '解谜', 'RPG', '策略', '科幻', '动作'];
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -91,9 +65,11 @@ export default function GamesPage() {
                     type="search"
                     placeholder="搜索游戏..."
                     className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-                <Button>搜索</Button>
+                <Button onClick={() => setPage(1)}>搜索</Button>
               </div>
             </div>
           </div>
@@ -103,24 +79,23 @@ export default function GamesPage() {
         <section className="border-b">
           <div className="container mx-auto px-4 py-6">
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm">
+              <Button
+                variant={selectedTag === null ? 'outline' : 'ghost'}
+                size="sm"
+                onClick={() => setSelectedTag(null)}
+              >
                 全部
               </Button>
-              <Button variant="ghost" size="sm">
-                冒险
-              </Button>
-              <Button variant="ghost" size="sm">
-                解谜
-              </Button>
-              <Button variant="ghost" size="sm">
-                RPG
-              </Button>
-              <Button variant="ghost" size="sm">
-                策略
-              </Button>
-              <Button variant="ghost" size="sm">
-                科幻
-              </Button>
+              {tags.map(tag => (
+                <Button
+                  key={tag}
+                  variant={selectedTag === tag ? 'outline' : 'ghost'}
+                  size="sm"
+                  onClick={() => setSelectedTag(tag)}
+                >
+                  {tag}
+                </Button>
+              ))}
             </div>
           </div>
         </section>
@@ -128,22 +103,42 @@ export default function GamesPage() {
         {/* Games Grid */}
         <section className="py-12">
           <div className="container mx-auto px-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {games.map((game) => (
-                <GameCard key={game.id} game={game} />
-              ))}
-            </div>
+            {gamesLoading ? (
+              <div className="text-center py-12">加载中...</div>
+            ) : games.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                暂无游戏
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {games.map((game) => (
+                    <GameCard key={game.id} game={game} />
+                  ))}
+                </div>
 
-            {/* Pagination */}
-            <div className="flex justify-center gap-2 mt-12">
-              <Button variant="outline" disabled>
-                上一页
-              </Button>
-              <Button variant="outline">1</Button>
-              <Button variant="ghost">2</Button>
-              <Button variant="ghost">3</Button>
-              <Button variant="outline">下一页</Button>
-            </div>
+                {/* Pagination */}
+                {gamesData && gamesData.total > 12 && (
+                  <div className="flex justify-center gap-2 mt-12">
+                    <Button
+                      variant="outline"
+                      disabled={page === 1}
+                      onClick={() => setPage(p => p - 1)}
+                    >
+                      上一页
+                    </Button>
+                    <Button variant="outline">{page}</Button>
+                    <Button
+                      variant="outline"
+                      disabled={page * 12 >= gamesData.total}
+                      onClick={() => setPage(p => p + 1)}
+                    >
+                      下一页
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </section>
       </main>

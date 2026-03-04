@@ -70,6 +70,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		productHandler := handler.NewProductHandler(cfg.ProductService)
 		orderHandler := handler.NewOrderHandler(cfg.OrderService)
 		couponHandler := handler.NewCouponHandler(cfg.CouponService)
+		searchHandler := handler.NewSearchHandler(cfg.GameService, cfg.MusicService)
 		authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)
 
 		// Auth routes (no auth required)
@@ -78,6 +79,14 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
+		}
+
+		// Search routes (public)
+		search := v1.Group("/search")
+		{
+			search.GET("", searchHandler.SearchAll)
+			search.GET("/games", searchHandler.SearchGames)
+			search.GET("/albums", searchHandler.SearchAlbums)
 		}
 
 		// Protected routes

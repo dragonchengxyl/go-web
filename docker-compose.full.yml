@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: studio_postgres
+    environment:
+      POSTGRES_USER: studio
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: studio_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - studio-network
+
+  # 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: studio_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - studio-network
+
+  # 后端 API（需要先构建镜像）
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: studio_backend
+    ports:
+      - "8080:8080"
+    environment:
+      - STUDIO_SERVER_PORT=8080
+      - STUDIO_SERVER_MODE=release
+      - STUDIO_DATABASE_DSN=postgres://studio:password@postgres:5432/studio_db?sslmode=disable
+      - STUDIO_REDIS_ADDR=redis:6379
+      - STUDIO_REDIS_PASSWORD=
+      - STUDIO_JWT_SECRET=${STUDIO_JWT_SECRET}
+      - STUDIO_SERVER_ALLOW_ORIGINS=http://localhost:3000,https://yourdomain.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - studio-network
+    restart: unless-stopped
+
+  # 前端（需要先构建镜像）
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: studio_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    networks:
+      - studio-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  studio-network:
+    driver: bridge

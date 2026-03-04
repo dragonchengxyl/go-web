@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mail, Lock } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,38 +19,23 @@ export default function LoginPage() {
     email: '',
     password: '',
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const loginMutation = useMutation({
+    mutationFn: () => apiClient.login(formData.email, formData.password),
+    onSuccess: (data) => {
+      apiClient.setToken(data.access_token);
+      router.push('/');
+    },
+    onError: (err: any) => {
+      setError(err.message || '登录失败，请检查邮箱和密码');
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
-
-    try {
-      // TODO: Implement actual login API call
-      const response = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Store token
-        localStorage.setItem('access_token', data.data.access_token);
-        router.push('/');
-      } else {
-        const data = await response.json();
-        setError(data.message || '登录失败，请检查邮箱和密码');
-      }
-    } catch (err) {
-      setError('网络错误，请稍后重试');
-    } finally {
-      setIsLoading(false);
-    }
+    loginMutation.mutate();
   };
 
   return (
@@ -124,8 +111,8 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? '登录中...' : '登录'}
+            <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+              {loginMutation.isPending ? '登录中...' : '登录'}
             </Button>
           </form>
         </CardContent>

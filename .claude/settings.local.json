@@ -26,7 +26,23 @@
       "Bash(xargs ls:*)",
       "Bash(xargs cat:*)",
       "Bash(chmod +x:*)",
-      "Bash(/home/chenlongting/go-web/.env.example:*)"
+      "Bash(/home/chenlongting/go-web/.env.example:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(ls:*)",
+      "Bash(go get:*)",
+      "Bash(go env:*)",
+      "Bash(go test:*)",
+      "Bash(/home/chenlongting/go-web/internal/usecase/crypto_test.go:*)",
+      "Bash(/home/chenlongting/go-web/QUICK_START.md:*)",
+      "Bash(sudo mkdir:*)",
+      "Bash(sudo tee:*)",
+      "Bash(sudo:*)",
+      "Bash(/tmp/docker-config.sh:*)",
+      "Bash(docker-compose:*)",
+      "Bash(netstat:*)",
+      "Bash(go install:*)",
+      "Bash(migrate:*)",
+      "Bash(grep:*)"
     ]
   }
 }

@@ -178,3 +178,26 @@ func (s *MusicService) IncrementPlayCount(ctx context.Context, trackID uuid.UUID
 	}
 	return nil
 }
+
+// SearchAlbums searches albums by query string
+func (s *MusicService) SearchAlbums(ctx context.Context, query string, limit int) ([]*music.Album, error) {
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	input := ListAlbumsInput{
+		Page:     1,
+		PageSize: limit,
+		Search:   query,
+	}
+
+	output, err := s.ListAlbums(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	return output.Albums, nil
+}

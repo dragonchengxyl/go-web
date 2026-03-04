@@ -51,27 +51,15 @@ func (h *SearchHandler) SearchAll(c *gin.Context) {
 // SearchGames 搜索游戏
 func (h *SearchHandler) SearchGames(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
-	tags := c.QueryArray("tags")
-	minPrice := c.Query("min_price")
-	maxPrice := c.Query("max_price")
-	sortBy := c.DefaultQuery("sort", "relevance") // relevance, price_asc, price_desc, newest
-
-	if query == "" && len(tags) == 0 {
+	if query == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
-			"message": "请提供搜索关键词或标签",
+			"message": "搜索关键词不能为空",
 		})
 		return
 	}
 
-	games, err := h.gameService.SearchGamesAdvanced(c.Request.Context(), usecase.GameSearchParams{
-		Query:    query,
-		Tags:     tags,
-		MinPrice: minPrice,
-		MaxPrice: maxPrice,
-		SortBy:   sortBy,
-	})
-
+	games, err := h.gameService.SearchGames(c.Request.Context(), query, 20)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -90,23 +78,15 @@ func (h *SearchHandler) SearchGames(c *gin.Context) {
 // SearchAlbums 搜索音乐专辑
 func (h *SearchHandler) SearchAlbums(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
-	artist := c.Query("artist")
-	sortBy := c.DefaultQuery("sort", "relevance")
-
-	if query == "" && artist == "" {
+	if query == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
-			"message": "请提供搜索关键词或艺术家",
+			"message": "搜索关键词不能为空",
 		})
 		return
 	}
 
-	albums, err := h.musicService.SearchAlbumsAdvanced(c.Request.Context(), usecase.AlbumSearchParams{
-		Query:  query,
-		Artist: artist,
-		SortBy: sortBy,
-	})
-
+	albums, err := h.musicService.SearchAlbums(c.Request.Context(), query, 20)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    500,
@@ -119,49 +99,6 @@ func (h *SearchHandler) SearchAlbums(c *gin.Context) {
 		"code":    0,
 		"message": "success",
 		"data":    albums,
-	})
-}
-
-// GetSearchSuggestions 获取搜索建议
-func (h *SearchHandler) GetSearchSuggestions(c *gin.Context) {
-	query := strings.TrimSpace(c.Query("q"))
-	if query == "" || len(query) < 2 {
-		c.JSON(http.StatusOK, gin.H{
-			"code":    0,
-			"message": "success",
-			"data":    []string{},
-		})
-		return
-	}
-
-	// 获取游戏建议
-	gameSuggestions, _ := h.gameService.GetSearchSuggestions(c.Request.Context(), query, 5)
-
-	// 获取音乐建议
-	albumSuggestions, _ := h.musicService.GetSearchSuggestions(c.Request.Context(), query, 5)
-
-	suggestions := make([]map[string]interface{}, 0)
-
-	for _, game := range gameSuggestions {
-		suggestions = append(suggestions, map[string]interface{}{
-			"type":  "game",
-			"title": game,
-			"url":   "/games?q=" + game,
-		})
-	}
-
-	for _, album := range albumSuggestions {
-		suggestions = append(suggestions, map[string]interface{}{
-			"type":  "album",
-			"title": album,
-			"url":   "/music?q=" + album,
-		})
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "success",
-		"data":    suggestions,
 	})
 }
 
