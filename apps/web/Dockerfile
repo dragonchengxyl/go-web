@@ -3,19 +3,31 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
-COPY apps/web/package.json ./apps/web/
-
-# Install pnpm
+# Install pnpm globally
 RUN npm install -g pnpm
 
-# Install dependencies
+# Copy workspace root package files
+COPY package.json ./
+
+# Copy app-level package files and lock file
+COPY apps/web/package.json ./apps/web/
+COPY apps/web/pnpm-lock.yaml ./apps/web/
+
+# Copy packages if any
+COPY packages ./packages
+
+# Copy turbo config
+COPY turbo.json ./
+
+# Install dependencies using the app-level lock file
+WORKDIR /app/apps/web
 RUN pnpm install --frozen-lockfile
+
+# Back to workspace root
+WORKDIR /app
 
 # Copy source code
 COPY apps/web ./apps/web
-COPY turbo.json ./
 
 # Build the application
 RUN pnpm --filter web build
@@ -32,7 +44,8 @@ WORKDIR /app
 COPY --from=builder /app/apps/web/.next ./apps/web/.next
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/package.json ./apps/web/
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/pnpm-lock.yaml ./apps/web/
+COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=builder /app/package.json ./
 
 # Create non-root user
