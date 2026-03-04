@@ -66,8 +66,8 @@ export default function SearchPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">搜索结果</h1>
         <p className="text-gray-600">
-          找到 <span className="font-medium">{totalResults}</span> 个关于 "
-          <span className="font-medium">{query}</span>" 的结果
+          找到 <span className="font-medium">{totalResults}</span> 个关于 &ldquo;
+          <span className="font-medium">{query}</span>&rdquo; 的结果
         </p>
       </div>
 
