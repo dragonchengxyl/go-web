@@ -1,9 +1,8 @@
 name: Deploy to Kubernetes
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
+  # Only trigger manually - requires Kubernetes cluster configured
+  # Automatic deploy will be enabled once KUBE_CONFIG secret is set
   workflow_dispatch:
     inputs:
       environment:
@@ -14,6 +13,8 @@ on:
           - dev
           - staging
           - production
+  push:
+    tags: ['v*']
 
 jobs:
   deploy:
