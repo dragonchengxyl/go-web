@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: studio-config
+  namespace: studio
+data:
+  SERVER_PORT: "8080"
+  SERVER_MODE: "release"
+  REDIS_DB: "0"
+  JWT_ACCESS_EXPIRY: "15m"
+  JWT_REFRESH_EXPIRY: "720h"
+  RATELIMIT_UNAUTHENTICATED: "60"
+  RATELIMIT_AUTHENTICATED: "200"
+  RATELIMIT_ADMIN: "1000"

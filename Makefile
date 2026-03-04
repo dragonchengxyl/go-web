@@ -10,6 +10,14 @@ setup: ## Initialize project dependencies
 build: ## Build the application
 	go build -o bin/server ./cmd/server
 
+build-cli: ## Build the CLI tool
+	go build -o bin/studio-cli ./cmd/studio-cli
+
+build-all: ## Build all binaries
+	@make build
+	@make build-cli
+	@echo "✓ All binaries built successfully"
+
 run: ## Run the application
 	go run ./cmd/server/main.go
 

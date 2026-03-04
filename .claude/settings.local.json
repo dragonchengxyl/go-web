@@ -42,7 +42,9 @@
       "Bash(netstat:*)",
       "Bash(go install:*)",
       "Bash(migrate:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(exit:*)",
+      "Bash(make build-all:*)"
     ]
   }
 }

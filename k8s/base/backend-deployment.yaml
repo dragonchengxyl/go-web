@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: studio-backend
+  namespace: studio
+  labels:
+    app: studio-backend
+    component: api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: studio-backend
+  template:
+    metadata:
+      labels:
+        app: studio-backend
+        component: api
+    spec:
+      containers:
+      - name: backend
+        image: ghcr.io/studio/backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: STUDIO_SERVER_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: studio-config
+              key: SERVER_PORT
+        - name: STUDIO_SERVER_MODE
+          valueFrom:
+            configMapKeyRef:
+              name: studio-config
+              key: SERVER_MODE
+        - name: STUDIO_DATABASE_DSN
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_DATABASE_DSN
+        - name: STUDIO_REDIS_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_REDIS_ADDR
+        - name: STUDIO_REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_REDIS_PASSWORD
+        - name: STUDIO_REDIS_DB
+          valueFrom:
+            configMapKeyRef:
+              name: studio-config
+              key: REDIS_DB
+        - name: STUDIO_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_JWT_SECRET
+        - name: STUDIO_JWT_ACCESS_EXPIRY
+          valueFrom:
+            configMapKeyRef:
+              name: studio-config
+              key: JWT_ACCESS_EXPIRY
+        - name: STUDIO_JWT_REFRESH_EXPIRY
+          valueFrom:
+            configMapKeyRef:
+              name: studio-config
+              key: JWT_REFRESH_EXPIRY
+        - name: STUDIO_OSS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_OSS_ACCESS_KEY_ID
+        - name: STUDIO_OSS_ACCESS_KEY_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_OSS_ACCESS_KEY_SECRET
+        - name: STUDIO_OSS_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_OSS_BUCKET
+        - name: STUDIO_OSS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: studio-secrets
+              key: STUDIO_OSS_ENDPOINT
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30

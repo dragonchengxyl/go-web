@@ -42,6 +42,12 @@ func main() {
 	defer pool.Close()
 	logger.Info("Connected to PostgreSQL")
 
+	// Run database migrations
+	migrator := postgres.NewMigrator(logger)
+	if err := migrator.RunMigrations(cfg.Database.DSN, "migrations"); err != nil {
+		logger.Fatal("Failed to run migrations", zap.Error(err))
+	}
+
 	// Initialize Redis
 	redisClient, err := redis.NewClient(ctx, cfg.Redis)
 	if err != nil {

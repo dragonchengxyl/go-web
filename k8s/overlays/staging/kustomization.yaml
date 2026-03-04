@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: studio-staging
+
+bases:
+- ../../base
+
+nameSuffix: -staging
+
+replicas:
+- name: studio-backend
+  count: 2
+- name: studio-frontend
+  count: 1
+
+patches:
+- target:
+    kind: Deployment
+    name: studio-backend
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: ghcr.io/studio/backend:staging
+- target:
+    kind: Deployment
+    name: studio-frontend
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/image
+      value: ghcr.io/studio/frontend:staging
