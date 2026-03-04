@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
@@ -32,6 +33,14 @@ interface SearchResult {
 }
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 py-8">搜索中...</div>}>
+      <SearchContent />
+    </Suspense>
+  )
+}
+
+function SearchContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get('q') || ''
 
