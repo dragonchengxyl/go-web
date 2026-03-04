@@ -6,28 +6,23 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Copy workspace root package files
-COPY package.json ./
+# Copy workspace config and lock file (root level for monorepo)
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 
-# Copy app-level package files and lock file
+# Copy package manifests for all workspaces
 COPY apps/web/package.json ./apps/web/
-COPY apps/web/pnpm-lock.yaml ./apps/web/
+COPY packages/api-client/package.json ./packages/api-client/
+COPY packages/config/package.json ./packages/config/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/utils/package.json ./packages/utils/
 
-# Copy packages if any
-COPY packages ./packages
-
-# Copy turbo config
-COPY turbo.json ./
-
-# Install dependencies using the app-level lock file
-WORKDIR /app/apps/web
+# Install dependencies
 RUN pnpm install --frozen-lockfile
-
-# Back to workspace root
-WORKDIR /app
 
 # Copy source code
 COPY apps/web ./apps/web
+COPY packages ./packages
+COPY turbo.json ./
 
 # Build the application
 RUN pnpm --filter web build
@@ -35,40 +30,31 @@ RUN pnpm --filter web build
 # Runtime stage
 FROM node:20-alpine
 
-# Install pnpm
 RUN npm install -g pnpm
 
 WORKDIR /app
 
-# Copy built application
+# Copy built application and dependencies
 COPY --from=builder /app/apps/web/.next ./apps/web/.next
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/package.json ./apps/web/
-COPY --from=builder /app/apps/web/pnpm-lock.yaml ./apps/web/
-COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
+    adduser -S nextjs -u 1001 && \
+    chown -R nextjs:nodejs /app
 
-# Change ownership
-RUN chown -R nextjs:nodejs /app
-
-# Switch to non-root user
 USER nextjs
 
-# Expose port
 EXPOSE 3000
 
-# Set environment
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-# Run the application
 WORKDIR /app/apps/web
 CMD ["pnpm", "start"]
