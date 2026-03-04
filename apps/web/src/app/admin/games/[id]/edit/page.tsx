@@ -43,7 +43,7 @@ export default function AdminGameEditPage() {
     queryKey: ['admin-game', gameId],
     queryFn: async () => {
       const response = await apiClient.get(`/admin/games/${gameId}`)
-      return response.data.data
+      return response
     },
     enabled: !isNew,
   })

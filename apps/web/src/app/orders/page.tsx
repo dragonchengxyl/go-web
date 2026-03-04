@@ -118,7 +118,7 @@ export default function OrdersPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2 mb-4">
-                      {order.items.map((item) => (
+                      {order.items.map((item: any) => (
                         <div key={item.id} className="flex justify-between items-center">
                           <div>
                             <p className="font-medium">{item.product_name}</p>

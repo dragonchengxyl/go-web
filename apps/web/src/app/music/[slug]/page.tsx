@@ -38,18 +38,18 @@ export default function AlbumDetailPage() {
     queryKey: ['album', slug],
     queryFn: async () => {
       const response = await apiClient.get(`/music/albums/${slug}`)
-      return response.data.data
+      return response
     },
   })
 
   const handleAddToCart = () => {
     if (!album) return
     addItem({
-      id: album.id,
+      id: String(album.id),
+      productId: String(album.id),
       name: album.title,
       price: album.price,
-      quantity: 1,
-      image: album.cover_image,
+      coverImage: album.cover_image,
     })
     alert('已添加到购物车！')
   }

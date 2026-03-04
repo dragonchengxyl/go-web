@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/api-client'
 import { Header } from '@/components/layout/header'
@@ -37,18 +37,21 @@ export default function ProfilePage() {
   const { data: profile, isLoading } = useQuery<UserProfile>({
     queryKey: ['profile'],
     queryFn: async () => {
-      const response = await apiClient.get('/users/me')
+      const response = await apiClient.get<UserProfile>('/users/me')
       return response
     },
-    onSuccess: (data) => {
-      setFormData({
-        nickname: data.nickname || '',
-        bio: data.bio || '',
-        website: data.website || '',
-        avatar: data.avatar || '',
-      })
-    },
   })
+
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        nickname: profile.nickname || '',
+        bio: profile.bio || '',
+        website: profile.website || '',
+        avatar: profile.avatar || '',
+      })
+    }
+  }, [profile])
 
   const updateMutation = useMutation({
     mutationFn: async (data: typeof formData) => {

@@ -23,10 +23,8 @@ export function GlobalSearch() {
     queryKey: ['search-suggestions', query],
     queryFn: async () => {
       if (query.length < 2) return []
-      const response = await apiClient.get('/search/suggestions', {
-        params: { q: query },
-      })
-      return response.data.data
+      const response = await apiClient.get(`/search/suggestions?q=${encodeURIComponent(query)}`)
+      return response
     },
     enabled: query.length >= 2,
   })
@@ -35,7 +33,7 @@ export function GlobalSearch() {
     queryKey: ['popular-searches'],
     queryFn: async () => {
       const response = await apiClient.get('/search/popular')
-      return response.data.data
+      return response
     },
   })
 

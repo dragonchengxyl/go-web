@@ -28,7 +28,7 @@ export default function AdminDashboardPage() {
     queryKey: ['admin-stats'],
     queryFn: async () => {
       const response = await apiClient.get('/admin/stats/dashboard')
-      return response.data.data
+      return response
     },
   })
 
@@ -36,7 +36,7 @@ export default function AdminDashboardPage() {
     queryKey: ['admin-popular-games'],
     queryFn: async () => {
       const response = await apiClient.get('/admin/stats/popular-games')
-      return response.data.data
+      return response
     },
   })
 

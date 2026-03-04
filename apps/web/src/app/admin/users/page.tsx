@@ -26,10 +26,10 @@ export default function AdminUsersPage() {
   const { data: users, isLoading } = useQuery<User[]>({
     queryKey: ['admin-users', search],
     queryFn: async () => {
-      const response = await apiClient.get('/admin/users', {
-        params: { search },
-      })
-      return response.data.data
+      const params = new URLSearchParams()
+      if (search) params.append('search', search)
+      const response = await apiClient.get(`/admin/users?${params.toString()}`)
+      return response
     },
   })
 

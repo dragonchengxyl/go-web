@@ -28,7 +28,7 @@ export default function AdminGameReleasesPage() {
     queryKey: ['admin-game-releases', gameId],
     queryFn: async () => {
       const response = await apiClient.get(`/admin/games/${gameId}/releases`)
-      return response.data.data
+      return response
     },
   })
 

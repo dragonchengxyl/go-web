@@ -36,7 +36,7 @@ export default function AdminTracksPage() {
     queryKey: ['admin-tracks', albumId],
     queryFn: async () => {
       const response = await apiClient.get(`/admin/albums/${albumId}/tracks`)
-      return response.data.data
+      return response
     },
   })
 

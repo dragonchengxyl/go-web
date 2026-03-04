@@ -41,7 +41,7 @@ export default function AdminAlbumEditPage() {
     queryKey: ['admin-album', albumId],
     queryFn: async () => {
       const response = await apiClient.get(`/admin/albums/${albumId}`)
-      return response.data.data
+      return response
     },
     enabled: !isNew,
   })

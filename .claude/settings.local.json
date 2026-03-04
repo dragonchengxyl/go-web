@@ -46,7 +46,10 @@
       "Bash(exit:*)",
       "Bash(make build-all:*)",
       "Bash(git push:*)",
-      "Bash(golangci-lint run:*)"
+      "Bash(golangci-lint run:*)",
+      "Bash(pnpm:*)",
+      "Bash(npx tsc:*)",
+      "Bash(xargs sed:*)"
     ]
   }
 }

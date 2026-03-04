@@ -115,7 +115,7 @@ export default function SearchPage() {
                             {game.short_description}
                           </p>
                           <div className="flex flex-wrap gap-2 mb-3">
-                            {game.tags?.slice(0, 3).map((tag, index) => (
+                            {game.tags?.slice(0, 3).map((tag: string, index: number) => (
                               <Badge key={index} variant="outline">
                                 {tag}
                               </Badge>
@@ -198,7 +198,7 @@ export default function SearchPage() {
                           {game.short_description}
                         </p>
                         <div className="flex flex-wrap gap-2 mb-3">
-                          {game.tags?.slice(0, 3).map((tag, index) => (
+                          {game.tags?.slice(0, 3).map((tag: string, index: number) => (
                             <Badge key={index} variant="outline">
                               {tag}
                             </Badge>

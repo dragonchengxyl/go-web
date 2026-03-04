@@ -27,10 +27,10 @@ export default function AdminMusicPage() {
   const { data: albums, isLoading } = useQuery<Album[]>({
     queryKey: ['admin-albums', search],
     queryFn: async () => {
-      const response = await apiClient.get('/admin/albums', {
-        params: { search },
-      })
-      return response.data.data
+      const params = new URLSearchParams()
+      if (search) params.append('search', search)
+      const response = await apiClient.get(`/admin/albums?${params.toString()}`)
+      return response
     },
   })
 

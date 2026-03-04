@@ -40,7 +40,7 @@ export default function AdminOrderDetailPage() {
     queryKey: ['admin-order', orderId],
     queryFn: async () => {
       const response = await apiClient.get(`/admin/orders/${orderId}`)
-      return response.data.data
+      return response
     },
   })
 

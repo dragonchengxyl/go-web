@@ -29,10 +29,11 @@ export default function AdminOrdersPage() {
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ['admin-orders', search, statusFilter],
     queryFn: async () => {
-      const response = await apiClient.get('/admin/orders', {
-        params: { search, status: statusFilter !== 'all' ? statusFilter : undefined },
-      })
-      return response.data.data
+      const params = new URLSearchParams()
+      if (search) params.append('search', search)
+      if (statusFilter !== 'all') params.append('status', statusFilter)
+      const response = await apiClient.get(`/admin/orders?${params.toString()}`)
+      return response
     },
   })
 
