@@ -158,7 +158,7 @@ func (h *MusicHandler) StreamTrack(c *gin.Context) {
 
 	// Increment play count
 	if err := h.musicService.IncrementPlayCount(c.Request.Context(), trackID); err != nil {
-		c.Error(err)
+		_ = c.Error(err)
 	}
 
 	// TODO: Generate streaming URL from OSS

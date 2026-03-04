@@ -41,9 +41,9 @@ func init() {
 	PublishCmd.Flags().StringVar(&platform, "platform", "windows", "Target platform (windows, macos, linux)")
 	PublishCmd.Flags().BoolVar(&autoPublish, "auto-publish", false, "Automatically publish after upload")
 
-	PublishCmd.MarkFlagRequired("game")
-	PublishCmd.MarkFlagRequired("version")
-	PublishCmd.MarkFlagRequired("package")
+	_ = PublishCmd.MarkFlagRequired("game")
+	_ = PublishCmd.MarkFlagRequired("version")
+	_ = PublishCmd.MarkFlagRequired("package")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -171,7 +171,7 @@ func createRelease(creds *config.Credentials, branchID, version, title, changelo
 		title = fmt.Sprintf("Release %s", version)
 	}
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"version":      version,
 		"title":        title,
 		"changelog":    changelog,

@@ -125,7 +125,7 @@ func (u *ChunkedUploader) Upload(filePath string, gameSlug string, version strin
 				return
 			}
 
-			bar.Add(size)
+			_ = bar.Add(size)
 		}(i)
 	}
 
@@ -148,7 +148,7 @@ func (u *ChunkedUploader) Upload(filePath string, gameSlug string, version strin
 
 // initUpload initializes a chunked upload
 func (u *ChunkedUploader) initUpload(gameSlug, version, filename string, fileSize int64) (string, error) {
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"game_slug": gameSlug,
 		"version":   version,
 		"filename":  filename,

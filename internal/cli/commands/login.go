@@ -28,8 +28,8 @@ func init() {
 	LoginCmd.Flags().StringVarP(&loginEmail, "email", "e", "", "Email address")
 	LoginCmd.Flags().StringVarP(&loginPassword, "password", "p", "", "Password")
 	LoginCmd.Flags().StringVar(&loginAPIURL, "api-url", "http://localhost:8080", "API URL")
-	LoginCmd.MarkFlagRequired("email")
-	LoginCmd.MarkFlagRequired("password")
+	_ = LoginCmd.MarkFlagRequired("email")
+	_ = LoginCmd.MarkFlagRequired("password")
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {

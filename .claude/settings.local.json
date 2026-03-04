@@ -44,7 +44,9 @@
       "Bash(migrate:*)",
       "Bash(grep:*)",
       "Bash(exit:*)",
-      "Bash(make build-all:*)"
+      "Bash(make build-all:*)",
+      "Bash(git push:*)",
+      "Bash(golangci-lint run:*)"
     ]
   }
 }

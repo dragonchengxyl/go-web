@@ -229,7 +229,7 @@ func (h *AssetHandler) RequestDownload(c *gin.Context) {
 	userAgent := c.GetHeader("User-Agent")
 	if err := h.assetService.LogDownload(c.Request.Context(), userID, releaseID, clientIP, userAgent); err != nil {
 		// Log error but don't fail the request
-		c.Error(err)
+		_ = c.Error(err)
 	}
 
 	// TODO: Generate pre-signed URL from OSS
