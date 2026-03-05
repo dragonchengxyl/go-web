@@ -50,6 +50,7 @@ func (s *UserService) RefreshToken(ctx context.Context, refreshToken, device, ip
 	// Delete old refresh token
 	if err := s.tokenStore.DeleteRefreshToken(ctx, claims.JTI); err != nil {
 		// Log but don't fail
+		_ = err
 	}
 
 	// Generate new tokens

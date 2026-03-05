@@ -164,7 +164,7 @@ func (r *couponRepo) BatchCreateRedeemCodes(ctx context.Context, codes []*coupon
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	for _, rc := range codes {
 		rc.ID = uuid.New()

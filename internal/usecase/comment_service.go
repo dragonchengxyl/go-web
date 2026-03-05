@@ -56,6 +56,7 @@ func (s *CommentService) CreateComment(ctx context.Context, userID uuid.UUID, in
 	if input.ParentID != nil {
 		if err := s.commentRepo.IncrementReplyCount(ctx, *input.ParentID); err != nil {
 			// Log error but don't fail
+			_ = err
 		}
 	}
 
@@ -114,6 +115,7 @@ func (s *CommentService) DeleteComment(ctx context.Context, userID, commentID uu
 	if c.ParentID != nil {
 		if err := s.commentRepo.DecrementReplyCount(ctx, *c.ParentID); err != nil {
 			// Log error but don't fail
+			_ = err
 		}
 	}
 
@@ -196,6 +198,7 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID uuid
 	// Increment like count
 	if err := s.commentRepo.IncrementLikeCount(ctx, commentID); err != nil {
 		// Log error but don't fail
+		_ = err
 	}
 
 	return nil
@@ -213,6 +216,7 @@ func (s *CommentService) UnlikeComment(ctx context.Context, userID, commentID uu
 	// Decrement like count
 	if err := s.commentRepo.DecrementLikeCount(ctx, commentID); err != nil {
 		// Log error but don't fail
+		_ = err
 	}
 
 	return nil
