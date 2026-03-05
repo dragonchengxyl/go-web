@@ -12,6 +12,26 @@ import (
 
 // Register registers a new user
 func (s *UserService) Register(ctx context.Context, input RegisterInput) (*user.User, error) {
+	// Validate email format
+	if err := crypto.ValidateEmail(input.Email); err != nil {
+		return nil, apperr.New(apperr.CodeInvalidParam, err.Error())
+	}
+
+	// Validate username format
+	if err := crypto.ValidateUsername(input.Username); err != nil {
+		return nil, apperr.New(apperr.CodeInvalidParam, err.Error())
+	}
+
+	// Validate password strength
+	if err := crypto.ValidatePassword(input.Password, crypto.DefaultPasswordStrength()); err != nil {
+		return nil, apperr.New(apperr.CodeInvalidParam, err.Error())
+	}
+
+	// Check if password is too common
+	if crypto.IsCommonPassword(input.Password) {
+		return nil, apperr.New(apperr.CodeInvalidParam, "密码过于简单，请使用更复杂的密码")
+	}
+
 	// Check if email exists
 	exists, err := s.userRepo.ExistsByEmail(ctx, input.Email)
 	if err != nil {
