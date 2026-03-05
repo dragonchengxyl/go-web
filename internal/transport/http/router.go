@@ -29,6 +29,7 @@ type RouterConfig struct {
 	ProductService *usecase.ProductService
 	OrderService   *usecase.OrderService
 	CouponService  *usecase.CouponService
+	StatsService   *usecase.StatsService
 	TokenStore     *redis.TokenStore
 }
 
@@ -111,23 +112,24 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			admin := protected.Group("/admin")
 			admin.Use(authMiddleware.RequireRole(user.RoleAdmin))
 			{
-				// Dashboard stats
-// 				adminHandler := handler.NewAdminHandler(cfg.GameService, cfg.UserService)
-// 				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
-// 				admin.GET("/stats/popular-games", adminHandler.GetPopularGames)
-// 
-// 				// Game management
-// 				admin.GET("/games", adminHandler.ListGames)
-// 				admin.GET("/games/:id", adminHandler.GetGame)
-// 				admin.POST("/games", adminHandler.CreateGame)
-// 				admin.PUT("/games/:id", adminHandler.UpdateGame)
-// 				admin.DELETE("/games/:id", adminHandler.DeleteGame)
-// 
-// 				// User management
-// 				admin.GET("/users", adminHandler.ListUsers)
-// 				admin.PUT("/users/:id/role", adminHandler.UpdateUserRole)
-// 				admin.POST("/users/:id/ban", adminHandler.BanUser)
-// 				admin.POST("/users/:id/unban", adminHandler.UnbanUser)
+				adminHandler := handler.NewAdminHandler(cfg.StatsService, cfg.UserService, cfg.GameService, cfg.CommentService)
+
+			// Dashboard stats
+			admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
+			admin.GET("/stats/revenue", adminHandler.GetRevenueChart)
+			admin.GET("/stats/user-growth", adminHandler.GetUserGrowthChart)
+			admin.GET("/stats/popular-games", adminHandler.GetPopularGames)
+
+			// User management
+			admin.GET("/users", adminHandler.ListUsers)
+			admin.PUT("/users/:id/role", adminHandler.UpdateUserRole)
+			admin.POST("/users/:id/ban", adminHandler.BanUser)
+			admin.POST("/users/:id/unban", adminHandler.UnbanUser)
+			admin.DELETE("/users/:id", adminHandler.DeleteUser)
+
+			// Comment moderation
+			admin.GET("/comments", adminHandler.ListComments)
+			admin.DELETE("/comments/:id", adminHandler.DeleteComment)
 			}
 		}
 

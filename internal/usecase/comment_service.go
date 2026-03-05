@@ -217,3 +217,46 @@ func (s *CommentService) UnlikeComment(ctx context.Context, userID, commentID uu
 
 	return nil
 }
+
+// AdminListComments lists all comments for admin moderation
+func (s *CommentService) AdminListComments(ctx context.Context, page, pageSize int) (*ListCommentsOutput, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	filter := comment.ListFilter{
+		Page:     page,
+		PageSize: pageSize,
+	}
+
+	comments, total, err := s.commentRepo.List(ctx, filter)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询评论失败", err)
+	}
+
+	return &ListCommentsOutput{
+		Comments: comments,
+		Total:    total,
+		Page:     page,
+		Size:     len(comments),
+	}, nil
+}
+
+// AdminDeleteComment deletes any comment without ownership check (admin only)
+func (s *CommentService) AdminDeleteComment(ctx context.Context, commentID uuid.UUID) error {
+	_, err := s.commentRepo.GetByID(ctx, commentID)
+	if err != nil {
+		if errors.Is(err, comment.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return apperr.Wrap(apperr.CodeInternalError, "查询评论失败", err)
+	}
+
+	if err := s.commentRepo.Delete(ctx, commentID); err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "删除评论失败", err)
+	}
+	return nil
+}

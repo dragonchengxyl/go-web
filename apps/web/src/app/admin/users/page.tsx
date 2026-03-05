@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 
 interface User {
-  id: number
+  id: string
   username: string
   email: string
   nickname: string
@@ -19,73 +19,70 @@ interface User {
   created_at: string
 }
 
+interface ListUsersOutput {
+  users: User[]
+  total: number
+  page: number
+  size: number
+}
+
 export default function AdminUsersPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
 
-  const { data: users, isLoading } = useQuery<User[]>({
+  const { data, isLoading } = useQuery<ListUsersOutput>({
     queryKey: ['admin-users', search],
-    queryFn: async () => {
+    queryFn: () => {
       const params = new URLSearchParams()
       if (search) params.append('search', search)
-      const response = await apiClient.get(`/admin/users?${params.toString()}`)
-      return response
+      return apiClient.get(`/admin/users?${params.toString()}`)
     },
   })
 
+  const users = data?.users ?? []
+
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
-      await apiClient.put(`/admin/users/${userId}/role`, { role })
-    },
+    mutationFn: ({ userId, role }: { userId: string; role: string }) =>
+      apiClient.put(`/admin/users/${userId}/role`, { role }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       alert('角色更新成功！')
     },
-    onError: () => {
-      alert('更新失败，请重试')
-    },
+    onError: () => alert('更新失败，请重试'),
   })
 
   const banMutation = useMutation({
-    mutationFn: async (userId: number) => {
-      await apiClient.post(`/admin/users/${userId}/ban`)
-    },
+    mutationFn: (userId: string) => apiClient.post(`/admin/users/${userId}/ban`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       alert('封禁成功！')
     },
-    onError: () => {
-      alert('操作失败，请重试')
-    },
+    onError: () => alert('操作失败，请重试'),
   })
 
   const unbanMutation = useMutation({
-    mutationFn: async (userId: number) => {
-      await apiClient.post(`/admin/users/${userId}/unban`)
-    },
+    mutationFn: (userId: string) => apiClient.post(`/admin/users/${userId}/unban`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       alert('解封成功！')
     },
-    onError: () => {
-      alert('操作失败，请重试')
-    },
+    onError: () => alert('操作失败，请重试'),
   })
 
-  const handleRoleChange = (userId: number, currentRole: string) => {
+  const handleRoleChange = (userId: string, currentRole: string) => {
     const newRole = prompt('输入新角色 (user/admin/moderator):', currentRole)
     if (newRole && ['user', 'admin', 'moderator'].includes(newRole)) {
       updateRoleMutation.mutate({ userId, role: newRole })
     }
   }
 
-  const handleBan = (userId: number, username: string) => {
+  const handleBan = (userId: string, username: string) => {
     if (confirm(`确定要封禁用户 ${username} 吗？`)) {
       banMutation.mutate(userId)
     }
   }
 
-  const handleUnban = (userId: number, username: string) => {
+  const handleUnban = (userId: string, username: string) => {
     if (confirm(`确定要解封用户 ${username} 吗？`)) {
       unbanMutation.mutate(userId)
     }
@@ -106,13 +103,17 @@ export default function AdminUsersPage() {
           <Button variant="outline" className="mb-4">← 返回后台首页</Button>
         </Link>
         <h1 className="text-3xl font-bold mb-4">用户管理</h1>
-
-        <div className="max-w-md">
-          <Input
-            placeholder="搜索用户名或邮箱..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex items-center gap-4">
+          <div className="max-w-md flex-1">
+            <Input
+              placeholder="搜索用户名或邮箱..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {data && (
+            <span className="text-sm text-gray-500">共 {data.total} 个用户</span>
+          )}
         </div>
       </div>
 
@@ -121,7 +122,7 @@ export default function AdminUsersPage() {
           <CardTitle>用户列表</CardTitle>
         </CardHeader>
         <CardContent>
-          {!users || users.length === 0 ? (
+          {users.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               {search ? '未找到匹配的用户' : '暂无用户'}
             </div>

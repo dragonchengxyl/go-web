@@ -85,6 +85,7 @@ func main() {
 	productService := usecase.NewProductService(productRepo)
 	orderService := usecase.NewOrderService(orderRepo, productRepo, couponRepo)
 	couponService := usecase.NewCouponService(couponRepo, productRepo)
+	statsService := usecase.NewStatsService(pool)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
@@ -102,6 +103,7 @@ func main() {
 		ProductService: productService,
 		OrderService:   orderService,
 		CouponService:  couponService,
+		StatsService:   statsService,
 		TokenStore:     tokenStore,
 	})
 

@@ -49,7 +49,8 @@
       "Bash(golangci-lint run:*)",
       "Bash(pnpm:*)",
       "Bash(npx tsc:*)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(python3:*)"
     ]
   }
 }
