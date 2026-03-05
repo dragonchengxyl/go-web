@@ -70,9 +70,11 @@ func main() {
 	productRepo := postgres.NewProductRepository(pool)
 	orderRepo := postgres.NewOrderRepository(pool)
 	couponRepo := postgres.NewCouponRepository(pool)
+	achievementRepo := postgres.NewAchievementRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
+	leaderboard := redis.NewLeaderboard(redisClient)
 
 	// Initialize services
 	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT)
@@ -86,6 +88,7 @@ func main() {
 	orderService := usecase.NewOrderService(orderRepo, productRepo, couponRepo)
 	couponService := usecase.NewCouponService(couponRepo, productRepo)
 	statsService := usecase.NewStatsService(pool)
+	achievementService := usecase.NewAchievementService(achievementRepo, leaderboard)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
@@ -103,8 +106,9 @@ func main() {
 		ProductService: productService,
 		OrderService:   orderService,
 		CouponService:  couponService,
-		StatsService:   statsService,
-		TokenStore:     tokenStore,
+		StatsService:        statsService,
+		AchievementService:  achievementService,
+		TokenStore:          tokenStore,
 	})
 
 	// Start server

@@ -15,9 +15,9 @@ import (
 
 // RouterConfig holds router dependencies
 type RouterConfig struct {
-	Config         *configs.Config
-	Logger         *zap.Logger
-	Pool           *pgxpool.Pool
+	Config              *configs.Config
+	Logger              *zap.Logger
+	Pool                *pgxpool.Pool
 	RedisClient    *redisClient.Client
 	UserService    *usecase.UserService
 	GameService    *usecase.GameService
@@ -29,8 +29,9 @@ type RouterConfig struct {
 	ProductService *usecase.ProductService
 	OrderService   *usecase.OrderService
 	CouponService  *usecase.CouponService
-	StatsService   *usecase.StatsService
-	TokenStore     *redis.TokenStore
+	StatsService        *usecase.StatsService
+	AchievementService  *usecase.AchievementService
+	TokenStore          *redis.TokenStore
 }
 
 // NewRouter creates a new HTTP router
@@ -290,6 +291,36 @@ v1.POST("/games/:id/branches", authMiddleware.Authenticate(), authMiddleware.Req
 				couponsAdmin.POST("/redeem-codes/batch", couponHandler.BatchCreateRedeemCodes)
 			}
 		}
+
+		// Achievement & Gamification routes
+		achievementHandler := handler.NewAchievementHandler(cfg.AchievementService)
+
+		// Public achievement list
+		v1.GET("/achievements", achievementHandler.ListAchievements)
+		v1.GET("/users/:id/achievements", achievementHandler.GetUserAchievements)
+
+		// Leaderboard (public)
+		v1.GET("/leaderboard", achievementHandler.GetLeaderboard)
+		v1.GET("/leaderboard/weekly", achievementHandler.GetWeeklyLeaderboard)
+
+		// Authenticated: my achievements & points
+		achievementsAuth := v1.Group("")
+		achievementsAuth.Use(authMiddleware.Authenticate())
+		{
+			achievementsAuth.GET("/users/me/achievements", achievementHandler.GetMyAchievements)
+			achievementsAuth.GET("/users/me/points", achievementHandler.GetMyPoints)
+			achievementsAuth.GET("/users/me/points/history", achievementHandler.GetMyPointHistory)
+		}
+	}
+
+	// Admin achievement routes (inside /admin group already above)
+	adminAchievement := r.Group("/api/v1/admin")
+	adminAchievement.Use(middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore).Authenticate())
+	adminAchievement.Use(middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore).RequireRole(user.RoleAdmin))
+	{
+		achievementHandler := handler.NewAchievementHandler(cfg.AchievementService)
+		adminAchievement.POST("/users/:id/achievements", achievementHandler.AdminUnlockAchievement)
+		adminAchievement.POST("/users/:id/points", achievementHandler.AdminAwardPoints)
 	}
 
 	return r
