@@ -51,7 +51,9 @@
       "Bash(npx tsc:*)",
       "Bash(xargs sed:*)",
       "Bash(python3:*)",
-      "Bash(~/go/bin/golangci-lint run:*)"
+      "Bash(~/go/bin/golangci-lint run:*)",
+      "Bash(ss:*)",
+      "Bash(pkill:*)"
     ]
   }
 }
