@@ -3,10 +3,10 @@ package handler
 import (
 	"fmt"
 	"io"
-	"net/http"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -207,11 +207,17 @@ func (h *UploadHandler) UploadChunk(c *gin.Context) {
 // MergeChunks merges uploaded chunks into a single file
 func (h *UploadHandler) MergeChunks(c *gin.Context) {
 	uploadID := c.PostForm("upload_id")
-	totalChunks := c.PostForm("total_chunks")
+	totalChunksStr := c.PostForm("total_chunks")
 	filename := c.PostForm("filename")
 
-	if uploadID == "" || totalChunks == "" || filename == "" {
+	if uploadID == "" || totalChunksStr == "" || filename == "" {
 		response.Error(c, fmt.Errorf("缺少必要参数"))
+		return
+	}
+
+	totalChunks, err := strconv.Atoi(totalChunksStr)
+	if err != nil {
+		response.Error(c, fmt.Errorf("无效的分片数量"))
 		return
 	}
 
@@ -220,7 +226,7 @@ func (h *UploadHandler) MergeChunks(c *gin.Context) {
 	outputFilename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
 	outputPath := filepath.Join(h.uploadDir, "games", outputFilename)
 
-	output, err := c.Writer.(*gin.ResponseWriter).File(outputPath)
+	output, err := os.Create(outputPath)
 	if err != nil {
 		response.Error(c, fmt.Errorf("创建输出文件失败: %w", err))
 		return
@@ -231,7 +237,7 @@ func (h *UploadHandler) MergeChunks(c *gin.Context) {
 	chunksDir := filepath.Join(h.uploadDir, "chunks", uploadID)
 	for i := 0; i < totalChunks; i++ {
 		chunkPath := filepath.Join(chunksDir, fmt.Sprintf("%d", i))
-		chunk, err := c.Writer.(*gin.ResponseWriter).File(chunkPath)
+		chunk, err := os.Open(chunkPath)
 		if err != nil {
 			response.Error(c, fmt.Errorf("读取分片失败: %w", err))
 			return
@@ -246,7 +252,7 @@ func (h *UploadHandler) MergeChunks(c *gin.Context) {
 	}
 
 	// Clean up chunks
-	// os.RemoveAll(chunksDir)
+	os.RemoveAll(chunksDir)
 
 	url := fmt.Sprintf("/uploads/games/%s", outputFilename)
 	response.Success(c, gin.H{

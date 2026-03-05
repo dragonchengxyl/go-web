@@ -26,12 +26,18 @@ export default function CreateGamePage() {
     formData.append('file', file)
 
     try {
-      const response = await apiClient.post('/admin/upload', formData, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'}/upload/image`, {
+        method: 'POST',
+        body: formData,
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
       })
-      return response.url
+      const data = await response.json()
+      if (data.code === 0) {
+        return data.data.url
+      }
+      throw new Error(data.message || '上传失败')
     } catch (error) {
       throw new Error('上传失败')
     }
