@@ -35,7 +35,7 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 }
 
 const getUserByIDSQL = `
-	SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
+	SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
 	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE id = $1
 `
@@ -44,6 +44,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 	var u user.User
 	err := r.pool.QueryRow(ctx, getUserByIDSQL, id).Scan(
 		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
+		&u.FurryName, &u.Species,
 		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -57,7 +58,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 }
 
 const getUserByEmailSQL = `
-	SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
+	SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
 	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE email = $1
 `
@@ -66,6 +67,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 	var u user.User
 	err := r.pool.QueryRow(ctx, getUserByEmailSQL, email).Scan(
 		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
+		&u.FurryName, &u.Species,
 		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -79,7 +81,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 }
 
 const getUserByUsernameSQL = `
-	SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
+	SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
 	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE username = $1
 `
@@ -88,6 +90,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*u
 	var u user.User
 	err := r.pool.QueryRow(ctx, getUserByUsernameSQL, username).Scan(
 		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
+		&u.FurryName, &u.Species,
 		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
@@ -103,14 +106,14 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*u
 const updateUserSQL = `
 	UPDATE users
 	SET username = $2, email = $3, avatar_key = $4, bio = $5, website = $6, location = $7,
-	    role = $8, status = $9, updated_at = $10
+	    furry_name = $8, species = $9, role = $10, status = $11, updated_at = $12
 	WHERE id = $1
 `
 
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 	_, err := r.pool.Exec(ctx, updateUserSQL,
 		u.ID, u.Username, u.Email, u.AvatarKey, u.Bio, u.Website, u.Location,
-		u.Role, u.Status, u.UpdatedAt,
+		u.FurryName, u.Species, u.Role, u.Status, u.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
@@ -158,7 +161,7 @@ func (r *UserRepository) ExistsByUsername(ctx context.Context, username string) 
 func (r *UserRepository) List(ctx context.Context, filter user.ListFilter) ([]*user.User, int64, error) {
 	// Build query
 	query := `
-		SELECT id, username, email, password_hash, avatar_key, bio, website, location, role, status,
+		SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
 		       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 		FROM users
 		WHERE 1=1
@@ -217,6 +220,7 @@ func (r *UserRepository) List(ctx context.Context, filter user.ListFilter) ([]*u
 		var u user.User
 		err := rows.Scan(
 			&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
+			&u.FurryName, &u.Species,
 			&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 			&u.CreatedAt, &u.UpdatedAt,
 		)

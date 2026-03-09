@@ -17,6 +17,8 @@ type UpdateProfileInput struct {
 	Bio       *string `json:"bio,omitempty"`
 	Website   *string `json:"website,omitempty"`
 	Location  *string `json:"location,omitempty"`
+	FurryName *string `json:"furry_name,omitempty"`
+	Species   *string `json:"species,omitempty"`
 }
 
 // UpdateProfile updates user profile
@@ -57,6 +59,14 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID uuid.UUID, input
 
 	if input.Location != nil {
 		u.Location = input.Location
+	}
+
+	if input.FurryName != nil {
+		u.FurryName = input.FurryName
+	}
+
+	if input.Species != nil {
+		u.Species = input.Species
 	}
 
 	// Update timestamp

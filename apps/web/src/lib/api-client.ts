@@ -508,6 +508,7 @@ class ApiClient {
     location?: string
     furry_name?: string
     species?: string
+    avatar_key?: string
   }) {
     return this.put<any>('/users/me', data)
   }
