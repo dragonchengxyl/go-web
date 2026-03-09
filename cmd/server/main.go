@@ -11,6 +11,11 @@ import (
 	"time"
 
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/infra/oss"
+	paymentalipay "github.com/studio/platform/internal/infra/payment/alipay"
+	"github.com/studio/platform/internal/infra/payment/mock"
+	paymentwechat "github.com/studio/platform/internal/infra/payment/wechat"
+	paymentpkg "github.com/studio/platform/internal/infra/payment"
 	"github.com/studio/platform/internal/infra/postgres"
 	"github.com/studio/platform/internal/infra/redis"
 	transporthttp "github.com/studio/platform/internal/transport/http"
@@ -76,17 +81,36 @@ func main() {
 	tokenStore := redis.NewTokenStore(redisClient)
 	leaderboard := redis.NewLeaderboard(redisClient)
 
+	// Initialize storage service
+	storageService := oss.NewAliyunOSS(cfg.OSS)
+
+	// Initialize payment gateways (fall back to mock if credentials not configured)
+	mockGW := mock.New()
+	var alipayGW, wechatGW paymentpkg.PaymentGateway = mockGW, mockGW
+	if cfg.Payment.Alipay.AppID != "" {
+		if gw, err := paymentalipay.New(cfg.Payment.Alipay); err == nil {
+			alipayGW = gw
+		} else {
+			logger.Warn("alipay gateway init failed, using mock", zap.Error(err))
+		}
+	}
+	if cfg.Payment.Wechat.AppID != "" {
+		wechatGW = paymentwechat.New(cfg.Payment.Wechat)
+	}
+
 	// Initialize services
 	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT)
 	gameService := usecase.NewGameService(gameRepo)
 	branchService := usecase.NewBranchService(branchRepo, gameRepo)
 	releaseService := usecase.NewReleaseService(releaseRepo, branchRepo)
-	assetService := usecase.NewAssetService(assetRepo, gameRepo, branchRepo, releaseRepo)
-	musicService := usecase.NewMusicService(albumRepo, trackRepo)
+	assetService := usecase.NewAssetService(assetRepo, gameRepo, branchRepo, releaseRepo, storageService)
+	musicService := usecase.NewMusicService(albumRepo, trackRepo, storageService)
 	commentService := usecase.NewCommentService(commentRepo)
 	productService := usecase.NewProductService(productRepo)
 	orderService := usecase.NewOrderService(orderRepo, productRepo, couponRepo)
 	couponService := usecase.NewCouponService(couponRepo, productRepo)
+	paymentService := usecase.NewPaymentService(orderRepo, alipayGW, wechatGW)
+	searchService := usecase.NewSearchService(pool)
 	statsService := usecase.NewStatsService(pool)
 	achievementService := usecase.NewAchievementService(achievementRepo, leaderboard)
 
@@ -105,7 +129,9 @@ func main() {
 		CommentService: commentService,
 		ProductService: productService,
 		OrderService:   orderService,
-		CouponService:  couponService,
+		CouponService:       couponService,
+		PaymentService:      paymentService,
+		SearchService:       searchService,
 		StatsService:        statsService,
 		AchievementService:  achievementService,
 		TokenStore:          tokenStore,
@@ -123,6 +149,29 @@ func main() {
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
+
+	// Background scheduled tasks
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+
+	// Cancel expired orders every minute
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				n, err := orderService.CancelExpiredOrders(bgCtx)
+				if err != nil {
+					logger.Error("cancel expired orders failed", zap.Error(err))
+				} else if n > 0 {
+					logger.Info("cancelled expired orders", zap.Int("count", n))
+				}
+			case <-bgCtx.Done():
+				return
+			}
 		}
 	}()
 

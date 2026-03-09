@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -90,7 +91,7 @@ func (s *CouponService) RedeemCode(ctx context.Context, code string, userID uuid
 	}
 
 	// 检查是否过期
-	if rc.ExpiresAt != nil && rc.ExpiresAt.Before(rc.CreatedAt) {
+	if rc.ExpiresAt != nil && rc.ExpiresAt.Before(time.Now()) {
 		return nil, apperr.BadRequest("兑换码已过期")
 	}
 
@@ -119,7 +120,10 @@ func (s *CouponService) BatchCreateRedeemCodes(ctx context.Context, productID *u
 
 	codes := make([]*coupon.RedeemCode, count)
 	for i := 0; i < count; i++ {
-		code := GenerateRedeemCode()
+		code, err := GenerateRedeemCode()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate redeem code: %w", err)
+		}
 		codes[i] = &coupon.RedeemCode{
 			Code:        code,
 			ProductID:   productID,
@@ -137,11 +141,11 @@ func (s *CouponService) BatchCreateRedeemCodes(ctx context.Context, productID *u
 
 // GenerateRedeemCode 生成兑换码
 // 格式：XXXX-XXXX-XXXX（共12位，Base32编码，去除易混淆字符）
-func GenerateRedeemCode() string {
+func GenerateRedeemCode() (string, error) {
 	// 生成8字节随机数
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
-		panic(err)
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 
 	// Base32编码
@@ -163,5 +167,5 @@ func GenerateRedeemCode() string {
 	encoded = encoded[:12]
 
 	// 格式化为 XXXX-XXXX-XXXX
-	return fmt.Sprintf("%s-%s-%s", encoded[0:4], encoded[4:8], encoded[8:12])
+	return fmt.Sprintf("%s-%s-%s", encoded[0:4], encoded[4:8], encoded[8:12]), nil
 }

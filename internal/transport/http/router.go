@@ -3,6 +3,7 @@ package http
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/redis"
@@ -29,6 +30,8 @@ type RouterConfig struct {
 	ProductService *usecase.ProductService
 	OrderService   *usecase.OrderService
 	CouponService  *usecase.CouponService
+	PaymentService      *usecase.PaymentService
+	SearchService       *usecase.SearchService
 	StatsService        *usecase.StatsService
 	AchievementService  *usecase.AchievementService
 	TokenStore          *redis.TokenStore
@@ -47,6 +50,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.Use(middleware.Logger(cfg.Logger))
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(cfg.Config.Server.AllowOrigins))
+	r.Use(middleware.PrometheusMetrics())
+
+	// Prometheus metrics endpoint (internal use)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Rate limiter
 	rateLimiter := middleware.NewRateLimiter(cfg.RedisClient, cfg.Config.RateLimit)
@@ -72,7 +79,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		productHandler := handler.NewProductHandler(cfg.ProductService)
 		orderHandler := handler.NewOrderHandler(cfg.OrderService)
 		couponHandler := handler.NewCouponHandler(cfg.CouponService)
-		searchHandler := handler.NewSearchHandler(cfg.GameService, cfg.MusicService)
+		searchHandler := handler.NewSearchHandler(cfg.GameService, cfg.MusicService, cfg.SearchService)
 		authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)
 
 		// Auth routes (no auth required)
@@ -89,6 +96,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			search.GET("", searchHandler.SearchAll)
 			search.GET("/games", searchHandler.SearchGames)
 			search.GET("/albums", searchHandler.SearchAlbums)
+			search.GET("/popular", searchHandler.GetPopularSearches)
 		}
 
 		// Protected routes
@@ -268,6 +276,21 @@ v1.POST("/games/:id/branches", authMiddleware.Authenticate(), authMiddleware.Req
 			orders.GET("/:id", orderHandler.GetOrder)
 			orders.POST("/:id/pay", orderHandler.PayOrder)
 			orders.POST("/:id/cancel", orderHandler.CancelOrder)
+
+			// Payment gateway routes
+			if cfg.PaymentService != nil {
+				paymentHandler := handler.NewPaymentHandler(cfg.PaymentService)
+				orders.POST("/:id/pay/alipay", paymentHandler.PayWithAlipay)
+				orders.POST("/:id/pay/wechat", paymentHandler.PayWithWechat)
+			}
+		}
+
+		// Payment callback routes (no auth required — called by payment gateways)
+		if cfg.PaymentService != nil {
+			paymentHandler := handler.NewPaymentHandler(cfg.PaymentService)
+			paymentCallbacks := v1.Group("/payment/callback")
+			paymentCallbacks.POST("/alipay", paymentHandler.AlipayCallback)
+			paymentCallbacks.POST("/wechat", paymentHandler.WechatCallback)
 		}
 
 		// Coupon routes

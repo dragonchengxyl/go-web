@@ -11,6 +11,8 @@ type Config struct {
 	JWT       JWTConfig       `mapstructure:"jwt"`
 	OSS       OSSConfig       `mapstructure:"oss"`
 	RateLimit RateLimitConfig `mapstructure:"ratelimit"`
+	Email     EmailConfig     `mapstructure:"email"`
+	Payment   PaymentConfig   `mapstructure:"payment"`
 }
 
 type ServerConfig struct {
@@ -51,3 +53,33 @@ type RateLimitConfig struct {
 	Authenticated   int `mapstructure:"authenticated"`
 	Admin           int `mapstructure:"admin"`
 }
+
+type EmailConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	From     string `mapstructure:"from"`
+}
+
+type PaymentConfig struct {
+	Alipay AlipayConfig `mapstructure:"alipay"`
+	Wechat WechatConfig `mapstructure:"wechat"`
+}
+
+type AlipayConfig struct {
+	AppID      string `mapstructure:"app_id"`
+	PrivateKey string `mapstructure:"private_key"`
+	PublicKey  string `mapstructure:"public_key"`
+	NotifyURL  string `mapstructure:"notify_url"`
+	Sandbox    bool   `mapstructure:"sandbox"`
+}
+
+type WechatConfig struct {
+	AppID     string `mapstructure:"app_id"`
+	MchID     string `mapstructure:"mch_id"`
+	APIKey    string `mapstructure:"api_key"`
+	NotifyURL string `mapstructure:"notify_url"`
+	Sandbox   bool   `mapstructure:"sandbox"`
+}
+

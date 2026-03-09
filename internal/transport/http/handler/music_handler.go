@@ -161,9 +161,13 @@ func (h *MusicHandler) StreamTrack(c *gin.Context) {
 		_ = c.Error(err)
 	}
 
-	// TODO: Generate streaming URL from OSS
+	// Generate pre-signed streaming URL from OSS
+	streamURL, err := h.musicService.GenerateStreamURL(c.Request.Context(), trackID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
 	response.Success(c, gin.H{
-		"stream_url": "https://example.com/stream/placeholder",
-		"message":    "OSS integration pending",
+		"stream_url": streamURL,
 	})
 }

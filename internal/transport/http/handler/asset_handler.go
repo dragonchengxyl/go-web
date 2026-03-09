@@ -232,11 +232,14 @@ func (h *AssetHandler) RequestDownload(c *gin.Context) {
 		_ = c.Error(err)
 	}
 
-	// TODO: Generate pre-signed URL from OSS
-	// For now, return a placeholder
+	// Generate pre-signed download URL from OSS
+	downloadURL, expiresIn, err := h.assetService.GenerateDownloadURL(c.Request.Context(), releaseID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
 	response.Success(c, gin.H{
-		"download_url": "https://example.com/download/placeholder",
-		"expires_in":   900, // 15 minutes
-		"message":      "OSS integration pending",
+		"download_url": downloadURL,
+		"expires_in":   expiresIn,
 	})
 }

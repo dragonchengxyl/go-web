@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -17,9 +17,12 @@ import { apiClient } from '@/lib/api-client';
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { items, getTotalPrice, clearCart } = useCartStore();
   const [paymentMethod, setPaymentMethod] = useState<'alipay' | 'wechat' | 'stripe'>('alipay');
-  const [couponCode, setCouponCode] = useState('');
+  // Read coupon pre-filled from cart page query param
+  const [couponCode, setCouponCode] = useState(searchParams.get('coupon') || '');
+  const [wechatQrCode, setWechatQrCode] = useState<string | null>(null);
 
   const totalPrice = getTotalPrice();
   const discount = 0;
@@ -27,18 +30,33 @@ export default function CheckoutPage() {
 
   const checkoutMutation = useMutation({
     mutationFn: async () => {
+      // Step 1: create order
       const order = await apiClient.createOrder(
         items.map(item => ({ product_id: item.productId })),
         couponCode || undefined,
         `order_${Date.now()}`
       );
 
-      await apiClient.payOrder(order.id, paymentMethod);
+      // Step 2: initiate payment based on method
+      if (paymentMethod === 'alipay') {
+        const { pay_url } = await apiClient.payOrderAlipay(order.id, `${window.location.origin}/orders/${order.id}?success=true`);
+        clearCart();
+        window.open(pay_url, '_blank');
+        alert('支付宝支付页面已在新窗口打开，完成支付后请返回此页面刷新查看订单状态。');
+        router.push(`/orders/${order.id}`);
+      } else if (paymentMethod === 'wechat') {
+        const { qr_code } = await apiClient.payOrderWechat(order.id);
+        clearCart();
+        setWechatQrCode(qr_code);
+        return order;
+      } else {
+        // stripe: fallback to generic payOrder
+        await apiClient.payOrder(order.id, paymentMethod);
+        clearCart();
+        router.push(`/orders/${order.id}?success=true`);
+      }
+
       return order;
-    },
-    onSuccess: (order) => {
-      clearCart();
-      router.push(`/orders/${order.id}?success=true`);
     },
     onError: (error: any) => {
       alert(error.message || '结账失败，请重试');
@@ -49,9 +67,52 @@ export default function CheckoutPage() {
     checkoutMutation.mutate();
   };
 
-  if (items.length === 0) {
+  if (items.length === 0 && !wechatQrCode) {
     router.push('/cart');
     return null;
+  }
+
+  // Show WeChat QR code after payment initiation
+  if (wechatQrCode) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <main className="pt-16">
+          <div className="container mx-auto px-4 py-12">
+            <div className="max-w-sm mx-auto text-center space-y-6">
+              <h1 className="text-2xl font-bold">微信扫码支付</h1>
+              <p className="text-muted-foreground">请使用微信扫描下方二维码完成支付</p>
+              <div className="border rounded-xl p-4 bg-white inline-block">
+                <img
+                  src={wechatQrCode}
+                  alt="微信支付二维码"
+                  className="w-48 h-48 mx-auto"
+                  onError={(e) => {
+                    // Fallback: show URL as text if image fails to load
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    const sibling = e.currentTarget.nextElementSibling as HTMLElement;
+                    if (sibling) sibling.style.display = 'block';
+                  }}
+                />
+                <p
+                  className="text-xs text-muted-foreground break-all mt-2"
+                  style={{ display: 'none' }}
+                >
+                  {wechatQrCode}
+                </p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                支付完成后，请点击下方按钮刷新查看订单状态。
+              </p>
+              <Button onClick={() => router.push('/orders')} className="w-full">
+                我已完成支付，查看订单
+              </Button>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
   }
 
   return (

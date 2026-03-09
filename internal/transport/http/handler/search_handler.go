@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -9,14 +10,16 @@ import (
 )
 
 type SearchHandler struct {
-	gameService  *usecase.GameService
-	musicService *usecase.MusicService
+	gameService   *usecase.GameService
+	musicService  *usecase.MusicService
+	searchService *usecase.SearchService
 }
 
-func NewSearchHandler(gameService *usecase.GameService, musicService *usecase.MusicService) *SearchHandler {
+func NewSearchHandler(gameService *usecase.GameService, musicService *usecase.MusicService, searchService *usecase.SearchService) *SearchHandler {
 	return &SearchHandler{
-		gameService:  gameService,
-		musicService: musicService,
+		gameService:   gameService,
+		musicService:  musicService,
+		searchService: searchService,
 	}
 }
 
@@ -104,18 +107,22 @@ func (h *SearchHandler) SearchAlbums(c *gin.Context) {
 
 // GetPopularSearches 获取热门搜索
 func (h *SearchHandler) GetPopularSearches(c *gin.Context) {
-	// TODO: 从Redis或数据库获取热门搜索词
-	popularSearches := []string{
-		"动作游戏",
-		"独立游戏",
-		"冒险游戏",
-		"原声音乐",
-		"钢琴曲",
+	limit := 10
+	if l := c.Query("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 50 {
+			limit = n
+		}
+	}
+
+	searches, err := h.searchService.GetPopularSearches(c.Request.Context(), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    0,
 		"message": "success",
-		"data":    popularSearches,
+		"data":    searches,
 	})
 }

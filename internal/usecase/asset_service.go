@@ -3,29 +3,33 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/asset"
 	"github.com/studio/platform/internal/domain/game"
+	"github.com/studio/platform/internal/infra/oss"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 // AssetService handles user asset business logic
 type AssetService struct {
-	assetRepo   asset.Repository
-	gameRepo    game.Repository
-	branchRepo  game.BranchRepository
-	releaseRepo game.ReleaseRepository
+	assetRepo      asset.Repository
+	gameRepo       game.Repository
+	branchRepo     game.BranchRepository
+	releaseRepo    game.ReleaseRepository
+	storageService oss.StorageService
 }
 
 // NewAssetService creates a new AssetService
-func NewAssetService(assetRepo asset.Repository, gameRepo game.Repository, branchRepo game.BranchRepository, releaseRepo game.ReleaseRepository) *AssetService {
+func NewAssetService(assetRepo asset.Repository, gameRepo game.Repository, branchRepo game.BranchRepository, releaseRepo game.ReleaseRepository, storageService oss.StorageService) *AssetService {
 	return &AssetService{
-		assetRepo:   assetRepo,
-		gameRepo:    gameRepo,
-		branchRepo:  branchRepo,
-		releaseRepo: releaseRepo,
+		assetRepo:      assetRepo,
+		gameRepo:       gameRepo,
+		branchRepo:     branchRepo,
+		releaseRepo:    releaseRepo,
+		storageService: storageService,
 	}
 }
 
@@ -177,4 +181,28 @@ func (s *AssetService) LogDownload(ctx context.Context, userID, releaseID uuid.U
 	}
 
 	return nil
+}
+
+// GenerateDownloadURL generates a pre-signed download URL for a game release.
+// The release must have an OSSKey set; otherwise an error is returned.
+func (s *AssetService) GenerateDownloadURL(ctx context.Context, releaseID uuid.UUID) (string, int, error) {
+	release, err := s.releaseRepo.GetByID(ctx, releaseID)
+	if err != nil {
+		if errors.Is(err, game.ErrNotFound) {
+			return "", 0, apperr.ErrNotFound
+		}
+		return "", 0, apperr.Wrap(apperr.CodeInternalError, "查询版本失败", err)
+	}
+
+	if release.OSSKey == nil || *release.OSSKey == "" {
+		return "", 0, apperr.New(apperr.CodeInternalError, "该版本暂无下载文件")
+	}
+
+	const expiresIn = 15 * time.Minute
+	downloadURL, err := s.storageService.GeneratePresignedURL(ctx, *release.OSSKey, expiresIn)
+	if err != nil {
+		return "", 0, fmt.Errorf("generate presigned url: %w", err)
+	}
+
+	return downloadURL, int(expiresIn.Seconds()), nil
 }

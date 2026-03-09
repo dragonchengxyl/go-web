@@ -8,6 +8,24 @@ interface ApiResponse<T> {
   timestamp?: number
 }
 
+export interface Achievement {
+  id: string
+  name: string
+  description: string
+  icon: string
+  points: number
+  unlocked_at?: string
+}
+
+export interface LeaderboardEntry {
+  rank: number
+  user_id: string
+  username: string
+  avatar?: string
+  points: number
+  level: number
+}
+
 class ApiClient {
   private baseUrl: string
   private token: string | null = null
@@ -199,6 +217,99 @@ class ApiClient {
 
   async searchAlbums(query: string) {
     return this.get<any[]>(`/search/albums?q=${encodeURIComponent(query)}`)
+  }
+
+  // Search - Popular
+  async getPopularSearches(): Promise<string[]> {
+    return this.get<string[]>('/search/popular')
+  }
+
+  // Coupon APIs
+  async validateCoupon(code: string): Promise<{ valid: boolean; discount: number; discount_type: string }> {
+    return this.get<{ valid: boolean; discount: number; discount_type: string }>(
+      `/coupons/validate?code=${encodeURIComponent(code)}`
+    )
+  }
+
+  async redeemCode(code: string): Promise<void> {
+    return this.post<void>('/coupons/redeem', { code })
+  }
+
+  // Achievement APIs
+  async getUserAchievements(userId: string): Promise<Achievement[]> {
+    return this.get<Achievement[]>(`/users/${userId}/achievements`)
+  }
+
+  async getMyAchievements(): Promise<Achievement[]> {
+    return this.get<Achievement[]>('/users/me/achievements')
+  }
+
+  async getMyPoints(): Promise<{ total: number; level: number }> {
+    return this.get<{ total: number; level: number }>('/users/me/points')
+  }
+
+  // Leaderboard APIs
+  async getLeaderboard(type?: 'all' | 'weekly'): Promise<LeaderboardEntry[]> {
+    if (type === 'weekly') {
+      return this.get<LeaderboardEntry[]>('/leaderboard/weekly')
+    }
+    return this.get<LeaderboardEntry[]>('/leaderboard')
+  }
+
+  // Upload APIs
+  async uploadAvatar(file: File): Promise<{ url: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const headers: Record<string, string> = {}
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`
+    }
+
+    const response = await fetch(`${this.baseUrl}/upload/avatar`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    })
+
+    const data: ApiResponse<{ url: string }> = await response.json()
+    if (data.code !== 0) {
+      throw new Error(data.message || 'Upload failed')
+    }
+    return data.data
+  }
+
+  async uploadFile(endpoint: string, file: File): Promise<{ url: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const headers: Record<string, string> = {}
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`
+    }
+
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    })
+
+    const data: ApiResponse<{ url: string }> = await response.json()
+    if (data.code !== 0) {
+      throw new Error(data.message || 'Upload failed')
+    }
+    return data.data
+  }
+
+  // Payment APIs (method-specific)
+  async payOrderAlipay(orderId: string, returnUrl?: string): Promise<{ pay_url: string }> {
+    return this.post<{ pay_url: string }>(`/orders/${orderId}/pay/alipay`, {
+      return_url: returnUrl,
+    })
+  }
+
+  async payOrderWechat(orderId: string): Promise<{ qr_code: string }> {
+    return this.post<{ qr_code: string }>(`/orders/${orderId}/pay/wechat`, {})
   }
 }
 

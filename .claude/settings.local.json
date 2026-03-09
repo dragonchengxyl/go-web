@@ -53,7 +53,8 @@
       "Bash(python3:*)",
       "Bash(~/go/bin/golangci-lint run:*)",
       "Bash(ss:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(go list:*)"
     ]
   }
 }

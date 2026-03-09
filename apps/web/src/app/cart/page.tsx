@@ -12,15 +12,58 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { useCartStore } from '@/lib/store/cart';
 import { formatPrice } from '@/lib/utils';
-import { Trash2, Plus, Minus, ShoppingBag } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingBag, Loader2 } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, getTotalPrice, clearCart } = useCartStore();
   const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discount: number;
+    discount_type: string;
+  } | null>(null);
+  const [couponError, setCouponError] = useState('');
+  const [isValidating, setIsValidating] = useState(false);
 
   const totalPrice = getTotalPrice();
-  const discount = 0; // TODO: Implement coupon logic
+
+  const discount = appliedCoupon
+    ? appliedCoupon.discount_type === 'percent'
+      ? Math.round(totalPrice * appliedCoupon.discount) / 100
+      : appliedCoupon.discount
+    : 0;
+
   const finalPrice = totalPrice - discount;
+
+  const handleValidateCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setIsValidating(true);
+    setCouponError('');
+    setAppliedCoupon(null);
+    try {
+      const result = await apiClient.validateCoupon(couponCode.trim());
+      if (result.valid) {
+        setAppliedCoupon({
+          code: couponCode.trim(),
+          discount: result.discount,
+          discount_type: result.discount_type,
+        });
+      } else {
+        setCouponError('优惠券无效或已过期');
+      }
+    } catch (err: any) {
+      setCouponError(err.message || '验证失败，请重试');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponError('');
+  };
 
   if (items.length === 0) {
     return (
@@ -130,14 +173,51 @@ export default function CartPage() {
                   {/* Coupon */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium">优惠券代码</label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="输入优惠券代码"
-                        value={couponCode}
-                        onChange={(e) => setCouponCode(e.target.value)}
-                      />
-                      <Button variant="outline">应用</Button>
-                    </div>
+                    {appliedCoupon ? (
+                      <div className="flex items-center justify-between p-2 bg-primary/10 border border-primary/30 rounded-lg">
+                        <span className="text-sm font-medium text-primary">
+                          {appliedCoupon.code} 已应用
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto py-0 px-1 text-muted-foreground hover:text-destructive"
+                          onClick={handleRemoveCoupon}
+                        >
+                          移除
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="输入优惠券代码"
+                            value={couponCode}
+                            onChange={(e) => {
+                              setCouponCode(e.target.value);
+                              setCouponError('');
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleValidateCoupon();
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            onClick={handleValidateCoupon}
+                            disabled={isValidating || !couponCode.trim()}
+                          >
+                            {isValidating ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              '验证'
+                            )}
+                          </Button>
+                        </div>
+                        {couponError && (
+                          <p className="text-sm text-destructive">{couponError}</p>
+                        )}
+                      </>
+                    )}
                   </div>
 
                   {/* Price Breakdown */}
@@ -160,7 +240,11 @@ export default function CartPage() {
                 </CardContent>
                 <CardFooter className="flex flex-col gap-2">
                   <Button asChild className="w-full" size="lg">
-                    <Link href="/checkout">去结算</Link>
+                    <Link
+                      href={`/checkout${appliedCoupon ? `?coupon=${encodeURIComponent(appliedCoupon.code)}` : ''}`}
+                    >
+                      去结算
+                    </Link>
                   </Button>
                   <Button asChild variant="outline" className="w-full">
                     <Link href="/games">继续购物</Link>

@@ -3,24 +3,28 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/music"
+	"github.com/studio/platform/internal/infra/oss"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 // MusicService handles music-related business logic
 type MusicService struct {
-	albumRepo music.AlbumRepository
-	trackRepo music.TrackRepository
+	albumRepo      music.AlbumRepository
+	trackRepo      music.TrackRepository
+	storageService oss.StorageService
 }
 
 // NewMusicService creates a new MusicService
-func NewMusicService(albumRepo music.AlbumRepository, trackRepo music.TrackRepository) *MusicService {
+func NewMusicService(albumRepo music.AlbumRepository, trackRepo music.TrackRepository, storageService oss.StorageService) *MusicService {
 	return &MusicService{
-		albumRepo: albumRepo,
-		trackRepo: trackRepo,
+		albumRepo:      albumRepo,
+		trackRepo:      trackRepo,
+		storageService: storageService,
 	}
 }
 
@@ -200,4 +204,27 @@ func (s *MusicService) SearchAlbums(ctx context.Context, query string, limit int
 	}
 
 	return output.Albums, nil
+}
+
+// GenerateStreamURL generates a pre-signed streaming URL for a track.
+// The URL is valid for 1 hour.
+func (s *MusicService) GenerateStreamURL(ctx context.Context, trackID uuid.UUID) (string, error) {
+	track, err := s.trackRepo.GetByID(ctx, trackID)
+	if err != nil {
+		if errors.Is(err, music.ErrNotFound) {
+			return "", apperr.ErrNotFound
+		}
+		return "", apperr.Wrap(apperr.CodeInternalError, "查询音轨失败", err)
+	}
+
+	if track.StreamKey == nil || *track.StreamKey == "" {
+		return "", apperr.New(apperr.CodeInternalError, "该音轨暂无音频文件")
+	}
+
+	streamURL, err := s.storageService.GeneratePresignedURL(ctx, *track.StreamKey, time.Hour)
+	if err != nil {
+		return "", fmt.Errorf("generate stream url: %w", err)
+	}
+
+	return streamURL, nil
 }
