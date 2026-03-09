@@ -497,6 +497,14 @@ class ApiClient {
     return this.get<LeaderboardEntry[]>('/leaderboard')
   }
 
+  async blockUser(userId: string) {
+    return this.post<{ message: string }>(`/users/${userId}/block`)
+  }
+
+  async unblockUser(userId: string) {
+    return this.delete<{ message: string }>(`/users/${userId}/block`)
+  }
+
   async createReport(targetType: string, targetId: string, reason: string, description?: string) {
     return this.post<{ message: string }>('/reports', { target_type: targetType, target_id: targetId, reason, description })
   }

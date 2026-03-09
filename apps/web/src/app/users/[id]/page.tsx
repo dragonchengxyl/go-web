@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus, UserMinus, MessageCircle, MapPin, Globe } from 'lucide-react';
+import { UserPlus, UserMinus, MessageCircle, MapPin, Globe, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PostCard } from '@/components/post/post-card';
@@ -40,9 +40,11 @@ export default function UserProfilePage() {
   const [followers, setFollowers] = useState<FollowUser[]>([]);
   const [following, setFollowing] = useState<FollowUser[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -115,6 +117,28 @@ export default function UserProfilePage() {
     }
   }
 
+  async function handleBlock() {
+    if (!apiClient.getToken()) return;
+    setBlockLoading(true);
+    try {
+      if (isBlocked) {
+        await apiClient.unblockUser(userId);
+        setIsBlocked(false);
+      } else {
+        await apiClient.blockUser(userId);
+        setIsBlocked(true);
+        if (isFollowing) {
+          await apiClient.unfollowUser(userId);
+          setIsFollowing(false);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBlockLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-2xl mx-auto pt-20 px-4">
@@ -168,7 +192,7 @@ export default function UserProfilePage() {
                   variant={isFollowing ? 'outline' : 'default'}
                   size="sm"
                   onClick={handleFollow}
-                  disabled={followLoading}
+                  disabled={followLoading || isBlocked}
                 >
                   {isFollowing ? (
                     <><UserMinus className="h-4 w-4 mr-1" />取消关注</>
@@ -181,6 +205,16 @@ export default function UserProfilePage() {
                     <MessageCircle className="h-4 w-4" />
                   </Button>
                 </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBlock}
+                  disabled={blockLoading}
+                  className={isBlocked ? 'text-muted-foreground' : 'text-red-500 hover:text-red-600'}
+                  title={isBlocked ? '取消屏蔽' : '屏蔽用户'}
+                >
+                  <ShieldX className="h-4 w-4" />
+                </Button>
               </>
             )}
             {isSelf && (

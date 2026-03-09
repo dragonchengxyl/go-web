@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/domain/block"
 	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/redis"
@@ -38,6 +39,7 @@ type RouterConfig struct {
 	Hub                 *ws.Hub
 	TokenStore          *redis.TokenStore
 	ReportRepo          report.Repository
+	BlockRepo           block.Repository
 }
 
 // NewRouter creates a new HTTP router
@@ -211,6 +213,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Reports
 			reportHandler := handler.NewReportHandler(cfg.ReportRepo)
 			protected.POST("/reports", reportHandler.CreateReport)
+
+			// Block
+			blockHandler := handler.NewBlockHandler(cfg.BlockRepo)
+			protected.POST("/users/:id/block", blockHandler.Block)
+			protected.DELETE("/users/:id/block", blockHandler.Unblock)
+			protected.GET("/users/me/blocked", blockHandler.ListBlocked)
 
 			// Music (admin write)
 			albumsProtected := protected.Group("/albums")
