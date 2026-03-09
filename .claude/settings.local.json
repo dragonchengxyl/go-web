@@ -57,7 +57,11 @@
       "Bash(go list:*)",
       "Bash(npm run:*)",
       "Bash(go:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Read(//home/chenlongting/.claude/**)",
+      "Bash(cp:*)",
+      "Bash(/home/chenlongting/go-web/internal/usecase/user_admin.go:*)",
+      "Bash(/home/chenlongting/go-web/internal/usecase/post_service.go:*)"
     ]
   }
 }
