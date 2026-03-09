@@ -497,6 +497,18 @@ class ApiClient {
     return this.get<LeaderboardEntry[]>('/leaderboard')
   }
 
+  async getCreatorStats() {
+    return this.get<{
+      post_count: number
+      total_likes: number
+      total_comments: number
+      follower_count: number
+      following_count: number
+      tip_total_cents: number
+      tip_count: number
+    }>('/creator/stats')
+  }
+
   // ── User Profile ──────────────────────────────────────────────────────
 
   async getMe() {

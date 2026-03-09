@@ -202,6 +202,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			uploadHandler := handler.NewUploadHandler("./uploads", 10*1024*1024)
 			protected.POST("/upload/image", uploadHandler.UploadImage)
 
+			// Creator dashboard
+			creatorHandler := handler.NewCreatorHandler(cfg.PostService, cfg.FollowService, cfg.TipService)
+			protected.GET("/creator/stats", creatorHandler.GetStats)
+
 			// Music (admin write)
 			albumsProtected := protected.Group("/albums")
 			albumsProtected.Use(authMiddleware.RequireRole(user.RoleAdmin))
