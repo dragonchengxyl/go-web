@@ -61,6 +61,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.GET("/health", healthHandler.Health)
 	r.GET("/ready", healthHandler.Ready)
 
+	// Static file serving for local uploads
+	r.Static("/uploads", "./uploads")
+
 	v1 := r.Group("/api/v1")
 	{
 		// Initialize handlers
@@ -193,6 +196,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/notifications", notificationHandler.ListNotifications)
 			protected.POST("/notifications/read", notificationHandler.MarkRead)
 			protected.GET("/notifications/unread-count", notificationHandler.CountUnread)
+
+			// Upload
+			uploadHandler := handler.NewUploadHandler("./uploads", 10*1024*1024)
+			protected.POST("/upload/image", uploadHandler.UploadImage)
 
 			// Music (admin write)
 			albumsProtected := protected.Group("/albums")

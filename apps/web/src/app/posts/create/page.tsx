@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { X, ImagePlus, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,12 +11,42 @@ import { Label } from '@/components/ui/label';
 
 export default function CreatePostPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
   const [visibility, setVisibility] = useState('public');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [images, setImages] = useState<{ url: string; preview: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const remaining = 9 - images.length;
+    const toUpload = files.slice(0, remaining);
+    setUploading(true);
+    try {
+      const results = await Promise.all(
+        toUpload.map(async (file) => {
+          const preview = URL.createObjectURL(file);
+          const { url } = await apiClient.uploadFile('/upload/image', file);
+          return { url, preview };
+        })
+      );
+      setImages(prev => [...prev, ...results]);
+    } catch (e: any) {
+      setError(e.message || '图片上传失败');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  function removeImage(index: number) {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +60,7 @@ export default function CreatePostPage() {
       const post = await apiClient.createPost({
         title: title || undefined,
         content,
+        media_urls: images.map(img => img.url),
         tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         visibility: visibility as 'public' | 'followers_only' | 'private',
       });
@@ -66,6 +98,51 @@ export default function CreatePostPage() {
             required
           />
         </div>
+
+        {/* Image upload */}
+        <div>
+          <Label>图片（最多 9 张）</Label>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {images.map((img, i) => (
+              <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+                <img src={img.preview} alt="" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => removeImage(i)}
+                  className="absolute top-1 right-1 bg-black/60 rounded-full p-0.5 hover:bg-black/80 transition-colors"
+                >
+                  <X className="h-3 w-3 text-white" />
+                </button>
+              </div>
+            ))}
+            {images.length < 9 && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 hover:border-primary/50 hover:bg-muted/50 transition-colors text-muted-foreground"
+              >
+                {uploading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>
+                    <ImagePlus className="h-5 w-5" />
+                    <span className="text-xs">添加图片</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        </div>
+
         <div>
           <Label htmlFor="tags">标签（逗号分隔）</Label>
           <Input
@@ -91,7 +168,7 @@ export default function CreatePostPage() {
         </div>
         {error && <p className="text-destructive text-sm">{error}</p>}
         <div className="flex gap-3 pt-2">
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || uploading}>
             {loading ? '发布中...' : '发布'}
           </Button>
           <Button type="button" variant="outline" onClick={() => router.back()}>
