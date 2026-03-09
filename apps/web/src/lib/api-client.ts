@@ -467,6 +467,10 @@ class ApiClient {
     return this.get<any>('/users/me')
   }
 
+  async getUser(userId: string) {
+    return this.get<any>(`/users/${userId}`)
+  }
+
   async updateProfile(data: {
     bio?: string
     website?: string
