@@ -102,6 +102,11 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 		args = append(args, string(*filter.Visibility))
 		idx++
 	}
+	if len(filter.Tags) > 0 {
+		where += fmt.Sprintf(" AND p.tags && $%d", idx)
+		args = append(args, filter.Tags)
+		idx++
+	}
 
 	countSQL := "SELECT COUNT(*) FROM posts p " + where
 	var total int64
@@ -188,6 +193,33 @@ func scanPosts(rows pgx.Rows) ([]*post.Post, int64, error) {
 		return nil, 0, fmt.Errorf("rows error: %w", err)
 	}
 	return posts, int64(len(posts)), nil
+}
+
+func (r *PostRepository) GetHotTags(ctx context.Context, limit int) ([]string, error) {
+	const sql = `
+		SELECT tag, COUNT(*) AS cnt
+		FROM posts, unnest(tags) AS tag
+		WHERE deleted_at IS NULL AND visibility = 'public'
+		GROUP BY tag
+		ORDER BY cnt DESC
+		LIMIT $1
+	`
+	rows, err := r.pool.Query(ctx, sql, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hot tags: %w", err)
+	}
+	defer rows.Close()
+
+	tags := make([]string, 0, limit)
+	for rows.Next() {
+		var tag string
+		var cnt int64
+		if err := rows.Scan(&tag, &cnt); err != nil {
+			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+	return tags, rows.Err()
 }
 
 func (r *PostRepository) LikePost(ctx context.Context, like *post.PostLike) error {

@@ -229,11 +229,16 @@ class ApiClient {
     return this.get<{ posts: Post[]; total: number; page: number; size: number }>(`/feed?${q}`)
   }
 
-  async getExplore(page?: number, pageSize?: number) {
+  async getExplore(page?: number, pageSize?: number, tag?: string) {
     const q = new URLSearchParams()
     if (page) q.set('page', String(page))
     if (pageSize) q.set('page_size', String(pageSize))
+    if (tag) q.set('tag', tag)
     return this.get<{ posts: Post[]; total: number; page: number; size: number }>(`/explore?${q}`)
+  }
+
+  async getHotTags(): Promise<string[]> {
+    return this.get<string[]>('/explore/tags')
   }
 
   async getPost(id: string) {

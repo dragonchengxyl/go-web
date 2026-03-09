@@ -101,6 +101,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 		// Explore (public)
 		v1.GET("/explore", postHandler.GetExplore)
+		v1.GET("/explore/tags", postHandler.GetHotTags)
 
 		// Music (public read)
 		albums := v1.Group("/albums")

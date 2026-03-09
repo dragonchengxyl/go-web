@@ -139,7 +139,7 @@ func (s *PostService) ListUserPosts(ctx context.Context, input ListUserPostsInpu
 }
 
 // ListExplore lists recent public posts for explore page
-func (s *PostService) ListExplore(ctx context.Context, page, pageSize int) ([]*post.Post, int64, error) {
+func (s *PostService) ListExplore(ctx context.Context, page, pageSize int, tag string) ([]*post.Post, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -147,11 +147,23 @@ func (s *PostService) ListExplore(ctx context.Context, page, pageSize int) ([]*p
 		pageSize = 20
 	}
 	vis := post.VisibilityPublic
-	return s.postRepo.List(ctx, post.ListFilter{
+	filter := post.ListFilter{
 		Visibility: &vis,
 		Page:       page,
 		PageSize:   pageSize,
-	})
+	}
+	if tag != "" {
+		filter.Tags = []string{tag}
+	}
+	return s.postRepo.List(ctx, filter)
+}
+
+// GetHotTags returns the most used tags
+func (s *PostService) GetHotTags(ctx context.Context, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	return s.postRepo.GetHotTags(ctx, limit)
 }
 
 // ListFeed returns posts from followed users

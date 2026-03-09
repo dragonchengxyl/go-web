@@ -236,12 +236,23 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 // GetExplore GET /api/v1/explore
 func (h *PostHandler) GetExplore(c *gin.Context) {
 	page, pageSize := getPageParams(c)
-	posts, total, err := h.postService.ListExplore(c.Request.Context(), page, pageSize)
+	tag := c.Query("tag")
+	posts, total, err := h.postService.ListExplore(c.Request.Context(), page, pageSize, tag)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 	response.Success(c, gin.H{"posts": posts, "total": total, "page": page, "size": len(posts)})
+}
+
+// GetHotTags GET /api/v1/explore/tags
+func (h *PostHandler) GetHotTags(c *gin.Context) {
+	tags, err := h.postService.GetHotTags(c.Request.Context(), 20)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, tags)
 }
 
 // ListUserPosts GET /api/v1/users/:username/posts
