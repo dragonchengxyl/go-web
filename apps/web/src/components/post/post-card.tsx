@@ -5,8 +5,18 @@ import { Heart, MessageCircle, MoreHorizontal, Pin } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { formatDistanceToNow } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes}分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}天前`;
+  return new Date(dateStr).toLocaleDateString('zh-CN');
+}
 
 interface PostCardProps {
   post: Post;
@@ -15,10 +25,7 @@ interface PostCardProps {
 }
 
 export function PostCard({ post, onLike, showFull = false }: PostCardProps) {
-  const timeAgo = formatDistanceToNow(new Date(post.created_at), {
-    addSuffix: true,
-    locale: zhCN,
-  });
+  const createdAgo = timeAgo(post.created_at);
 
   return (
     <div className="bg-card border rounded-xl p-4 hover:border-primary/30 transition-colors">
@@ -40,7 +47,7 @@ export function PostCard({ post, onLike, showFull = false }: PostCardProps) {
               {post.author_username || '未知用户'}
             </Link>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span>{timeAgo}</span>
+              <span>{createdAgo}</span>
               {post.is_pinned && (
                 <>
                   <span>·</span>

@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"context"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/notification"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -10,11 +14,15 @@ import (
 
 // FollowHandler handles follow-related HTTP requests
 type FollowHandler struct {
-	followService *usecase.FollowService
+	followService       *usecase.FollowService
+	notificationService *usecase.NotificationService
 }
 
-func NewFollowHandler(followService *usecase.FollowService) *FollowHandler {
-	return &FollowHandler{followService: followService}
+func NewFollowHandler(followService *usecase.FollowService, notificationService *usecase.NotificationService) *FollowHandler {
+	return &FollowHandler{
+		followService:       followService,
+		notificationService: notificationService,
+	}
 }
 
 // Follow POST /api/v1/users/:id/follow
@@ -34,6 +42,26 @@ func (h *FollowHandler) Follow(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+
+	// Notify followee async (fire-and-forget)
+	if h.notificationService != nil {
+		actorID := followerID
+		targetID := followeeID
+		notifSvc := h.notificationService
+		go func() {
+			defer func() { recover() }()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = notifSvc.Notify(ctx, &notification.Notification{
+				UserID:     targetID,
+				ActorID:    &actorID,
+				Type:       notification.TypeFollow,
+				TargetID:   &actorID,
+				TargetType: "user",
+			})
+		}()
+	}
+
 	response.Success(c, gin.H{"message": "关注成功"})
 }
 

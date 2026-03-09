@@ -74,6 +74,7 @@ func main() {
 	postRepo := postgres.NewPostRepository(pool)
 	followRepo := postgres.NewFollowRepository(pool)
 	chatRepo := postgres.NewChatRepository(pool)
+	notificationRepo := postgres.NewNotificationRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
@@ -123,6 +124,8 @@ func main() {
 	defer hubCancel()
 	go hub.Run(hubCtx)
 
+	notificationService := usecase.NewNotificationService(notificationRepo, hub)
+
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
 		Config:             cfg,
@@ -140,8 +143,9 @@ func main() {
 		PostService:        postService,
 		FollowService:      followService,
 		ChatService:        chatService,
-		TipService:         tipService,
-		Hub:                hub,
+		TipService:          tipService,
+		NotificationService: notificationService,
+		Hub:                 hub,
 		TokenStore:         tokenStore,
 	})
 

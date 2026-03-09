@@ -6,10 +6,12 @@ import { Menu, X, User, Bell, MessageCircle, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { GlobalSearch } from '@/components/search/global-search';
+import { apiClient } from '@/lib/api-client';
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,6 +19,27 @@ export function Header() {
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    apiClient.setToken(token);
+
+    const fetchUnread = async () => {
+      try {
+        const data = await apiClient.getUnreadCount();
+        setUnreadCount(data.count);
+      } catch {
+        // not logged in or error — ignore
+      }
+    };
+
+    fetchUnread();
+
+    // Re-check every 60 seconds
+    const interval = setInterval(fetchUnread, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -80,8 +103,13 @@ export function Header() {
               </Button>
             </Link>
             <Link href="/notifications">
-              <Button variant="ghost" size="icon" title="通知">
+              <Button variant="ghost" size="icon" title="通知" className="relative">
                 <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-medium leading-none">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </Button>
             </Link>
             <Link href="/profile">
@@ -141,7 +169,7 @@ export function Header() {
                 className="text-sm font-medium hover:text-primary transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                通知
+                通知{unreadCount > 0 && ` (${unreadCount})`}
               </Link>
               <Link
                 href="/profile"

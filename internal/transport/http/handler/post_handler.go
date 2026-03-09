@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"context"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/notification"
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/pkg/apperr"
@@ -12,12 +16,17 @@ import (
 
 // PostHandler handles post-related HTTP requests
 type PostHandler struct {
-	postService   *usecase.PostService
-	followService *usecase.FollowService
+	postService         *usecase.PostService
+	followService       *usecase.FollowService
+	notificationService *usecase.NotificationService
 }
 
-func NewPostHandler(postService *usecase.PostService, followService *usecase.FollowService) *PostHandler {
-	return &PostHandler{postService: postService, followService: followService}
+func NewPostHandler(postService *usecase.PostService, followService *usecase.FollowService, notificationService *usecase.NotificationService) *PostHandler {
+	return &PostHandler{
+		postService:         postService,
+		followService:       followService,
+		notificationService: notificationService,
+	}
 }
 
 // CreatePost POST /api/v1/posts
@@ -154,6 +163,31 @@ func (h *PostHandler) LikePost(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+
+	// Notify post author async (fire-and-forget)
+	if h.notificationService != nil {
+		actorID := userID
+		targetID := postID
+		notifSvc := h.notificationService
+		postSvc := h.postService
+		go func() {
+			defer func() { recover() }()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			p, err := postSvc.GetPost(ctx, targetID)
+			if err != nil || p.AuthorID == actorID {
+				return
+			}
+			_ = notifSvc.Notify(ctx, &notification.Notification{
+				UserID:     p.AuthorID,
+				ActorID:    &actorID,
+				Type:       notification.TypeLike,
+				TargetID:   &targetID,
+				TargetType: "post",
+			})
+		}()
+	}
+
 	response.Success(c, gin.H{"message": "点赞成功"})
 }
 

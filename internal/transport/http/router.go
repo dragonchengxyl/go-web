@@ -17,24 +17,25 @@ import (
 
 // RouterConfig holds router dependencies
 type RouterConfig struct {
-	Config             *configs.Config
-	Logger             *zap.Logger
-	Pool               *pgxpool.Pool
-	RedisClient        *redisClient.Client
-	UserService        *usecase.UserService
-	MusicService       *usecase.MusicService
-	CommentService     *usecase.CommentService
-	OrderService       *usecase.OrderService
-	PaymentService     *usecase.PaymentService
-	SearchService      *usecase.SearchService
-	StatsService       *usecase.StatsService
-	AchievementService *usecase.AchievementService
-	PostService        *usecase.PostService
-	FollowService      *usecase.FollowService
-	ChatService        *usecase.ChatService
-	TipService         *usecase.TipService
-	Hub                *ws.Hub
-	TokenStore         *redis.TokenStore
+	Config              *configs.Config
+	Logger              *zap.Logger
+	Pool                *pgxpool.Pool
+	RedisClient         *redisClient.Client
+	UserService         *usecase.UserService
+	MusicService        *usecase.MusicService
+	CommentService      *usecase.CommentService
+	OrderService        *usecase.OrderService
+	PaymentService      *usecase.PaymentService
+	SearchService       *usecase.SearchService
+	StatsService        *usecase.StatsService
+	AchievementService  *usecase.AchievementService
+	PostService         *usecase.PostService
+	FollowService       *usecase.FollowService
+	ChatService         *usecase.ChatService
+	TipService          *usecase.TipService
+	NotificationService *usecase.NotificationService
+	Hub                 *ws.Hub
+	TokenStore          *redis.TokenStore
 }
 
 // NewRouter creates a new HTTP router
@@ -66,13 +67,14 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		authHandler := handler.NewAuthHandler(cfg.UserService)
 		userHandler := handler.NewUserHandler(cfg.UserService)
 		musicHandler := handler.NewMusicHandler(cfg.MusicService)
-		commentHandler := handler.NewCommentHandler(cfg.CommentService)
+		commentHandler := handler.NewCommentHandler(cfg.CommentService, cfg.PostService, cfg.NotificationService)
 		searchHandler := handler.NewSearchHandler(nil, cfg.MusicService, cfg.SearchService)
-		postHandler := handler.NewPostHandler(cfg.PostService, cfg.FollowService)
-		followHandler := handler.NewFollowHandler(cfg.FollowService)
+		postHandler := handler.NewPostHandler(cfg.PostService, cfg.FollowService, cfg.NotificationService)
+		followHandler := handler.NewFollowHandler(cfg.FollowService, cfg.NotificationService)
 		chatHandler := handler.NewChatHandler(cfg.ChatService, cfg.Hub, cfg.Logger)
 		tipHandler := handler.NewTipHandler(cfg.TipService, cfg.PaymentService)
 		achievementHandler := handler.NewAchievementHandler(cfg.AchievementService)
+		notificationHandler := handler.NewNotificationHandler(cfg.NotificationService)
 
 		authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)
 
@@ -136,6 +138,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		v1.GET("/users/:id/follow-stats", followHandler.GetFollowStats)
 		v1.GET("/users/:id/posts", postHandler.ListUserPosts)
 		v1.GET("/users/:id/tips/received", tipHandler.ListReceivedTips)
+		v1.GET("/users/:id", userHandler.GetUserByID)
 
 		// ── Authenticated routes ────────────────────────────────────────
 		protected := v1.Group("")
@@ -146,7 +149,6 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Profile
 			protected.GET("/users/me", userHandler.GetProfile)
 			protected.PUT("/users/me", userHandler.UpdateProfile)
-			protected.GET("/users/:id", userHandler.GetUserByID)
 
 			// My achievements & points
 			protected.GET("/users/me/achievements", achievementHandler.GetMyAchievements)
@@ -186,6 +188,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 			// Tips
 			protected.POST("/tips", tipHandler.CreateTip)
+
+			// Notifications
+			protected.GET("/notifications", notificationHandler.ListNotifications)
+			protected.POST("/notifications/read", notificationHandler.MarkRead)
+			protected.GET("/notifications/unread-count", notificationHandler.CountUnread)
 
 			// Music (admin write)
 			albumsProtected := protected.Group("/albums")

@@ -95,6 +95,19 @@ export interface TipOrder {
   created_at: string
 }
 
+export interface Notification {
+  id: string
+  user_id: string
+  actor_id?: string
+  type: 'like' | 'comment' | 'follow' | 'tip' | 'system'
+  target_id?: string
+  target_type?: string
+  is_read: boolean
+  created_at: string
+  actor_username?: string
+  actor_avatar_key?: string
+}
+
 class ApiClient {
   private baseUrl: string
   private token: string | null = null
@@ -317,8 +330,27 @@ class ApiClient {
     return this.post<TipOrder>('/tips', { to_user_id: toUserId, amount, message })
   }
 
-  async getReceivedTips(userId: string, page?: number, pageSize?: number) {
-    const q = new URLSearchParams()
+  async validateCoupon(code: string) {
+    return this.post<{ valid: boolean; discount: number; type: string; discount_type: string }>('/coupons/validate', { code })
+  }
+
+  async createOrder(items: any[], couponCode?: string, _ref?: string) {
+    return this.post<{ id: string; order_no: string; total_cents: number }>('/orders', { items, coupon_code: couponCode })
+  }
+
+  async payOrderAlipay(orderId: string, returnUrl?: string) {
+    return this.post<{ pay_url: string }>(`/orders/${orderId}/pay/alipay`, { return_url: returnUrl })
+  }
+
+  async payOrderWechat(orderId: string) {
+    return this.post<{ qr_code: string }>(`/orders/${orderId}/pay/wechat`, {})
+  }
+
+  async payOrder(orderId: string, method: string) {
+    return this.post<{ pay_url?: string; qr_code?: string }>(`/orders/${orderId}/pay`, { method })
+  }
+
+  async getReceivedTips(userId: string, page?: number, pageSize?: number) {    const q = new URLSearchParams()
     if (page) q.set('page', String(page))
     if (pageSize) q.set('page_size', String(pageSize))
     return this.get<{ tips: TipOrder[]; total: number }>(`/users/${userId}/tips/received?${q}`)
@@ -332,9 +364,26 @@ class ApiClient {
     return this.post<{ qr_code: string }>(`/orders/${orderId}/pay/wechat`, {})
   }
 
+  // ── Notifications ─────────────────────────────────────────────────────
+
+  async getNotifications(page?: number, pageSize?: number) {
+    const q = new URLSearchParams()
+    if (page) q.set('page', String(page))
+    if (pageSize) q.set('page_size', String(pageSize))
+    return this.get<{ notifications: Notification[]; total: number; page: number; size: number }>(`/notifications?${q}`)
+  }
+
+  async markNotificationsRead(ids?: string[]) {
+    return this.post<void>('/notifications/read', { ids: ids ?? [] })
+  }
+
+  async getUnreadCount() {
+    return this.get<{ count: number }>('/notifications/unread-count')
+  }
+
   // ── Music ─────────────────────────────────────────────────────────────
 
-  async getAlbums(params?: { page?: number; page_size?: number; search?: string }) {
+  async getAlbums(params?: { page?: number; page_size?: number; search?: string; tag?: string }) {
     const q = new URLSearchParams()
     if (params?.page) q.set('page', String(params.page))
     if (params?.page_size) q.set('page_size', String(params.page_size))
@@ -346,10 +395,41 @@ class ApiClient {
     return this.get<any>(`/albums/slug/${slug}`)
   }
 
+  async getGames(params?: { page?: number; page_size?: number; search?: string; tag?: string }) {
+    const q = new URLSearchParams()
+    if (params?.page) q.set('page', String(params.page))
+    if (params?.page_size) q.set('page_size', String(params.page_size))
+    if (params?.search) q.set('search', params.search)
+    return this.get<{ games: any[]; total: number }>(`/games?${q}`)
+  }
+
+  async getGameBySlug(slug: string) {
+    return this.get<any>(`/games/slug/${slug}`)
+  }
+
+  async getProducts(params?: { product_type?: string; is_active?: boolean; page?: number }) {
+    const q = new URLSearchParams()
+    if (params?.product_type) q.set('product_type', params.product_type)
+    if (params?.is_active !== undefined) q.set('is_active', String(params.is_active))
+    if (params?.page) q.set('page', String(params.page))
+    return this.get<{ products: any[]; total: number }>(`/products?${q}`)
+  }
+
+  async getOrders(page?: number, pageSize?: number) {
+    const q = new URLSearchParams()
+    if (page) q.set('page', String(page))
+    if (pageSize) q.set('page_size', String(pageSize))
+    return this.get<{ orders: any[]; total: number }>(`/orders?${q}`)
+  }
+
+  async getOrder(orderId: string) {
+    return this.get<any>(`/orders/${orderId}`)
+  }
+
   // ── Search ────────────────────────────────────────────────────────────
 
   async searchAll(query: string) {
-    return this.get<{ albums: any[]; query: string }>(`/search?q=${encodeURIComponent(query)}`)
+    return this.get<{ albums: any[]; games?: any[]; users?: any[]; posts?: any[]; query: string }>(`/search?q=${encodeURIComponent(query)}`)
   }
 
   async searchAlbums(query: string) {
