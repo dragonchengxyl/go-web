@@ -173,7 +173,12 @@ func (s *EmailService) BroadcastGameRelease(ctx context.Context, gameTitle, game
 
 	for _, sub := range subs {
 		if sub.GameReleases {
-			go s.SendGameReleaseEmail(ctx, sub.Email, gameTitle, gameID, description)
+			sub := sub // capture loop variable
+			go func() {
+				if err := s.SendGameReleaseEmail(ctx, sub.Email, gameTitle, gameID, description); err != nil {
+					_ = err // best-effort notification; errors are acceptable in goroutines
+				}
+			}()
 		}
 	}
 

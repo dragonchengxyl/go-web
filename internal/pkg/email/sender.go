@@ -234,6 +234,8 @@ func RenderTemplate(templateName string, data any) (string, error) {
 // GenerateToken generates a random token
 func GenerateToken() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
+	}
 	return hex.EncodeToString(b)
 }
