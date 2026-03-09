@@ -107,6 +107,11 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 		args = append(args, filter.Tags)
 		idx++
 	}
+	if filter.Search != "" {
+		where += fmt.Sprintf(" AND (p.title ILIKE $%d OR p.content ILIKE $%d)", idx, idx)
+		args = append(args, "%"+filter.Search+"%")
+		idx++
+	}
 
 	countSQL := "SELECT COUNT(*) FROM posts p " + where
 	var total int64

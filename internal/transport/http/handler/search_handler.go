@@ -6,75 +6,54 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
 )
 
 type SearchHandler struct {
-	gameService   *usecase.GameService
 	musicService  *usecase.MusicService
 	searchService *usecase.SearchService
+	postService   *usecase.PostService
+	userService   *usecase.UserService
 }
 
-func NewSearchHandler(gameService *usecase.GameService, musicService *usecase.MusicService, searchService *usecase.SearchService) *SearchHandler {
+func NewSearchHandler(musicService *usecase.MusicService, searchService *usecase.SearchService, postService *usecase.PostService, userService *usecase.UserService) *SearchHandler {
 	return &SearchHandler{
-		gameService:   gameService,
 		musicService:  musicService,
 		searchService: searchService,
+		postService:   postService,
+		userService:   userService,
 	}
 }
 
-// SearchAll 全局搜索
+// SearchAll 全局搜索（posts + users + albums）
 func (h *SearchHandler) SearchAll(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "搜索关键词不能为空",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "搜索关键词不能为空"})
 		return
 	}
 
-	// 搜索游戏
-	games, _ := h.gameService.SearchGames(c.Request.Context(), query, 5)
+	var posts, users, albums any
 
-	// 搜索音乐
-	albums, _ := h.musicService.SearchAlbums(c.Request.Context(), query, 5)
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "success",
-		"data": gin.H{
-			"games":  games,
-			"albums": albums,
-			"query":  query,
-		},
-	})
-}
-
-// SearchGames 搜索游戏
-func (h *SearchHandler) SearchGames(c *gin.Context) {
-	query := strings.TrimSpace(c.Query("q"))
-	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "搜索关键词不能为空",
-		})
-		return
+	if h.postService != nil {
+		p, _ := h.postService.SearchPosts(c.Request.Context(), query, 20)
+		posts = p
+	}
+	if h.userService != nil {
+		u, _ := h.userService.SearchUsers(c.Request.Context(), query, 20)
+		users = u
+	}
+	if h.musicService != nil {
+		a, _ := h.musicService.SearchAlbums(c.Request.Context(), query, 10)
+		albums = a
 	}
 
-	games, err := h.gameService.SearchGames(c.Request.Context(), query, 20)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": err.Error(),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "success",
-		"data":    games,
+	response.Success(c, gin.H{
+		"posts":  posts,
+		"users":  users,
+		"albums": albums,
+		"query":  query,
 	})
 }
 
@@ -82,27 +61,21 @@ func (h *SearchHandler) SearchGames(c *gin.Context) {
 func (h *SearchHandler) SearchAlbums(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code":    400,
-			"message": "搜索关键词不能为空",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "搜索关键词不能为空"})
+		return
+	}
+
+	if h.musicService == nil {
+		response.Success(c, []any{})
 		return
 	}
 
 	albums, err := h.musicService.SearchAlbums(c.Request.Context(), query, 20)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    500,
-			"message": err.Error(),
-		})
+		response.Error(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "success",
-		"data":    albums,
-	})
+	response.Success(c, albums)
 }
 
 // GetPopularSearches 获取热门搜索
@@ -119,10 +92,5 @@ func (h *SearchHandler) GetPopularSearches(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "success",
-		"data":    searches,
-	})
+	response.Success(c, searches)
 }

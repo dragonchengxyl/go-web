@@ -71,7 +71,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		userHandler := handler.NewUserHandler(cfg.UserService)
 		musicHandler := handler.NewMusicHandler(cfg.MusicService)
 		commentHandler := handler.NewCommentHandler(cfg.CommentService, cfg.PostService, cfg.NotificationService)
-		searchHandler := handler.NewSearchHandler(nil, cfg.MusicService, cfg.SearchService)
+		searchHandler := handler.NewSearchHandler(cfg.MusicService, cfg.SearchService, cfg.PostService, cfg.UserService)
 		postHandler := handler.NewPostHandler(cfg.PostService, cfg.FollowService, cfg.NotificationService)
 		followHandler := handler.NewFollowHandler(cfg.FollowService, cfg.NotificationService)
 		chatHandler := handler.NewChatHandler(cfg.ChatService, cfg.Hub, cfg.Logger)

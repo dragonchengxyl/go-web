@@ -49,6 +49,7 @@ type PostLike struct {
 type ListFilter struct {
 	AuthorID   *uuid.UUID
 	Tags       []string
+	Search     string // full-text search on title+content
 	Visibility *Visibility
 	Cursor     *time.Time // for cursor-based pagination
 	Page       int

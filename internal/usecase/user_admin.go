@@ -166,3 +166,16 @@ func (s *UserService) DeleteUser(ctx context.Context, userID uuid.UUID) error {
 
 	return nil
 }
+
+// SearchUsers searches users by username/furry_name
+func (s *UserService) SearchUsers(ctx context.Context, query string, limit int) ([]*user.User, error) {
+	users, _, err := s.userRepo.List(ctx, user.ListFilter{
+		Search:   query,
+		Page:     1,
+		PageSize: limit,
+	})
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "搜索用户失败", err)
+	}
+	return users, nil
+}

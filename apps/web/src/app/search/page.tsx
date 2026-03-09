@@ -1,287 +1,199 @@
-'use client'
+'use client';
 
-import { Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
-import Link from 'next/link'
-import { apiClient } from '@/lib/api-client'
-import { Card, CardContent } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { apiClient, Post } from '@/lib/api-client';
+import { PostCard } from '@/components/post/post-card';
 
-interface SearchResult {
-  games: Array<{
-    id: number
-    slug: string
-    title: string
-    short_description: string
-    cover_image: string
-    price: number
-    discount_price: number
-    tags: string[]
-  }>
-  albums: Array<{
-    id: number
-    slug: string
-    title: string
-    artist: string
-    cover_image: string
-    price: number
-    track_count: number
-  }>
-  query: string
+function highlight(text: string, query: string): string {
+  if (!query.trim()) return text;
+  return text; // return plain string; we render via dangerouslySetInnerHTML in JSX below
+}
+
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query.trim() || !text) return <>{text}</>;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5">{part}</mark>
+          : part
+      )}
+    </>
+  );
 }
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="container mx-auto px-4 py-8">搜索中...</div>}>
+    <Suspense fallback={<div className="max-w-2xl mx-auto pt-20 px-4 text-muted-foreground">搜索中...</div>}>
       <SearchContent />
     </Suspense>
-  )
+  );
 }
 
-function SearchContent() {
-  const searchParams = useSearchParams()
-  const query = searchParams.get('q') || ''
+interface UserResult {
+  id: string;
+  username: string;
+  furry_name?: string;
+  species?: string;
+  avatar_key?: string;
+  bio?: string;
+}
 
-  const { data: results, isLoading } = useQuery({
-    queryKey: ['search', query],
-    queryFn: () => apiClient.searchAll(query),
-    enabled: !!query,
-  })
+type TabType = 'posts' | 'users' | 'albums';
+
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const query = searchParams.get('q') || '';
+  const tabParam = (searchParams.get('tab') as TabType) || 'posts';
+
+  const [tab, setTab] = useState<TabType>(tabParam);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [users, setUsers] = useState<UserResult[]>([]);
+  const [albums, setAlbums] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) { apiClient.setToken(token); setIsLoggedIn(true); }
+  }, []);
+
+  useEffect(() => {
+    if (!query) return;
+    setLoading(true);
+    apiClient.searchAll(query).then(res => {
+      setPosts(res.posts || []);
+      setUsers((res.users as UserResult[]) || []);
+      setAlbums(res.albums || []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [query]);
+
+  function handleTabChange(t: TabType) {
+    setTab(t);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', t);
+    router.replace(`/search?${params}`);
+  }
+
+  function handleLike(post: Post) {
+    if (!isLoggedIn) return;
+    const fn = post.is_liked_by_me ? apiClient.unlikePost(post.id) : apiClient.likePost(post.id);
+    fn.then(() => setPosts(prev => prev.map(p =>
+      p.id === post.id
+        ? { ...p, is_liked_by_me: !p.is_liked_by_me, like_count: p.is_liked_by_me ? p.like_count - 1 : p.like_count + 1 }
+        : p
+    ))).catch(() => {});
+  }
 
   if (!query) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-12">
-          <p className="text-gray-500">请输入搜索关键词</p>
-        </div>
+      <div className="max-w-2xl mx-auto pt-20 px-4 pb-8 text-center py-16 text-muted-foreground">
+        输入关键词开始搜索
       </div>
-    )
+    );
   }
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-12">加载中...</div>
-      </div>
-    )
-  }
-
-  const totalResults = (results?.games?.length || 0) + (results?.albums?.length || 0)
+  const tabs: { id: TabType; label: string; count: number }[] = [
+    { id: 'posts', label: '动态', count: posts.length },
+    { id: 'users', label: '用户', count: users.length },
+    { id: 'albums', label: '音乐', count: albums.length },
+  ];
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">搜索结果</h1>
-        <p className="text-gray-600">
-          找到 <span className="font-medium">{totalResults}</span> 个关于 &ldquo;
-          <span className="font-medium">{query}</span>&rdquo; 的结果
-        </p>
+    <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
+      <h1 className="text-xl font-bold mb-1">搜索结果</h1>
+      <p className="text-sm text-muted-foreground mb-5">
+        关于 <span className="font-medium text-foreground">"{query}"</span> 的结果
+      </p>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b mb-6">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => handleTabChange(t.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === t.id
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {t.label} {loading ? '' : `(${t.count})`}
+          </button>
+        ))}
       </div>
 
-      {totalResults === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-gray-500 mb-4">未找到相关结果</p>
-            <p className="text-sm text-gray-400">
-              尝试使用不同的关键词或浏览我们的游戏和音乐库
-            </p>
-          </CardContent>
-        </Card>
+      {loading ? (
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />)}
+        </div>
       ) : (
-        <Tabs defaultValue="all" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="all">
-              全部 ({totalResults})
-            </TabsTrigger>
-            <TabsTrigger value="games">
-              游戏 ({results?.games?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="music">
-              音乐 ({results?.albums?.length || 0})
-            </TabsTrigger>
-          </TabsList>
+        <>
+          {tab === 'posts' && (
+            <div className="space-y-4">
+              {posts.length === 0 ? (
+                <p className="text-center py-12 text-muted-foreground">未找到相关动态</p>
+              ) : (
+                posts.map(post => (
+                  <PostCard key={post.id} post={post} onLike={() => handleLike(post)} />
+                ))
+              )}
+            </div>
+          )}
 
-          <TabsContent value="all">
-            {results?.games && results.games.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-xl font-bold mb-4">游戏</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {results.games.map((game) => (
-                    <Link key={game.id} href={`/games/${game.slug}`}>
-                      <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                        <div className="aspect-video relative overflow-hidden">
-                          <img
-                            src={game.cover_image}
-                            alt={game.title}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <CardContent className="p-4">
-                          <h3 className="font-bold text-lg mb-2">{game.title}</h3>
-                          <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                            {game.short_description}
-                          </p>
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {game.tags?.slice(0, 3).map((tag: string, index: number) => (
-                              <Badge key={index} variant="outline">
-                                {tag}
-                              </Badge>
-                            ))}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {game.discount_price > 0 ? (
-                              <>
-                                <span className="text-lg font-bold text-red-600">
-                                  ¥{game.discount_price.toFixed(2)}
-                                </span>
-                                <span className="text-sm text-gray-500 line-through">
-                                  ¥{game.price.toFixed(2)}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-lg font-bold">
-                                ¥{game.price.toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {results?.albums && results.albums.length > 0 && (
-              <div>
-                <h2 className="text-xl font-bold mb-4">音乐</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {results.albums.map((album) => (
-                    <Link key={album.id} href={`/music/${album.slug}`}>
-                      <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                        <div className="aspect-square relative overflow-hidden">
-                          <img
-                            src={album.cover_image}
-                            alt={album.title}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <CardContent className="p-4">
-                          <h3 className="font-bold mb-1 truncate">{album.title}</h3>
-                          <p className="text-sm text-gray-600 mb-2">{album.artist}</p>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">
-                              {album.track_count} 首歌曲
-                            </span>
-                            <span className="font-bold text-red-600">
-                              ¥{album.price.toFixed(2)}
-                            </span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="games">
-            {results?.games && results.games.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {results.games.map((game) => (
-                  <Link key={game.id} href={`/games/${game.slug}`}>
-                    <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                      <div className="aspect-video relative overflow-hidden">
-                        <img
-                          src={game.cover_image}
-                          alt={game.title}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <CardContent className="p-4">
-                        <h3 className="font-bold text-lg mb-2">{game.title}</h3>
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                          {game.short_description}
-                        </p>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {game.tags?.slice(0, 3).map((tag: string, index: number) => (
-                            <Badge key={index} variant="outline">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {game.discount_price > 0 ? (
-                            <>
-                              <span className="text-lg font-bold text-red-600">
-                                ¥{game.discount_price.toFixed(2)}
-                              </span>
-                              <span className="text-sm text-gray-500 line-through">
-                                ¥{game.price.toFixed(2)}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-lg font-bold">
-                              ¥{game.price.toFixed(2)}
-                            </span>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+          {tab === 'users' && (
+            <div className="space-y-3">
+              {users.length === 0 ? (
+                <p className="text-center py-12 text-muted-foreground">未找到相关用户</p>
+              ) : (
+                users.map(u => (
+                  <Link key={u.id} href={`/users/${u.id}`} className="flex items-center gap-3 p-4 rounded-xl border hover:bg-muted/50 transition-colors">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <span className="font-bold text-primary">{(u.furry_name || u.username)[0]?.toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">
+                        <Highlight text={u.furry_name || u.username} query={query} />
+                      </p>
+                      <p className="text-sm text-muted-foreground">@<Highlight text={u.username} query={query} /></p>
+                      {u.species && <p className="text-xs text-muted-foreground">{u.species}</p>}
+                      {u.bio && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{u.bio}</p>}
+                    </div>
                   </Link>
-                ))}
-              </div>
-            ) : (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  未找到相关游戏
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+                ))
+              )}
+            </div>
+          )}
 
-          <TabsContent value="music">
-            {results?.albums && results.albums.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {results.albums.map((album) => (
-                  <Link key={album.id} href={`/music/${album.slug}`}>
-                    <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                      <div className="aspect-square relative overflow-hidden">
-                        <img
-                          src={album.cover_image}
-                          alt={album.title}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <CardContent className="p-4">
-                        <h3 className="font-bold mb-1 truncate">{album.title}</h3>
-                        <p className="text-sm text-gray-600 mb-2">{album.artist}</p>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500">
-                            {album.track_count} 首歌曲
-                          </span>
-                          <span className="font-bold text-red-600">
-                            ¥{album.price.toFixed(2)}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
+          {tab === 'albums' && (
+            <div className="space-y-3">
+              {albums.length === 0 ? (
+                <p className="text-center py-12 text-muted-foreground">未找到相关音乐</p>
+              ) : (
+                albums.map((album: any) => (
+                  <Link key={album.id} href={`/music/${album.slug}`} className="flex items-center gap-3 p-4 rounded-xl border hover:bg-muted/50 transition-colors">
+                    <div className="w-14 h-14 rounded-lg bg-muted flex-shrink-0 overflow-hidden">
+                      {album.cover_image_url && <img src={album.cover_image_url} alt="" className="w-full h-full object-cover" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">
+                        <Highlight text={album.title} query={query} />
+                      </p>
+                      <p className="text-sm text-muted-foreground">{album.artist_name}</p>
+                      {album.track_count > 0 && <p className="text-xs text-muted-foreground">{album.track_count} 首歌曲</p>}
+                    </div>
                   </Link>
-                ))}
-              </div>
-            ) : (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  未找到相关音乐
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+                ))
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
-  )
+  );
 }
