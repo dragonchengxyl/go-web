@@ -126,6 +126,8 @@ func main() {
 
 	notificationService := usecase.NewNotificationService(notificationRepo, hub)
 
+	reportRepo := postgres.NewReportRepository(pool)
+
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
 		Config:             cfg,
@@ -147,6 +149,7 @@ func main() {
 		NotificationService: notificationService,
 		Hub:                 hub,
 		TokenStore:         tokenStore,
+		ReportRepo:         reportRepo,
 	})
 
 	// Start server

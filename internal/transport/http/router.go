@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/redis"
 	"github.com/studio/platform/internal/transport/http/handler"
@@ -36,6 +37,7 @@ type RouterConfig struct {
 	NotificationService *usecase.NotificationService
 	Hub                 *ws.Hub
 	TokenStore          *redis.TokenStore
+	ReportRepo          report.Repository
 }
 
 // NewRouter creates a new HTTP router
@@ -205,6 +207,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Creator dashboard
 			creatorHandler := handler.NewCreatorHandler(cfg.PostService, cfg.FollowService, cfg.TipService)
 			protected.GET("/creator/stats", creatorHandler.GetStats)
+
+			// Reports
+			reportHandler := handler.NewReportHandler(cfg.ReportRepo)
+			protected.POST("/reports", reportHandler.CreateReport)
 
 			// Music (admin write)
 			albumsProtected := protected.Group("/albums")

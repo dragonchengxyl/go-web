@@ -497,6 +497,10 @@ class ApiClient {
     return this.get<LeaderboardEntry[]>('/leaderboard')
   }
 
+  async createReport(targetType: string, targetId: string, reason: string, description?: string) {
+    return this.post<{ message: string }>('/reports', { target_type: targetType, target_id: targetId, reason, description })
+  }
+
   async getCreatorStats() {
     return this.get<{
       post_count: number
