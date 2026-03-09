@@ -54,7 +54,8 @@
       "Bash(~/go/bin/golangci-lint run:*)",
       "Bash(ss:*)",
       "Bash(pkill:*)",
-      "Bash(go list:*)"
+      "Bash(go list:*)",
+      "Bash(npm run:*)"
     ]
   }
 }

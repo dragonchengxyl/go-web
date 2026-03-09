@@ -1,7 +1,6 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
+import { Suspense } from 'react';
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
@@ -15,7 +14,7 @@ import { formatPrice } from '@/lib/utils';
 import { CreditCard, Smartphone, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { items, getTotalPrice, clearCart } = useCartStore();
@@ -282,5 +281,13 @@ export default function CheckoutPage() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
+      <CheckoutContent />
+    </Suspense>
   );
 }
