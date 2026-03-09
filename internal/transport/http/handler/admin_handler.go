@@ -14,9 +14,8 @@ import (
 
 // AdminHandler handles admin HTTP requests
 type AdminHandler struct {
-	statsService *usecase.StatsService
-	userService  *usecase.UserService
-	gameService  *usecase.GameService
+	statsService   *usecase.StatsService
+	userService    *usecase.UserService
 	commentService *usecase.CommentService
 }
 
@@ -24,13 +23,12 @@ type AdminHandler struct {
 func NewAdminHandler(
 	statsService *usecase.StatsService,
 	userService *usecase.UserService,
-	gameService *usecase.GameService,
+	_ any, // was gameService - no longer needed
 	commentService *usecase.CommentService,
 ) *AdminHandler {
 	return &AdminHandler{
 		statsService:   statsService,
 		userService:    userService,
-		gameService:    gameService,
 		commentService: commentService,
 	}
 }

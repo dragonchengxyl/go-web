@@ -19,6 +19,7 @@ import (
 	"github.com/studio/platform/internal/infra/postgres"
 	"github.com/studio/platform/internal/infra/redis"
 	transporthttp "github.com/studio/platform/internal/transport/http"
+	"github.com/studio/platform/internal/transport/ws"
 	"github.com/studio/platform/internal/usecase"
 	"go.uber.org/zap"
 )
@@ -65,24 +66,28 @@ func main() {
 
 	// Initialize repositories
 	userRepo := postgres.NewUserRepository(pool)
-	gameRepo := postgres.NewGameRepository(pool)
-	branchRepo := postgres.NewBranchRepository(pool)
-	releaseRepo := postgres.NewReleaseRepository(pool)
-	assetRepo := postgres.NewAssetRepository(pool)
 	albumRepo := postgres.NewAlbumRepository(pool)
 	trackRepo := postgres.NewTrackRepository(pool)
 	commentRepo := postgres.NewCommentRepository(pool)
-	productRepo := postgres.NewProductRepository(pool)
 	orderRepo := postgres.NewOrderRepository(pool)
-	couponRepo := postgres.NewCouponRepository(pool)
 	achievementRepo := postgres.NewAchievementRepository(pool)
+	postRepo := postgres.NewPostRepository(pool)
+	followRepo := postgres.NewFollowRepository(pool)
+	chatRepo := postgres.NewChatRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
 	leaderboard := redis.NewLeaderboard(redisClient)
 
-	// Initialize storage service
-	storageService := oss.NewAliyunOSS(cfg.OSS)
+	// Initialize storage service (R2 preferred, fallback to Aliyun)
+	var storageService oss.StorageService
+	if cfg.OSS.Provider == "r2" {
+		storageService = oss.NewCloudflareR2(cfg.OSS)
+		logger.Info("Using Cloudflare R2 storage")
+	} else {
+		storageService = oss.NewAliyunOSS(cfg.OSS)
+		logger.Info("Using Aliyun OSS storage")
+	}
 
 	// Initialize payment gateways (fall back to mock if credentials not configured)
 	mockGW := mock.New()
@@ -100,41 +105,44 @@ func main() {
 
 	// Initialize services
 	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT)
-	gameService := usecase.NewGameService(gameRepo)
-	branchService := usecase.NewBranchService(branchRepo, gameRepo)
-	releaseService := usecase.NewReleaseService(releaseRepo, branchRepo)
-	assetService := usecase.NewAssetService(assetRepo, gameRepo, branchRepo, releaseRepo, storageService)
 	musicService := usecase.NewMusicService(albumRepo, trackRepo, storageService)
 	commentService := usecase.NewCommentService(commentRepo)
-	productService := usecase.NewProductService(productRepo)
-	orderService := usecase.NewOrderService(orderRepo, productRepo, couponRepo)
-	couponService := usecase.NewCouponService(couponRepo, productRepo)
+	orderService := usecase.NewOrderService(orderRepo, nil, nil)
 	paymentService := usecase.NewPaymentService(orderRepo, alipayGW, wechatGW)
 	searchService := usecase.NewSearchService(pool)
 	statsService := usecase.NewStatsService(pool)
 	achievementService := usecase.NewAchievementService(achievementRepo, leaderboard)
+	postService := usecase.NewPostService(postRepo)
+	followService := usecase.NewFollowService(followRepo)
+	chatService := usecase.NewChatService(chatRepo)
+	tipService := usecase.NewTipService(orderRepo)
+
+	// Initialize WebSocket hub
+	hub := ws.NewHub(logger)
+	hubCtx, hubCancel := context.WithCancel(context.Background())
+	defer hubCancel()
+	go hub.Run(hubCtx)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
-		Config:         cfg,
-		Logger:         logger,
-		Pool:           pool,
-		RedisClient:    redisClient,
-		UserService:    userService,
-		GameService:    gameService,
-		BranchService:  branchService,
-		ReleaseService: releaseService,
-		AssetService:   assetService,
-		MusicService:   musicService,
-		CommentService: commentService,
-		ProductService: productService,
-		OrderService:   orderService,
-		CouponService:       couponService,
-		PaymentService:      paymentService,
-		SearchService:       searchService,
-		StatsService:        statsService,
-		AchievementService:  achievementService,
-		TokenStore:          tokenStore,
+		Config:             cfg,
+		Logger:             logger,
+		Pool:               pool,
+		RedisClient:        redisClient,
+		UserService:        userService,
+		MusicService:       musicService,
+		CommentService:     commentService,
+		OrderService:       orderService,
+		PaymentService:     paymentService,
+		SearchService:      searchService,
+		StatsService:       statsService,
+		AchievementService: achievementService,
+		PostService:        postService,
+		FollowService:      followService,
+		ChatService:        chatService,
+		TipService:         tipService,
+		Hub:                hub,
+		TokenStore:         tokenStore,
 	})
 
 	// Start server
@@ -183,10 +191,10 @@ func main() {
 	logger.Info("Shutting down server...")
 
 	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutCtx); err != nil {
 		logger.Error("Server forced to shutdown", zap.Error(err))
 	}
 

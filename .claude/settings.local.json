@@ -56,7 +56,8 @@
       "Bash(pkill:*)",
       "Bash(go list:*)",
       "Bash(npm run:*)",
-      "Bash(go:*)"
+      "Bash(go:*)",
+      "Bash(cat:*)"
     ]
   }
 }

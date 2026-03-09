@@ -23,43 +23,11 @@ func NewOrderHandler(orderService *usecase.OrderService) *OrderHandler {
 	}
 }
 
-// CreateOrder 创建订单
-func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	userID := middleware.GetUserID(c)
-
-	var req struct {
-		Items          []usecase.OrderItemRequest `json:"items" binding:"required"`
-		CouponCode     *string                    `json:"coupon_code"`
-		IdempotencyKey string                     `json:"idempotency_key"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
-		return
-	}
-
-	createReq := usecase.CreateOrderRequest{
-		UserID:         userID,
-		Items:          req.Items,
-		CouponCode:     req.CouponCode,
-		IdempotencyKey: req.IdempotencyKey,
-	}
-
-	o, err := h.orderService.CreateOrder(c.Request.Context(), createReq)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-
-	response.Success(c, o)
-}
-
 // GetOrder 获取订单详情
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, apperr.BadRequest("invalid order id"))
 		return
@@ -71,7 +39,6 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	// 检查订单是否属于当前用户
 	if o.UserID != userID {
 		response.Error(c, apperr.ErrForbidden)
 		return
@@ -100,8 +67,7 @@ func (h *OrderHandler) ListMyOrders(c *gin.Context) {
 func (h *OrderHandler) PayOrder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, apperr.BadRequest("invalid order id"))
 		return
@@ -110,13 +76,11 @@ func (h *OrderHandler) PayOrder(c *gin.Context) {
 	var req struct {
 		PaymentMethod order.PaymentMethod `json:"payment_method" binding:"required"`
 	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, apperr.Wrap(apperr.CodeInvalidParam, "invalid request", err))
 		return
 	}
 
-	// 检查订单是否属于当前用户
 	o, err := h.orderService.GetOrder(c.Request.Context(), id)
 	if err != nil {
 		response.Error(c, err)
@@ -140,14 +104,12 @@ func (h *OrderHandler) PayOrder(c *gin.Context) {
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
+	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.Error(c, apperr.BadRequest("invalid order id"))
 		return
 	}
 
-	// 检查订单是否属于当前用户
 	o, err := h.orderService.GetOrder(c.Request.Context(), id)
 	if err != nil {
 		response.Error(c, err)

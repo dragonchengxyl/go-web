@@ -2,17 +2,14 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { Menu, X, User, ShoppingCart } from 'lucide-react';
+import { Menu, X, User, Bell, MessageCircle, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useCartStore } from '@/lib/store/cart';
 import { GlobalSearch } from '@/components/search/global-search';
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const totalItems = useCartStore((state) => state.getTotalItems());
 
   useEffect(() => {
     const handleScroll = () => {
@@ -35,8 +32,10 @@ export function Header() {
         <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2 flex-shrink-0">
-            <div className="w-8 h-8 bg-primary rounded-lg" />
-            <span className="font-bold text-xl">Studio</span>
+            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold text-sm">
+              F
+            </div>
+            <span className="font-bold text-xl">Furry社区</span>
           </Link>
 
           {/* Search Bar - Desktop */}
@@ -45,12 +44,19 @@ export function Header() {
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8 flex-shrink-0">
+          <nav className="hidden md:flex items-center space-x-6 flex-shrink-0">
             <Link
-              href="/games"
+              href="/feed"
               className="text-sm font-medium hover:text-primary transition-colors"
             >
-              游戏
+              动态
+            </Link>
+            <Link
+              href="/explore"
+              className="text-sm font-medium hover:text-primary transition-colors flex items-center gap-1"
+            >
+              <Compass className="h-4 w-4" />
+              发现
             </Link>
             <Link
               href="/music"
@@ -59,41 +65,27 @@ export function Header() {
               音乐
             </Link>
             <Link
-              href="/community"
+              href="/leaderboard"
               className="text-sm font-medium hover:text-primary transition-colors"
             >
-              社区
-            </Link>
-            <Link
-              href="/about"
-              className="text-sm font-medium hover:text-primary transition-colors"
-            >
-              关于
+              排行
             </Link>
           </nav>
 
           {/* Actions */}
-          <div className="flex items-center space-x-4">
-            <Link href="/orders">
-              <Button variant="ghost" size="sm" className="hidden md:inline-flex">
-                订单
+          <div className="flex items-center space-x-2">
+            <Link href="/messages">
+              <Button variant="ghost" size="icon" title="消息">
+                <MessageCircle className="h-5 w-5" />
               </Button>
             </Link>
-            <Link href="/cart">
-              <Button variant="ghost" size="icon" className="relative">
-                <ShoppingCart className="h-5 w-5" />
-                {totalItems > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                  >
-                    {totalItems}
-                  </Badge>
-                )}
+            <Link href="/notifications">
+              <Button variant="ghost" size="icon" title="通知">
+                <Bell className="h-5 w-5" />
               </Button>
             </Link>
             <Link href="/profile">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" title="个人主页">
                 <User className="h-5 w-5" />
               </Button>
             </Link>
@@ -117,34 +109,53 @@ export function Header() {
           <div className="md:hidden py-4 border-t">
             <nav className="flex flex-col space-y-4">
               <Link
-                href="/games"
+                href="/feed"
                 className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
-                游戏
+                动态
+              </Link>
+              <Link
+                href="/explore"
+                className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                发现
               </Link>
               <Link
                 href="/music"
                 className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 音乐
               </Link>
               <Link
-                href="/community"
+                href="/messages"
                 className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
-                社区
+                消息
               </Link>
               <Link
-                href="/about"
+                href="/notifications"
                 className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
-                关于
+                通知
               </Link>
               <Link
-                href="/orders"
+                href="/profile"
                 className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
-                订单
+                个人主页
+              </Link>
+              <Link
+                href="/leaderboard"
+                className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                排行榜
               </Link>
             </nav>
           </div>

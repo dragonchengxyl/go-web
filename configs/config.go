@@ -40,12 +40,12 @@ type JWTConfig struct {
 }
 
 type OSSConfig struct {
-	Provider        string `mapstructure:"provider"`
+	Provider        string `mapstructure:"provider"`          // "aliyun" or "r2"
 	AccessKeyID     string `mapstructure:"access_key_id"`
 	AccessKeySecret string `mapstructure:"access_key_secret"`
 	Bucket          string `mapstructure:"bucket"`
 	Endpoint        string `mapstructure:"endpoint"`
-	Region          string `mapstructure:"region"`
+	Region          string `mapstructure:"region"`            // "auto" for R2
 }
 
 type RateLimitConfig struct {

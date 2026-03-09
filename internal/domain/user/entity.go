@@ -14,9 +14,12 @@ const (
 	RoleAdmin      Role = "admin"
 	RoleModerator  Role = "moderator"
 	RoleCreator    Role = "creator"
-	RolePremium    Role = "premium"
-	RolePlayer     Role = "player"
+	RoleSupporter  Role = "supporter" // formerly premium
+	RoleMember     Role = "member"    // formerly player
 	RoleGuest      Role = "guest"
+	// Aliases for backwards compatibility
+	RolePremium Role = "premium"
+	RolePlayer  Role = "player"
 )
 
 // Status represents user status
@@ -39,6 +42,9 @@ type User struct {
 	Bio               *string    `json:"bio,omitempty"`
 	Website           *string    `json:"website,omitempty"`
 	Location          *string    `json:"location,omitempty"`
+	// Furry community fields
+	FurryName         *string    `json:"furry_name,omitempty"`
+	Species           *string    `json:"species,omitempty"`
 	Role              Role       `json:"role"`
 	Status            Status     `json:"status"`
 	EmailVerifiedAt   *time.Time `json:"email_verified_at,omitempty"`

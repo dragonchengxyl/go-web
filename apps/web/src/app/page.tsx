@@ -1,25 +1,18 @@
-import { Hero } from '@/components/home/hero';
-import { FeaturedGames } from '@/components/home/featured-games';
-import { FeaturedMusic } from '@/components/home/featured-music';
-import { CommunityFeed } from '@/components/home/community-feed';
-import { StudioIntro } from '@/components/home/studio-intro';
-import { Newsletter } from '@/components/home/newsletter';
-import { Header } from '@/components/layout/header';
-import { Footer } from '@/components/layout/footer';
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/feed');
+  }, [router]);
+
   return (
-    <div className="min-h-screen">
-      <Header />
-      <main>
-        <Hero />
-        <FeaturedGames />
-        <FeaturedMusic />
-        <CommunityFeed />
-        <StudioIntro />
-        <Newsletter />
-      </main>
-      <Footer />
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-muted-foreground">正在跳转...</p>
     </div>
   );
 }
