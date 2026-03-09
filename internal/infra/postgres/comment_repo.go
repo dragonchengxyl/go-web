@@ -87,10 +87,12 @@ func (r *CommentRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 func (r *CommentRepository) List(ctx context.Context, filter comment.ListFilter) ([]*comment.Comment, int64, error) {
 	query := `
-		SELECT id, user_id, commentable_type, commentable_id, parent_id, content,
-		       is_edited, is_deleted, like_count, reply_count, created_at, updated_at
-		FROM comments
-		WHERE commentable_type = $1 AND commentable_id = $2 AND is_deleted = false
+		SELECT c.id, c.user_id, c.commentable_type, c.commentable_id, c.parent_id, c.content,
+		       c.is_edited, c.is_deleted, c.like_count, c.reply_count, c.created_at, c.updated_at,
+		       u.username, u.avatar_key
+		FROM comments c
+		JOIN users u ON u.id = c.user_id
+		WHERE c.commentable_type = $1 AND c.commentable_id = $2 AND c.is_deleted = false
 	`
 	countQuery := `
 		SELECT COUNT(*) FROM comments
@@ -100,17 +102,17 @@ func (r *CommentRepository) List(ctx context.Context, filter comment.ListFilter)
 	argIndex := 3
 
 	if filter.ParentID != nil {
-		query += fmt.Sprintf(" AND parent_id = $%d", argIndex)
+		query += fmt.Sprintf(" AND c.parent_id = $%d", argIndex)
 		countQuery += fmt.Sprintf(" AND parent_id = $%d", argIndex)
 		args = append(args, *filter.ParentID)
 		argIndex++
 	} else {
-		query += " AND parent_id IS NULL"
+		query += " AND c.parent_id IS NULL"
 		countQuery += " AND parent_id IS NULL"
 	}
 
 	if filter.UserID != nil {
-		query += fmt.Sprintf(" AND user_id = $%d", argIndex)
+		query += fmt.Sprintf(" AND c.user_id = $%d", argIndex)
 		countQuery += fmt.Sprintf(" AND user_id = $%d", argIndex)
 		args = append(args, *filter.UserID)
 		argIndex++
@@ -122,7 +124,7 @@ func (r *CommentRepository) List(ctx context.Context, filter comment.ListFilter)
 		return nil, 0, fmt.Errorf("failed to count comments: %w", err)
 	}
 
-	query += " ORDER BY created_at DESC"
+	query += " ORDER BY c.created_at ASC"
 	if filter.PageSize > 0 {
 		offset := (filter.Page - 1) * filter.PageSize
 		query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
@@ -141,6 +143,7 @@ func (r *CommentRepository) List(ctx context.Context, filter comment.ListFilter)
 		err := rows.Scan(
 			&c.ID, &c.UserID, &c.CommentableType, &c.CommentableID, &c.ParentID, &c.Content,
 			&c.IsEdited, &c.IsDeleted, &c.LikeCount, &c.ReplyCount, &c.CreatedAt, &c.UpdatedAt,
+			&c.AuthorUsername, &c.AuthorAvatarKey,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan comment: %w", err)

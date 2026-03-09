@@ -95,6 +95,22 @@ export interface TipOrder {
   created_at: string
 }
 
+export interface Comment {
+  id: string
+  user_id: string
+  commentable_type: string
+  commentable_id: string
+  parent_id?: string
+  content: string
+  is_edited: boolean
+  like_count: number
+  reply_count: number
+  created_at: string
+  updated_at: string
+  author_username?: string
+  author_avatar_key?: string
+}
+
 export interface Notification {
   id: string
   user_id: string
@@ -242,6 +258,21 @@ class ApiClient {
 
   async unlikePost(id: string) {
     return this.delete<void>(`/posts/${id}/like`)
+  }
+
+  async getComments(postId: string, page?: number, pageSize?: number) {
+    const q = new URLSearchParams({ commentable_type: 'post', commentable_id: postId })
+    if (page) q.set('page', String(page))
+    if (pageSize) q.set('page_size', String(pageSize))
+    return this.get<{ comments: Comment[]; total: number; page: number; size: number }>(`/comments?${q}`)
+  }
+
+  async createComment(postId: string, content: string) {
+    return this.post<Comment>('/comments', {
+      commentable_type: 'post',
+      commentable_id: postId,
+      content,
+    })
   }
 
   async getUserPosts(userId: string, page?: number, pageSize?: number) {

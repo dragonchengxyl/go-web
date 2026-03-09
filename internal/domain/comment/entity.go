@@ -29,6 +29,10 @@ type Comment struct {
 	ReplyCount      int             `json:"reply_count"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
+
+	// Joined fields
+	AuthorUsername  string  `json:"author_username,omitempty"`
+	AuthorAvatarKey *string `json:"author_avatar_key,omitempty"`
 }
 
 // CommentLike represents a comment like
