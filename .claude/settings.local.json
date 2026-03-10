@@ -65,7 +65,9 @@
       "Bash(bash -n /home/chenlongting/go-web/dev.sh && echo \"语法正确\")",
       "Bash(grep -n \"TODO\\\\|placeholder\" /home/chenlongting/go-web/apps/web/src/app/posts/create/page.tsx | head -10\ngrep -n \"TODO\\\\|placeholder\" /home/chenlongting/go-web/apps/web/src/app/posts/\\\\[id\\\\]/page.tsx | head -10\ngrep -n \"TODO\\\\|placeholder\" /home/chenlongting/go-web/apps/web/src/app/messages/\\\\[id\\\\]/page.tsx | head -10)",
       "WebSearch",
-      "Bash(source .env 2>/dev/null || true; grep -E \"^DATABASE_URL|^DB_\" .env 2>/dev/null | head -5)"
+      "Bash(source .env 2>/dev/null || true; grep -E \"^DATABASE_URL|^DB_\" .env 2>/dev/null | head -5)",
+      "Bash(git -C /home/chenlongting/go-web log --oneline -5)",
+      "Bash(git -C /home/chenlongting/go-web show c44784e --stat)"
     ]
   }
 }

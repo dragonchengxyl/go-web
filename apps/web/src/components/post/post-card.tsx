@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Post, apiClient } from '@/lib/api-client';
-import { Heart, MessageCircle, MoreHorizontal, Pin, Flag } from 'lucide-react';
+import { Heart, MessageCircle, MoreHorizontal, Pin, Flag, Share2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -91,7 +93,6 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
   const [showReport, setShowReport] = useState(false);
   const [liked, setLiked] = useState(post.is_liked_by_me ?? false);
   const [likeCount, setLikeCount] = useState(post.like_count);
-  const [bounceKey, setBounceKey] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const isPending = post.moderation_status === 'pending';
@@ -115,7 +116,6 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       if (!liked) {
         setLiked(true);
         setLikeCount(c => c + 1);
-        setBounceKey(k => k + 1);
       } else {
         setLiked(false);
         setLikeCount(c => c - 1);
@@ -133,8 +133,10 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
     },
   });
 
+  const mediaUrls = post.media_urls?.slice(0, 4) ?? [];
+
   return (
-    <div className="relative bg-card border rounded-xl p-4 hover:border-primary/30 transition-colors">
+    <div className="relative bg-card border rounded-xl p-4 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200">
       {/* Moderation overlays */}
       {isPending && (
         <div className="absolute inset-0 bg-gray-100/60 dark:bg-gray-900/60 rounded-xl flex items-center justify-center z-10 pointer-events-none">
@@ -155,8 +157,8 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <Link href={`/users/${post.author_id}`}>
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 hover:opacity-80 transition-opacity">
-              <span className="text-sm font-semibold text-primary">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-purple to-brand-teal flex items-center justify-center flex-shrink-0 hover:opacity-80 transition-opacity shadow-sm">
+              <span className="text-sm font-semibold text-white">
                 {post.author_username?.[0]?.toUpperCase() || '?'}
               </span>
             </div>
@@ -179,7 +181,7 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
               {post.content_labels?.is_ai_generated && (
                 <>
                   <span>·</span>
-                  <span className="text-purple-500">AI 生成</span>
+                  <span className="text-brand-purple">AI 生成</span>
                 </>
               )}
             </div>
@@ -223,11 +225,44 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       </div>
 
       {/* Media */}
-      {post.media_urls && post.media_urls.length > 0 && (
-        <div className={`grid gap-2 mb-3 ${post.media_urls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {post.media_urls.slice(0, 4).map((url, i) => (
-            <img key={i} src={url} alt="" className="w-full h-48 object-cover rounded-lg" />
-          ))}
+      {mediaUrls.length > 0 && (
+        <div
+          className={cn(
+            'gap-2 mb-3',
+            mediaUrls.length === 1 && 'grid grid-cols-1',
+            mediaUrls.length === 2 && 'grid grid-cols-2',
+            mediaUrls.length === 3 && 'grid grid-cols-[2fr_1fr]',
+            mediaUrls.length === 4 && 'grid grid-cols-2',
+          )}
+        >
+          {mediaUrls.length === 3 ? (
+            <>
+              <img
+                src={mediaUrls[0]}
+                alt=""
+                className="w-full aspect-square object-cover rounded-lg row-span-2 hover:scale-[1.02] transition-transform duration-200"
+              />
+              <img
+                src={mediaUrls[1]}
+                alt=""
+                className="w-full aspect-square object-cover rounded-lg hover:scale-[1.02] transition-transform duration-200"
+              />
+              <img
+                src={mediaUrls[2]}
+                alt=""
+                className="w-full aspect-square object-cover rounded-lg hover:scale-[1.02] transition-transform duration-200"
+              />
+            </>
+          ) : (
+            mediaUrls.map((url, i) => (
+              <img
+                key={i}
+                src={url}
+                alt=""
+                className="w-full aspect-square object-cover rounded-lg hover:scale-[1.02] transition-transform duration-200"
+              />
+            ))
+          )}
         </div>
       )}
 
@@ -235,31 +270,61 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       {post.tags && post.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
           {post.tags.map(tag => (
-            <Badge key={tag} variant="secondary" className="text-xs">#{tag}</Badge>
+            <Badge
+              key={tag}
+              variant="outline"
+              className="text-xs border-brand-purple/40 text-brand-purple hover:bg-brand-purple/10 transition-colors cursor-pointer"
+            >
+              #{tag}
+            </Badge>
           ))}
         </div>
       )}
 
       {/* Actions */}
       <div className="flex items-center gap-4 pt-2 border-t">
-        <button
-          key={bounceKey}
+        <motion.button
           onClick={() => !isPending && !isBlocked && likeMutation.mutate()}
           disabled={isPending || isBlocked}
-          className={`flex items-center gap-1.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+          whileTap={{ scale: 0.82 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+          className={cn(
+            'flex items-center gap-1.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
             liked ? 'text-red-500 hover:text-red-600' : 'text-muted-foreground hover:text-red-500'
-          }`}
+          )}
         >
-          <Heart className={`h-4 w-4 ${liked ? 'fill-current animate-bounce' : ''}`} />
-          <span>{likeCount}</span>
-        </button>
+          <Heart className={cn('h-4 w-4', liked && 'fill-current')} />
+          <motion.span
+            key={likeCount}
+            initial={{ y: liked ? -6 : 6, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.15 }}
+          >
+            {likeCount}
+          </motion.span>
+        </motion.button>
+
         <Link
           href={isPending || isBlocked ? '#' : `/posts/${post.id}`}
-          className={`flex items-center gap-1.5 text-sm text-muted-foreground transition-colors ${isPending || isBlocked ? 'opacity-40 pointer-events-none' : 'hover:text-primary'}`}
+          className={cn(
+            'flex items-center gap-1.5 text-sm text-muted-foreground transition-colors',
+            isPending || isBlocked ? 'opacity-40 pointer-events-none' : 'hover:text-primary'
+          )}
         >
           <MessageCircle className="h-4 w-4" />
           <span>{post.comment_count}</span>
         </Link>
+
+        <button
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors ml-auto"
+          onClick={() => {
+            if (navigator.share) {
+              navigator.share({ url: `/posts/${post.id}`, title: post.title || post.content.slice(0, 40) });
+            }
+          }}
+        >
+          <Share2 className="h-4 w-4" />
+        </button>
       </div>
 
       {showReport && <ReportModal postId={post.id} onClose={() => setShowReport(false)} />}

@@ -3,9 +3,21 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiClient, Post } from '@/lib/api-client';
 import { PostCard } from '@/components/post/post-card';
+import { PostCardSkeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 type AIFilter = 'all' | 'human' | 'ai';
+
+const containerVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
+};
+const itemVariants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+};
 
 export default function ExplorePage() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -27,11 +39,7 @@ export default function ExplorePage() {
     try {
       const res = await apiClient.getExplore(p, 20, tag || undefined);
       const items = res.posts || [];
-      if (reset) {
-        setPosts(items);
-      } else {
-        setPosts(prev => [...prev, ...items]);
-      }
+      if (reset) setPosts(items); else setPosts(prev => [...prev, ...items]);
       setHasMore(items.length === 20);
     } catch {
       if (reset) setPosts([]);
@@ -63,14 +71,21 @@ export default function ExplorePage() {
 
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
-      <h1 className="text-2xl font-bold mb-4">发现</h1>
+      <h1 className="text-2xl font-bold mb-6 bg-gradient-to-r from-brand-purple to-brand-teal bg-clip-text text-transparent">
+        发现创作
+      </h1>
 
       {/* Hot tags */}
       {hotTags.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           <button
             onClick={() => setActiveTag('')}
-            className={`px-3 py-1 rounded-full text-sm border transition-colors ${activeTag === '' ? 'bg-primary text-primary-foreground border-primary' : 'hover:border-primary text-muted-foreground'}`}
+            className={cn(
+              'px-3 py-1 rounded-full text-sm border transition-all duration-200',
+              activeTag === ''
+                ? 'bg-gradient-to-r from-brand-purple to-brand-teal text-white border-transparent shadow-sm'
+                : 'hover:border-brand-purple/50 text-muted-foreground'
+            )}
           >
             全部
           </button>
@@ -78,7 +93,12 @@ export default function ExplorePage() {
             <button
               key={tag}
               onClick={() => handleTagClick(tag)}
-              className={`px-3 py-1 rounded-full text-sm border transition-colors ${activeTag === tag ? 'bg-primary text-primary-foreground border-primary' : 'hover:border-primary text-muted-foreground'}`}
+              className={cn(
+                'px-3 py-1 rounded-full text-sm border transition-all duration-200',
+                activeTag === tag
+                  ? 'bg-gradient-to-r from-brand-purple to-brand-teal text-white border-transparent shadow-sm'
+                  : 'hover:border-brand-purple/50 text-muted-foreground'
+              )}
             >
               #{tag}
             </button>
@@ -86,17 +106,18 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {/* AI filter toggle */}
+      {/* AI filter */}
       <div className="flex gap-1 mb-6">
         {(['all', 'human', 'ai'] as const).map(f => (
           <button
             key={f}
             onClick={() => setAIFilter(f)}
-            className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+            className={cn(
+              'px-3 py-1 rounded-full text-xs border transition-all duration-200',
               aiFilter === f
-                ? 'bg-purple-600 text-white border-purple-600'
-                : 'text-muted-foreground hover:border-purple-400'
-            }`}
+                ? 'bg-gradient-to-r from-brand-purple to-brand-teal text-white border-transparent'
+                : 'text-muted-foreground hover:border-brand-purple/40'
+            )}
           >
             {f === 'all' ? '全部' : f === 'human' ? '人工创作' : 'AI 生成'}
           </button>
@@ -105,27 +126,30 @@ export default function ExplorePage() {
 
       {loading ? (
         <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-40 bg-muted animate-pulse rounded-lg" />
-          ))}
+          {[...Array(5)].map((_, i) => <PostCardSkeleton key={i} />)}
         </div>
       ) : filteredPosts.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <p>{activeTag ? `#${activeTag} 暂无内容` : '暂无内容'}</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <motion.div
+          className="space-y-4"
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+        >
           {filteredPosts.map(post => (
-            <PostCard key={post.id} post={post} />
+            <motion.div key={post.id} variants={itemVariants}>
+              <PostCard post={post} />
+            </motion.div>
           ))}
           {hasMore && aiFilter === 'all' && (
             <div className="text-center pt-4">
-              <Button variant="outline" onClick={loadMore}>
-                加载更多
-              </Button>
+              <Button variant="outline" onClick={loadMore}>加载更多</Button>
             </div>
           )}
-        </div>
+        </motion.div>
       )}
     </div>
   );

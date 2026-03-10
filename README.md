@@ -64,7 +64,7 @@
 - **帖子**：图文发布（OSS 直传）、点赞（乐观更新）、可见性控制（public / followers_only / private）
 - **内容标签**：`content_labels` JSONB，支持 `is_ai_generated` 等标注
 - **内容审核**：发帖后异步调用阿里云内容安全，状态流转 `pending → approved / blocked`，前端实时展示审核遮罩
-- **评论**：嵌套评论，支持帖子 / 专辑 / 音轨多态关联
+- **评论**：嵌套评论，多态关联（帖子等）
 - **关注**：关注 / 取关，关注流 Feed
 - **探索页**：按参与度评分排序（`like_count + comment_count×3 / 时间衰减`），支持标签过滤与 AI 内容过滤
 - **即时通信**：私信会话，WebSocket 实时消息
@@ -83,17 +83,23 @@
 ### 前端页面
 | 路由 | 功能 |
 |------|------|
+| `/` | 首页（热门帖子 + 社区特色展示） |
 | `/feed` | 关注流（实时无限滚动） |
 | `/explore` | 发现页（评分排序 + 标签/AI 过滤） |
+| `/search` | 全文搜索（帖子 + 用户） |
+| `/tags/[tag]` | 标签聚合页 |
 | `/posts/create` | 发帖（OSS 直传 + AI 标签 + 草稿自动保存） |
 | `/posts/[id]` | 帖子详情（乐观点赞） |
 | `/users/[id]` | 用户主页 |
+| `/users/[id]/followers` | 粉丝列表 |
+| `/users/[id]/following` | 关注列表 |
 | `/messages` | 会话列表（实时更新） |
 | `/messages/[id]` | 聊天界面 |
 | `/notifications` | 通知中心 |
 | `/sponsor` | 赞助页 |
 | `/creator` | 创作者仪表盘 |
 | `/profile` | 个人资料 |
+| `/settings` | 账号与隐私设置 |
 | `/admin` | 管理后台入口 |
 
 ## 技术特性
