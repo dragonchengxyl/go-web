@@ -341,3 +341,18 @@ func (s *PostService) SearchPosts(ctx context.Context, query string, limit int) 
 	})
 	return posts, err
 }
+
+// AdminListPosts returns paginated posts filtered by moderation status (admin use only).
+func (s *PostService) AdminListPosts(ctx context.Context, status string, page, pageSize int) ([]*post.Post, int64, error) {
+	filter := post.ListFilter{Page: page, PageSize: pageSize}
+	if status != "" {
+		ms := post.ModerationStatus(status)
+		filter.ModerationStatus = &ms
+	}
+	return s.postRepo.List(ctx, filter)
+}
+
+// AdminUpdateModerationStatus updates a post's moderation_status (admin use only).
+func (s *PostService) AdminUpdateModerationStatus(ctx context.Context, postID uuid.UUID, status post.ModerationStatus) error {
+	return s.postRepo.UpdateModerationStatus(ctx, postID, status)
+}

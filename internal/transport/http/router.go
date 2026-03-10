@@ -242,7 +242,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			admin := protected.Group("/admin")
 			admin.Use(authMiddleware.RequireRole(user.RoleAdmin))
 			{
-				adminHandler := handler.NewAdminHandler(cfg.StatsService, cfg.UserService, nil, cfg.CommentService)
+				adminHandler := handler.NewAdminHandler(cfg.StatsService, cfg.UserService, nil, cfg.CommentService, cfg.PostService, cfg.ReportRepo)
 
 				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
 				admin.GET("/stats/revenue", adminHandler.GetRevenueChart)
@@ -259,7 +259,13 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				admin.DELETE("/comments/:id", adminHandler.DeleteComment)
 
 				// Admin post moderation
+				admin.GET("/posts", adminHandler.ListPosts)
+				admin.PUT("/posts/:id/moderation", adminHandler.UpdatePostModeration)
 				admin.DELETE("/posts/:id", postHandler.DeletePost)
+
+				// Admin reports
+				admin.GET("/reports", adminHandler.ListReports)
+				admin.PUT("/reports/:id", adminHandler.UpdateReport)
 
 				// Admin achievements
 				admin.POST("/users/:id/achievements", achievementHandler.AdminUnlockAchievement)

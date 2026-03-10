@@ -1,0 +1,77 @@
+# 生产环境配置
+# 用法: go run ./cmd/server/main.go -config configs/config.prod.yaml
+#
+# 复制此文件: cp configs/config.prod.yaml.example configs/config.prod.yaml
+# 此文件已被 gitignore，填入真实生产凭据后不要提交到 git
+#
+# 提示: 单个字段也可以用 STUDIO_* 环境变量覆盖
+# 例如: STUDIO_DATABASE_DSN=... 会覆盖 database.dsn
+
+server:
+  port: 8080
+  mode: release
+  allow_origins:
+    - https://your-domain.com        # 改为你的生产域名
+
+database:
+  dsn: postgres://user:password@host:5432/dbname?sslmode=require
+  max_conns: 20
+  min_conns: 5
+
+redis:
+  addr: your-redis-host:6379
+  password: your-redis-password
+  db: 0
+
+jwt:
+  secret: use-a-long-random-string-here   # openssl rand -base64 48
+  access_expiry: 15m
+  refresh_expiry: 720h
+
+oss:
+  provider: r2          # "aliyun" or "r2"
+  access_key_id: ""
+  access_key_secret: ""
+  bucket: ""
+  endpoint: ""
+  region: auto          # R2 用 "auto"
+  allowed_hosts:
+    - your-cdn-domain.com
+
+ratelimit:
+  unauthenticated: 60
+  authenticated: 200
+  admin: 1000
+
+email:
+  host: smtp.your-provider.com
+  port: 587
+  username: your-smtp-user
+  password: your-smtp-password
+  from: noreply@your-domain.com
+
+moderation:
+  access_key_id: ""
+  access_key_secret: ""
+  endpoint: green-cip.cn-shanghai.aliyuncs.com
+
+payment:
+  alipay:
+    app_id: ""
+    private_key: ""
+    public_key: ""
+    notify_url: https://your-domain.com/api/v1/payments/alipay/notify
+    sandbox: false
+  wechat:
+    app_id: ""
+    mch_id: ""
+    api_key: ""
+    notify_url: https://your-domain.com/api/v1/payments/wechat/notify
+    sandbox: false
+
+sponsor:
+  monthly_goal: 500
+  current_raised: 0
+  alipay_qr_url: ""
+  wechat_qr_url: ""
+  message: "感谢支持 Furry 社区的运营！"

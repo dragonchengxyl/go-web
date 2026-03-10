@@ -27,6 +27,8 @@ type DashboardStats struct {
 	RevenueToday   float64 `json:"revenue_today"`
 	TotalGames     int64   `json:"total_games"`
 	TotalOrders    int64   `json:"total_orders"`
+	TotalPosts     int64   `json:"total_posts"`
+	TotalReports   int64   `json:"total_reports"` // pending status only
 }
 
 // ChartPoint represents a single data point on a chart
@@ -60,6 +62,8 @@ func (s *StatsService) GetDashboardStats(ctx context.Context) (*DashboardStats, 
 		{`SELECT COUNT(*) FROM download_logs WHERE downloaded_at >= $1`, []any{today}, &stats.DownloadsToday, nil},
 		{`SELECT COUNT(*) FROM games`, nil, &stats.TotalGames, nil},
 		{`SELECT COUNT(*) FROM orders`, nil, &stats.TotalOrders, nil},
+		{`SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL`, nil, &stats.TotalPosts, nil},
+		{`SELECT COUNT(*) FROM reports WHERE status = 'pending'`, nil, &stats.TotalReports, nil},
 	}
 
 	for _, q := range queries {

@@ -1,4 +1,4 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -18,8 +18,8 @@ build-all: ## Build all binaries
 	@make build-cli
 	@echo "✓ All binaries built successfully"
 
-run: ## Run the application
-	go run ./cmd/server/main.go
+run: ## Run the application (local config by default)
+	go run ./cmd/server/main.go -config configs/config.local.yaml
 
 test: ## Run tests
 	go test -v -race -cover ./...
@@ -71,13 +71,57 @@ security-check: ## Run security checks
 	@echo "3. Running gosec..."
 	@gosec -quiet ./... || echo "✓ No security issues found"
 
-dev: ## Start development environment
-	@echo "Starting development environment..."
-	@make docker-up
-	@sleep 3
+## ─── Local Development ──────────────────────────────────────────────────────
+
+dev-setup: ## First-time setup: copy config templates
+	@if [ ! -f configs/config.local.yaml ]; then \
+		cp configs/config.local.yaml.example configs/config.local.yaml; \
+		echo "✓ Created configs/config.local.yaml — edit with your local DB/Redis credentials"; \
+	else \
+		echo "  configs/config.local.yaml already exists, skipping"; \
+	fi
+	@if [ ! -f configs/config.prod.yaml ]; then \
+		cp configs/config.prod.yaml.example configs/config.prod.yaml; \
+		echo "✓ Created configs/config.prod.yaml — edit with your production credentials"; \
+	else \
+		echo "  configs/config.prod.yaml already exists, skipping"; \
+	fi
+	@if [ ! -f apps/web/.env.local ]; then \
+		cp apps/web/.env.example apps/web/.env.local; \
+		echo "✓ Created apps/web/.env.local"; \
+	else \
+		echo "  apps/web/.env.local already exists, skipping"; \
+	fi
+
+infra-up: ## Start local Docker infra (Postgres + Redis)
+	docker-compose up -d
+	@echo "Waiting for Postgres..."
+	@until docker exec studio_postgres pg_isready -U studio -q 2>/dev/null; do sleep 1; done
+	@echo "✓ Postgres :5432  Redis :6379  ready"
+
+infra-down: ## Stop local Docker infra
+	docker-compose down
+
+dev-backend: ## Run backend with LOCAL config
+	go run ./cmd/server/main.go -config configs/config.local.yaml
+
+prod-backend: ## Run backend with PRODUCTION config
+	go run ./cmd/server/main.go -config configs/config.prod.yaml
+
+dev-frontend: ## Run Next.js dev server (uses apps/web/.env.local)
+	cd apps/web && pnpm dev
+
+dev-all: ## Setup + start infra + print next steps
+	@make dev-setup
+	@make infra-up
 	@make migrate-up
-	@echo "✓ Development environment ready"
-	@echo "Run 'make run' to start the backend"
+	@echo ""
+	@echo "✓ Ready. Now run in separate terminals:"
+	@echo "  make dev-backend    # Go API (local config)"
+	@echo "  make dev-frontend   # Next.js"
+	@echo ""
+
+dev: dev-all ## Alias for dev-all
 
 ci: ## Run CI checks locally
 	@echo "Running CI checks..."

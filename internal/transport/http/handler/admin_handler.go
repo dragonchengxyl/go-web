@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/post"
+	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
@@ -17,6 +19,8 @@ type AdminHandler struct {
 	statsService   *usecase.StatsService
 	userService    *usecase.UserService
 	commentService *usecase.CommentService
+	postService    *usecase.PostService
+	reportRepo     report.Repository
 }
 
 // NewAdminHandler creates a new AdminHandler
@@ -25,11 +29,15 @@ func NewAdminHandler(
 	userService *usecase.UserService,
 	_ any, // was gameService - no longer needed
 	commentService *usecase.CommentService,
+	postService *usecase.PostService,
+	reportRepo report.Repository,
 ) *AdminHandler {
 	return &AdminHandler{
 		statsService:   statsService,
 		userService:    userService,
 		commentService: commentService,
+		postService:    postService,
+		reportRepo:     reportRepo,
 	}
 }
 
@@ -198,4 +206,105 @@ func (h *AdminHandler) DeleteComment(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// ListPosts returns paginated posts filtered by moderation_status (admin)
+func (h *AdminHandler) ListPosts(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := c.Query("status") // pending | approved | blocked | ""
+
+	posts, total, err := h.postService.AdminListPosts(c.Request.Context(), status, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"posts": posts,
+		"total": total,
+		"page":  page,
+		"size":  pageSize,
+	})
+}
+
+// UpdatePostModeration updates a post's moderation_status (admin)
+func (h *AdminHandler) UpdatePostModeration(c *gin.Context) {
+	postID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.ErrInvalidParam)
+		return
+	}
+
+	var input struct {
+		Status string `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	ms := post.ModerationStatus(input.Status)
+	if ms != post.ModerationApproved && ms != post.ModerationBlocked && ms != post.ModerationPending {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的审核状态"))
+		return
+	}
+
+	if err := h.postService.AdminUpdateModerationStatus(c.Request.Context(), postID, ms); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"status": input.Status})
+}
+
+// ListReports returns paginated reports (admin)
+func (h *AdminHandler) ListReports(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := c.Query("status") // pending | reviewed | dismissed | ""
+
+	reports, total, err := h.reportRepo.List(c.Request.Context(), status, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"reports": reports,
+		"total":   total,
+		"page":    page,
+		"size":    pageSize,
+	})
+}
+
+// UpdateReport updates a report's status (admin)
+func (h *AdminHandler) UpdateReport(c *gin.Context) {
+	reportID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.ErrInvalidParam)
+		return
+	}
+
+	var input struct {
+		Status string `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	rs := report.Status(input.Status)
+	if rs != report.StatusReviewed && rs != report.StatusDismissed {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的举报状态"))
+		return
+	}
+
+	reviewerID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	if err := h.reportRepo.UpdateStatus(c.Request.Context(), reportID, rs, reviewerID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"status": input.Status})
 }

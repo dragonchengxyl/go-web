@@ -7,32 +7,24 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Load loads configuration from file and environment variables
-func Load() (*Config, error) {
+// Load loads configuration from the specified file path.
+// Environment variables with the STUDIO_ prefix override any value in the file.
+//
+// Usage:
+//   cfg, err := configs.Load("configs/config.local.yaml")  // local dev
+//   cfg, err := configs.Load("configs/config.prod.yaml")   // production
+func Load(file string) (*Config, error) {
 	v := viper.New()
 
-	// Set config file paths
-	v.SetConfigName("config")
+	v.SetConfigFile(file)
 	v.SetConfigType("yaml")
-	v.AddConfigPath("./configs")
-	v.AddConfigPath(".")
 
-	// Read config file
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to read config file: %w", err)
-		}
+		return nil, fmt.Errorf("failed to read config file %q: %w", file, err)
 	}
 
-	// Try to read local config (overrides default)
-	v.SetConfigName("config.local")
-	if err := v.MergeInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("failed to merge local config: %w", err)
-		}
-	}
-
-	// Environment variables override all
+	// STUDIO_* environment variables override file values.
+	// e.g. STUDIO_DATABASE_DSN overrides database.dsn
 	v.SetEnvPrefix("STUDIO")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()

@@ -19,11 +19,12 @@ vendor/
 # Go workspace file
 go.work
 
-# Environment files
+# Environment files (gitignored — copy from *.example templates)
 .env
 .env.local
-.env.production
-config.local.yaml
+/.env.production
+configs/config.local.yaml
+configs/config.prod.yaml
 
 # IDE
 .vscode/

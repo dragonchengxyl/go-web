@@ -1,0 +1,69 @@
+# 本地开发配置
+# 用法: go run ./cmd/server/main.go -config configs/config.local.yaml
+#
+# 复制此文件: cp configs/config.local.yaml.example configs/config.local.yaml
+# 此文件已被 gitignore，可以写入真实本地凭据
+
+server:
+  port: 8080
+  mode: debug
+  allow_origins:
+    - http://localhost:3000
+
+database:
+  dsn: postgres://studio:password@localhost:5432/studio_db?sslmode=disable
+  max_conns: 10
+  min_conns: 2
+
+redis:
+  addr: localhost:6379
+  password: ""
+  db: 0
+
+jwt:
+  secret: local-dev-secret-not-for-prod
+  access_expiry: 60m
+  refresh_expiry: 720h
+
+oss:
+  provider: aliyun
+  access_key_id: ""
+  access_key_secret: ""
+  bucket: ""
+  endpoint: ""
+  region: ""
+  allowed_hosts:
+    - localhost
+    - 127.0.0.1
+
+ratelimit:
+  unauthenticated: 60
+  authenticated: 200
+  admin: 1000
+
+email:
+  host: localhost
+  port: 1025        # MailHog: docker run -p 1025:1025 -p 8025:8025 mailhog/mailhog
+  username: ""
+  password: ""
+  from: noreply@localhost
+
+moderation:
+  access_key_id: ""     # 留空则跳过内容审核
+  access_key_secret: ""
+  endpoint: green-cip.cn-shanghai.aliyuncs.com
+
+payment:
+  alipay:
+    app_id: ""
+    sandbox: true
+  wechat:
+    app_id: ""
+    sandbox: true
+
+sponsor:
+  monthly_goal: 500
+  current_raised: 123.45
+  alipay_qr_url: ""
+  wechat_qr_url: ""
+  message: "【本地测试】感谢支持！"

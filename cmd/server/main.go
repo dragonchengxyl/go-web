@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -26,8 +27,11 @@ import (
 )
 
 func main() {
+	configFile := flag.String("config", "configs/config.local.yaml", "path to config file")
+	flag.Parse()
+
 	// Load configuration
-	cfg, err := configs.Load()
+	cfg, err := configs.Load(*configFile)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
