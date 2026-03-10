@@ -15,11 +15,11 @@ import (
 // ChatHandler handles chat-related HTTP requests and WebSocket connections
 type ChatHandler struct {
 	chatService *usecase.ChatService
-	hub         *ws.Hub
+	hub         ws.HubInterface
 	logger      *zap.Logger
 }
 
-func NewChatHandler(chatService *usecase.ChatService, hub *ws.Hub, logger *zap.Logger) *ChatHandler {
+func NewChatHandler(chatService *usecase.ChatService, hub ws.HubInterface, logger *zap.Logger) *ChatHandler {
 	return &ChatHandler{chatService: chatService, hub: hub, logger: logger}
 }
 

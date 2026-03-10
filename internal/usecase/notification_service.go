@@ -13,10 +13,10 @@ import (
 // NotificationService handles notification business logic
 type NotificationService struct {
 	repo notification.Repository
-	hub  *ws.Hub
+	hub  ws.HubInterface
 }
 
-func NewNotificationService(repo notification.Repository, hub *ws.Hub) *NotificationService {
+func NewNotificationService(repo notification.Repository, hub ws.HubInterface) *NotificationService {
 	return &NotificationService{repo: repo, hub: hub}
 }
 

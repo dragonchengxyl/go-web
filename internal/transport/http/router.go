@@ -36,7 +36,8 @@ type RouterConfig struct {
 	ChatService         *usecase.ChatService
 	TipService          *usecase.TipService
 	NotificationService *usecase.NotificationService
-	Hub                 *ws.Hub
+	OSSService          *usecase.OSSService
+	Hub                 ws.HubInterface
 	TokenStore          *redis.TokenStore
 	ReportRepo          report.Repository
 	BlockRepo           block.Repository
@@ -71,7 +72,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	v1 := r.Group("/api/v1")
 	{
 		// Initialize handlers
-		authHandler := handler.NewAuthHandler(cfg.UserService)
+		authHandler := handler.NewAuthHandler(cfg.UserService, cfg.RedisClient)
 		userHandler := handler.NewUserHandler(cfg.UserService)
 		musicHandler := handler.NewMusicHandler(cfg.MusicService)
 		commentHandler := handler.NewCommentHandler(cfg.CommentService, cfg.PostService, cfg.NotificationService)
@@ -106,6 +107,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		// Explore (public)
 		v1.GET("/explore", postHandler.GetExplore)
 		v1.GET("/explore/tags", postHandler.GetHotTags)
+
+		// Sponsor dashboard (public)
+		sponsorHandler := handler.NewSponsorHandler(cfg.Config.Sponsor)
+		v1.GET("/sponsor", sponsorHandler.GetSponsorInfo)
 
 		// Music (public read)
 		albums := v1.Group("/albums")
@@ -205,6 +210,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Upload
 			uploadHandler := handler.NewUploadHandler("./uploads", 10*1024*1024)
 			protected.POST("/upload/image", uploadHandler.UploadImage)
+
+			// OSS direct upload policy
+			if cfg.OSSService != nil {
+				ossHandler := handler.NewOSSHandler(cfg.OSSService)
+				protected.POST("/upload/oss-policy", ossHandler.GetUploadToken)
+			}
 
 			// Creator dashboard
 			creatorHandler := handler.NewCreatorHandler(cfg.PostService, cfg.FollowService, cfg.TipService)

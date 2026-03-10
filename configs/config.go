@@ -5,14 +5,16 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server"`
-	Database  DatabaseConfig  `mapstructure:"database"`
-	Redis     RedisConfig     `mapstructure:"redis"`
-	JWT       JWTConfig       `mapstructure:"jwt"`
-	OSS       OSSConfig       `mapstructure:"oss"`
-	RateLimit RateLimitConfig `mapstructure:"ratelimit"`
-	Email     EmailConfig     `mapstructure:"email"`
-	Payment   PaymentConfig   `mapstructure:"payment"`
+	Server     ServerConfig     `mapstructure:"server"`
+	Database   DatabaseConfig   `mapstructure:"database"`
+	Redis      RedisConfig      `mapstructure:"redis"`
+	JWT        JWTConfig        `mapstructure:"jwt"`
+	OSS        OSSConfig        `mapstructure:"oss"`
+	RateLimit  RateLimitConfig  `mapstructure:"ratelimit"`
+	Email      EmailConfig      `mapstructure:"email"`
+	Payment    PaymentConfig    `mapstructure:"payment"`
+	Moderation ModerationConfig `mapstructure:"moderation"`
+	Sponsor    SponsorConfig    `mapstructure:"sponsor"`
 }
 
 type ServerConfig struct {
@@ -40,12 +42,13 @@ type JWTConfig struct {
 }
 
 type OSSConfig struct {
-	Provider        string `mapstructure:"provider"`          // "aliyun" or "r2"
-	AccessKeyID     string `mapstructure:"access_key_id"`
-	AccessKeySecret string `mapstructure:"access_key_secret"`
-	Bucket          string `mapstructure:"bucket"`
-	Endpoint        string `mapstructure:"endpoint"`
-	Region          string `mapstructure:"region"`            // "auto" for R2
+	Provider        string   `mapstructure:"provider"`          // "aliyun" or "r2"
+	AccessKeyID     string   `mapstructure:"access_key_id"`
+	AccessKeySecret string   `mapstructure:"access_key_secret"`
+	Bucket          string   `mapstructure:"bucket"`
+	Endpoint        string   `mapstructure:"endpoint"`
+	Region          string   `mapstructure:"region"`            // "auto" for R2
+	AllowedHosts    []string `mapstructure:"allowed_hosts"`     // validated media URL hosts
 }
 
 type RateLimitConfig struct {
@@ -81,5 +84,21 @@ type WechatConfig struct {
 	APIKey    string `mapstructure:"api_key"`
 	NotifyURL string `mapstructure:"notify_url"`
 	Sandbox   bool   `mapstructure:"sandbox"`
+}
+
+// ModerationConfig holds settings for Aliyun content safety service.
+type ModerationConfig struct {
+	AccessKeyID     string `mapstructure:"access_key_id"`
+	AccessKeySecret string `mapstructure:"access_key_secret"`
+	Endpoint        string `mapstructure:"endpoint"` // default: green-cip.cn-shanghai.aliyuncs.com
+}
+
+// SponsorConfig holds sponsor dashboard display data.
+type SponsorConfig struct {
+	MonthlyGoal    float64 `mapstructure:"monthly_goal"`
+	CurrentRaised  float64 `mapstructure:"current_raised"`
+	AlipayQRURL    string  `mapstructure:"alipay_qr_url"`
+	WechatQRURL    string  `mapstructure:"wechat_qr_url"`
+	Message        string  `mapstructure:"message"`
 }
 

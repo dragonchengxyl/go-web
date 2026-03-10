@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -23,14 +24,18 @@ func NewPostRepository(pool *pgxpool.Pool) *PostRepository {
 
 const createPostSQL = `
 	INSERT INTO posts (id, author_id, title, content, media_urls, tags, visibility,
-	                   like_count, comment_count, is_pinned, created_at, updated_at)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	                   moderation_status, content_labels, like_count, comment_count, is_pinned, created_at, updated_at)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 `
 
 func (r *PostRepository) Create(ctx context.Context, p *post.Post) error {
-	_, err := r.pool.Exec(ctx, createPostSQL,
+	labelsJSON, err := json.Marshal(p.ContentLabels)
+	if err != nil {
+		return fmt.Errorf("marshal content_labels: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, createPostSQL,
 		p.ID, p.AuthorID, p.Title, p.Content, p.MediaURLs, p.Tags, string(p.Visibility),
-		p.LikeCount, p.CommentCount, p.IsPinned, p.CreatedAt, p.UpdatedAt,
+		string(p.ModerationStatus), labelsJSON, p.LikeCount, p.CommentCount, p.IsPinned, p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create post: %w", err)
@@ -40,7 +45,8 @@ func (r *PostRepository) Create(ctx context.Context, p *post.Post) error {
 
 const getPostByIDSQL = `
 	SELECT p.id, p.author_id, p.title, p.content, p.media_urls, p.tags, p.visibility,
-	       p.like_count, p.comment_count, p.is_pinned, p.created_at, p.updated_at, p.deleted_at,
+	       p.moderation_status, p.content_labels, p.like_count, p.comment_count, p.is_pinned,
+	       p.created_at, p.updated_at, p.deleted_at,
 	       u.username, u.avatar_key
 	FROM posts p
 	JOIN users u ON u.id = p.author_id
@@ -49,10 +55,12 @@ const getPostByIDSQL = `
 
 func (r *PostRepository) GetByID(ctx context.Context, id uuid.UUID) (*post.Post, error) {
 	var p post.Post
-	var visStr string
+	var visStr, modStr string
+	var labelsJSON []byte
 	err := r.pool.QueryRow(ctx, getPostByIDSQL, id).Scan(
 		&p.ID, &p.AuthorID, &p.Title, &p.Content, &p.MediaURLs, &p.Tags, &visStr,
-		&p.LikeCount, &p.CommentCount, &p.IsPinned, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
+		&modStr, &labelsJSON, &p.LikeCount, &p.CommentCount, &p.IsPinned,
+		&p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 		&p.AuthorUsername, &p.AuthorAvatarKey,
 	)
 	if err != nil {
@@ -62,6 +70,10 @@ func (r *PostRepository) GetByID(ctx context.Context, id uuid.UUID) (*post.Post,
 		return nil, fmt.Errorf("failed to get post: %w", err)
 	}
 	p.Visibility = post.Visibility(visStr)
+	p.ModerationStatus = post.ModerationStatus(modStr)
+	if len(labelsJSON) > 0 {
+		_ = json.Unmarshal(labelsJSON, &p.ContentLabels)
+	}
 	return &p, nil
 }
 
@@ -102,6 +114,11 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 		args = append(args, string(*filter.Visibility))
 		idx++
 	}
+	if filter.ModerationStatus != nil {
+		where += fmt.Sprintf(" AND p.moderation_status = $%d", idx)
+		args = append(args, string(*filter.ModerationStatus))
+		idx++
+	}
 	if len(filter.Tags) > 0 {
 		where += fmt.Sprintf(" AND p.tags && $%d", idx)
 		args = append(args, filter.Tags)
@@ -119,10 +136,18 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 		return nil, 0, fmt.Errorf("failed to count posts: %w", err)
 	}
 
+	orderBy := "p.is_pinned DESC, p.created_at DESC"
+	if filter.SortByScore {
+		// Engagement score: (like_count + comment_count*3) / time_decay
+		// EXTRACT(EPOCH ...) gives seconds; add 1 to avoid division by zero.
+		orderBy = "(p.like_count + p.comment_count * 3)::float / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600 + 1, 1) DESC"
+	}
+
 	listSQL := `SELECT p.id, p.author_id, p.title, p.content, p.media_urls, p.tags, p.visibility,
-	                   p.like_count, p.comment_count, p.is_pinned, p.created_at, p.updated_at, p.deleted_at,
+	                   p.moderation_status, p.content_labels, p.like_count, p.comment_count, p.is_pinned,
+	                   p.created_at, p.updated_at, p.deleted_at,
 	                   u.username, u.avatar_key
-	            FROM posts p JOIN users u ON u.id = p.author_id ` + where + " ORDER BY p.is_pinned DESC, p.created_at DESC"
+	            FROM posts p JOIN users u ON u.id = p.author_id ` + where + " ORDER BY " + orderBy
 
 	if filter.PageSize > 0 {
 		offset := (filter.Page - 1) * filter.PageSize
@@ -136,7 +161,8 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 	}
 	defer rows.Close()
 
-	return scanPosts(rows)
+	posts, _, err := scanPosts(rows)
+	return posts, total, err
 }
 
 func (r *PostRepository) ListFeed(ctx context.Context, followeeIDs []uuid.UUID, filter post.ListFilter) ([]*post.Post, int64, error) {
@@ -146,7 +172,7 @@ func (r *PostRepository) ListFeed(ctx context.Context, followeeIDs []uuid.UUID, 
 
 	args := []any{followeeIDs}
 	idx := 2
-	where := "WHERE p.deleted_at IS NULL AND p.author_id = ANY($1) AND p.visibility = 'public'"
+	where := "WHERE p.deleted_at IS NULL AND p.author_id = ANY($1) AND p.visibility = 'public' AND p.moderation_status = 'approved'"
 
 	if filter.Cursor != nil {
 		where += fmt.Sprintf(" AND p.created_at < $%d", idx)
@@ -161,7 +187,8 @@ func (r *PostRepository) ListFeed(ctx context.Context, followeeIDs []uuid.UUID, 
 	}
 
 	listSQL := `SELECT p.id, p.author_id, p.title, p.content, p.media_urls, p.tags, p.visibility,
-	                   p.like_count, p.comment_count, p.is_pinned, p.created_at, p.updated_at, p.deleted_at,
+	                   p.moderation_status, p.content_labels, p.like_count, p.comment_count, p.is_pinned,
+	                   p.created_at, p.updated_at, p.deleted_at,
 	                   u.username, u.avatar_key
 	            FROM posts p JOIN users u ON u.id = p.author_id ` + where + " ORDER BY p.created_at DESC"
 	if filter.PageSize > 0 {
@@ -175,23 +202,30 @@ func (r *PostRepository) ListFeed(ctx context.Context, followeeIDs []uuid.UUID, 
 	}
 	defer rows.Close()
 
-	return scanPosts(rows)
+	posts, _, err := scanPosts(rows)
+	return posts, total, err
 }
 
 func scanPosts(rows pgx.Rows) ([]*post.Post, int64, error) {
 	posts := make([]*post.Post, 0)
 	for rows.Next() {
 		var p post.Post
-		var visStr string
+		var visStr, modStr string
+		var labelsJSON []byte
 		err := rows.Scan(
 			&p.ID, &p.AuthorID, &p.Title, &p.Content, &p.MediaURLs, &p.Tags, &visStr,
-			&p.LikeCount, &p.CommentCount, &p.IsPinned, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
+			&modStr, &labelsJSON, &p.LikeCount, &p.CommentCount, &p.IsPinned,
+			&p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 			&p.AuthorUsername, &p.AuthorAvatarKey,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan post: %w", err)
 		}
 		p.Visibility = post.Visibility(visStr)
+		p.ModerationStatus = post.ModerationStatus(modStr)
+		if len(labelsJSON) > 0 {
+			_ = json.Unmarshal(labelsJSON, &p.ContentLabels)
+		}
 		posts = append(posts, &p)
 	}
 	if err := rows.Err(); err != nil {
@@ -269,5 +303,13 @@ func (r *PostRepository) IncrementCommentCount(ctx context.Context, postID uuid.
 
 func (r *PostRepository) DecrementCommentCount(ctx context.Context, postID uuid.UUID) error {
 	_, err := r.pool.Exec(ctx, `UPDATE posts SET comment_count = GREATEST(comment_count - 1, 0) WHERE id = $1`, postID)
+	return err
+}
+
+func (r *PostRepository) UpdateModerationStatus(ctx context.Context, id uuid.UUID, status post.ModerationStatus) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE posts SET moderation_status = $2 WHERE id = $1`,
+		id, string(status),
+	)
 	return err
 }

@@ -9,6 +9,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// HubInterface abstracts the WebSocket hub for single-node and distributed modes.
+type HubInterface interface {
+	SendToUser(userID uuid.UUID, msg WSMessage)
+	Register(c *Client)
+	Unregister(c *Client)
+	Run(ctx context.Context)
+	// ConnCount returns the number of active connections for a user (used for max-conn enforcement).
+	ConnCount(userID uuid.UUID) int
+}
+
 // MessageType represents the type of WebSocket message
 type MessageType string
 
@@ -128,4 +138,11 @@ func (h *Hub) Register(c *Client) {
 // Unregister removes a client from the hub
 func (h *Hub) Unregister(c *Client) {
 	h.unregister <- c
+}
+
+// ConnCount returns the number of active connections for a user.
+func (h *Hub) ConnCount(userID uuid.UUID) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients[userID])
 }

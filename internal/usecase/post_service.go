@@ -3,30 +3,60 @@ package usecase
 import (
 	"context"
 	"errors"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/post"
+	"github.com/studio/platform/internal/infra/moderation"
 	"github.com/studio/platform/internal/pkg/apperr"
+	"go.uber.org/zap"
 )
 
 // PostService handles post-related business logic
 type PostService struct {
-	postRepo post.Repository
+	postRepo     post.Repository
+	moderator    moderation.Moderator // may be nil (moderation disabled)
+	logger       *zap.Logger
+	allowedHosts []string // OSS media URL whitelist; empty = skip validation
 }
 
-func NewPostService(postRepo post.Repository) *PostService {
-	return &PostService{postRepo: postRepo}
+func NewPostService(postRepo post.Repository, opts ...PostServiceOption) *PostService {
+	s := &PostService{postRepo: postRepo}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// PostServiceOption configures an optional PostService dependency.
+type PostServiceOption func(*PostService)
+
+// WithModerator enables async content moderation.
+func WithModerator(m moderation.Moderator, logger *zap.Logger) PostServiceOption {
+	return func(s *PostService) {
+		s.moderator = m
+		s.logger = logger
+	}
+}
+
+// WithAllowedHosts enables media URL whitelist validation.
+func WithAllowedHosts(hosts []string) PostServiceOption {
+	return func(s *PostService) {
+		s.allowedHosts = hosts
+	}
 }
 
 // CreatePostInput represents input for creating a post
 type CreatePostInput struct {
-	AuthorID   uuid.UUID
-	Title      string
-	Content    string
-	MediaURLs  []string
-	Tags       []string
-	Visibility post.Visibility
+	AuthorID      uuid.UUID
+	Title         string
+	Content       string
+	MediaURLs     []string
+	Tags          []string
+	ContentLabels map[string]bool
+	Visibility    post.Visibility
 }
 
 func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*post.Post, error) {
@@ -37,22 +67,97 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 		input.Visibility = post.VisibilityPublic
 	}
 
+	// Validate media URLs against OSS whitelist
+	if len(s.allowedHosts) > 0 {
+		for _, mediaURL := range input.MediaURLs {
+			u, err := url.Parse(mediaURL)
+			if err != nil {
+				return nil, apperr.BadRequest("媒体URL格式无效")
+			}
+			allowed := false
+			for _, h := range s.allowedHosts {
+				if strings.EqualFold(u.Host, h) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return nil, apperr.BadRequest("媒体URL不属于允许的存储域名")
+			}
+		}
+	}
+
 	now := time.Now()
 	p := &post.Post{
-		ID:         uuid.New(),
-		AuthorID:   input.AuthorID,
-		Title:      input.Title,
-		Content:    input.Content,
-		MediaURLs:  input.MediaURLs,
-		Tags:       input.Tags,
-		Visibility: input.Visibility,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:               uuid.New(),
+		AuthorID:         input.AuthorID,
+		Title:            input.Title,
+		Content:          input.Content,
+		MediaURLs:        input.MediaURLs,
+		Tags:             input.Tags,
+		ContentLabels:    input.ContentLabels,
+		Visibility:       input.Visibility,
+		ModerationStatus: post.ModerationPending,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	if err := s.postRepo.Create(ctx, p); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建帖子失败", err)
 	}
+
+	// Trigger async content moderation if moderator is configured.
+	if s.moderator != nil {
+		postID := p.ID
+		content := p.Content
+		mediaURLs := p.MediaURLs
+		moderator := s.moderator
+		repo := s.postRepo
+		logger := s.logger
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					if logger != nil {
+						logger.Error("moderation goroutine panic", zap.Any("recover", r))
+					}
+				}
+			}()
+			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			// Check text content
+			decision, _, err := moderator.ReviewText(bgCtx, content)
+			if err != nil && logger != nil {
+				logger.Error("moderation text review failed", zap.Error(err), zap.String("post_id", postID.String()))
+			}
+
+			// If text passes, check first image (if any)
+			if decision == moderation.DecisionPass && len(mediaURLs) > 0 {
+				imgDecision, _, imgErr := moderator.ReviewImage(bgCtx, mediaURLs[0])
+				if imgErr != nil && logger != nil {
+					logger.Error("moderation image review failed", zap.Error(imgErr), zap.String("post_id", postID.String()))
+				}
+				if imgDecision == moderation.DecisionBlock {
+					decision = moderation.DecisionBlock
+				}
+			}
+
+			status := post.ModerationApproved
+			if decision == moderation.DecisionBlock {
+				status = post.ModerationBlocked
+			}
+			if err := repo.UpdateModerationStatus(bgCtx, postID, status); err != nil && logger != nil {
+				logger.Error("failed to update moderation_status", zap.Error(err), zap.String("post_id", postID.String()))
+			}
+		}()
+	} else {
+		// No moderator: auto-approve immediately
+		p.ModerationStatus = post.ModerationApproved
+		if err := s.postRepo.UpdateModerationStatus(ctx, p.ID, post.ModerationApproved); err != nil {
+			return nil, apperr.Wrap(apperr.CodeInternalError, "更新帖子状态失败", err)
+		}
+	}
+
 	return p, nil
 }
 
@@ -138,7 +243,7 @@ func (s *PostService) ListUserPosts(ctx context.Context, input ListUserPostsInpu
 	})
 }
 
-// ListExplore lists recent public posts for explore page
+// ListExplore lists approved public posts for the explore page, ranked by engagement score.
 func (s *PostService) ListExplore(ctx context.Context, page, pageSize int, tag string) ([]*post.Post, int64, error) {
 	if page < 1 {
 		page = 1
@@ -147,10 +252,13 @@ func (s *PostService) ListExplore(ctx context.Context, page, pageSize int, tag s
 		pageSize = 20
 	}
 	vis := post.VisibilityPublic
+	approved := post.ModerationApproved
 	filter := post.ListFilter{
-		Visibility: &vis,
-		Page:       page,
-		PageSize:   pageSize,
+		Visibility:       &vis,
+		ModerationStatus: &approved,
+		SortByScore:      true,
+		Page:             page,
+		PageSize:         pageSize,
 	}
 	if tag != "" {
 		filter.Tags = []string{tag}

@@ -531,6 +531,16 @@ class ApiClient {
     return this.get<any>(`/users/${userId}`)
   }
 
+  async getSponsorInfo(): Promise<{
+    monthly_goal: number
+    current_raised: number
+    alipay_qr_url: string
+    wechat_qr_url: string
+    message: string
+  }> {
+    return this.get('/sponsor')
+  }
+
   async updateProfile(data: {
     bio?: string
     website?: string

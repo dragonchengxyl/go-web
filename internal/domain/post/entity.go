@@ -7,6 +7,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// ModerationStatus tracks the content safety review state of a post.
+type ModerationStatus string
+
+const (
+	ModerationPending  ModerationStatus = "pending"
+	ModerationApproved ModerationStatus = "approved"
+	ModerationBlocked  ModerationStatus = "blocked"
+)
+
 // Visibility represents who can see a post
 type Visibility string
 
@@ -18,19 +27,21 @@ const (
 
 // Post represents a community post/update
 type Post struct {
-	ID           uuid.UUID  `json:"id"`
-	AuthorID     uuid.UUID  `json:"author_id"`
-	Title        string     `json:"title,omitempty"` // optional, for long posts
-	Content      string     `json:"content"`
-	MediaURLs    []string   `json:"media_urls,omitempty"`
-	Tags         []string   `json:"tags,omitempty"`
-	Visibility   Visibility `json:"visibility"`
-	LikeCount    int        `json:"like_count"`
-	CommentCount int        `json:"comment_count"`
-	IsPinned     bool       `json:"is_pinned"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	ID               uuid.UUID        `json:"id"`
+	AuthorID         uuid.UUID        `json:"author_id"`
+	Title            string           `json:"title,omitempty"` // optional, for long posts
+	Content          string           `json:"content"`
+	MediaURLs        []string         `json:"media_urls,omitempty"`
+	Tags             []string         `json:"tags,omitempty"`
+	ContentLabels    map[string]bool  `json:"content_labels,omitempty"` // e.g. {"is_ai_generated": true}
+	Visibility       Visibility       `json:"visibility"`
+	ModerationStatus ModerationStatus `json:"moderation_status"`
+	LikeCount        int              `json:"like_count"`
+	CommentCount     int              `json:"comment_count"`
+	IsPinned         bool             `json:"is_pinned"`
+	CreatedAt        time.Time        `json:"created_at"`
+	UpdatedAt        time.Time        `json:"updated_at"`
+	DeletedAt        *time.Time       `json:"deleted_at,omitempty"`
 
 	// Joined fields
 	AuthorUsername  string  `json:"author_username,omitempty"`
@@ -47,13 +58,15 @@ type PostLike struct {
 
 // ListFilter holds filtering options for listing posts
 type ListFilter struct {
-	AuthorID   *uuid.UUID
-	Tags       []string
-	Search     string // full-text search on title+content
-	Visibility *Visibility
-	Cursor     *time.Time // for cursor-based pagination
-	Page       int
-	PageSize   int
+	AuthorID         *uuid.UUID
+	Tags             []string
+	Search           string // full-text search on title+content
+	Visibility       *Visibility
+	ModerationStatus *ModerationStatus // if set, filter by this status
+	Cursor           *time.Time        // for cursor-based pagination
+	Page             int
+	PageSize         int
+	SortByScore      bool // if true, sort by engagement score (BIZ-02)
 }
 
 var (

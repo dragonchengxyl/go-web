@@ -24,4 +24,7 @@ type Repository interface {
 	DecrementLikeCount(ctx context.Context, postID uuid.UUID) error
 	IncrementCommentCount(ctx context.Context, postID uuid.UUID) error
 	DecrementCommentCount(ctx context.Context, postID uuid.UUID) error
+
+	// UpdateModerationStatus updates the moderation_status column.
+	UpdateModerationStatus(ctx context.Context, id uuid.UUID, status ModerationStatus) error
 }

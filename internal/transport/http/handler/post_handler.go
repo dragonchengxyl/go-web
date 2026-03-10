@@ -38,11 +38,12 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	}
 
 	var req struct {
-		Title      string   `json:"title"`
-		Content    string   `json:"content" binding:"required"`
-		MediaURLs  []string `json:"media_urls"`
-		Tags       []string `json:"tags"`
-		Visibility string   `json:"visibility"`
+		Title           string   `json:"title"`
+		Content         string   `json:"content" binding:"required"`
+		MediaURLs       []string `json:"media_urls"`
+		Tags            []string `json:"tags"`
+		Visibility      string   `json:"visibility"`
+		IsAIGenerated   bool     `json:"is_ai_generated"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
@@ -54,13 +55,16 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		vis = post.VisibilityPublic
 	}
 
+	labels := map[string]bool{"is_ai_generated": req.IsAIGenerated}
+
 	p, err := h.postService.CreatePost(c.Request.Context(), usecase.CreatePostInput{
-		AuthorID:   userID,
-		Title:      req.Title,
-		Content:    req.Content,
-		MediaURLs:  req.MediaURLs,
-		Tags:       req.Tags,
-		Visibility: vis,
+		AuthorID:      userID,
+		Title:         req.Title,
+		Content:       req.Content,
+		MediaURLs:     req.MediaURLs,
+		Tags:          req.Tags,
+		ContentLabels: labels,
+		Visibility:    vis,
 	})
 	if err != nil {
 		response.Error(c, err)

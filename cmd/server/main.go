@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/infra/moderation"
 	"github.com/studio/platform/internal/infra/oss"
 	paymentalipay "github.com/studio/platform/internal/infra/payment/alipay"
 	"github.com/studio/platform/internal/infra/payment/mock"
@@ -114,12 +115,28 @@ func main() {
 	statsService := usecase.NewStatsService(pool)
 	achievementService := usecase.NewAchievementService(achievementRepo, leaderboard)
 	postService := usecase.NewPostService(postRepo)
+	// Enable content moderation if Aliyun Green is configured
+	if cfg.Moderation.AccessKeyID != "" {
+		moderator := moderation.NewAliyunGreen(
+			cfg.Moderation.AccessKeyID,
+			cfg.Moderation.AccessKeySecret,
+			cfg.Moderation.Endpoint,
+		)
+		postService = usecase.NewPostService(postRepo,
+			usecase.WithModerator(moderator, logger),
+			usecase.WithAllowedHosts(cfg.OSS.AllowedHosts),
+		)
+		logger.Info("Aliyun Green content moderation enabled")
+	} else if len(cfg.OSS.AllowedHosts) > 0 {
+		postService = usecase.NewPostService(postRepo, usecase.WithAllowedHosts(cfg.OSS.AllowedHosts))
+	}
 	followService := usecase.NewFollowService(followRepo)
 	chatService := usecase.NewChatService(chatRepo)
 	tipService := usecase.NewTipService(orderRepo)
+	ossService := usecase.NewOSSService(storageService)
 
-	// Initialize WebSocket hub
-	hub := ws.NewHub(logger)
+	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
+	hub := ws.NewDistributedHub(redisClient, logger)
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 	go hub.Run(hubCtx)
@@ -148,6 +165,7 @@ func main() {
 		ChatService:        chatService,
 		TipService:          tipService,
 		NotificationService: notificationService,
+		OSSService:          ossService,
 		Hub:                 hub,
 		TokenStore:         tokenStore,
 		ReportRepo:         reportRepo,

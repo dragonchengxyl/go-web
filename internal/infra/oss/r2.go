@@ -12,7 +12,6 @@ import (
 
 	"github.com/studio/platform/configs"
 )
-
 // CloudflareR2 implements StorageService using Cloudflare R2 (S3-compatible).
 type CloudflareR2 struct {
 	cfg configs.OSSConfig
@@ -119,4 +118,10 @@ func sha256Hex(data []byte) string {
 	h := sha256.New()
 	h.Write(data)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// GenerateUploadPolicy is not supported for Cloudflare R2 in this implementation.
+// Use GeneratePresignedURL for uploads instead.
+func (r *CloudflareR2) GenerateUploadPolicy(_ context.Context, _ string, _ time.Duration) (*UploadPolicy, error) {
+	return nil, fmt.Errorf("GenerateUploadPolicy is not supported for Cloudflare R2; use GeneratePresignedURL")
 }

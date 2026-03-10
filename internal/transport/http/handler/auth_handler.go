@@ -1,9 +1,13 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
@@ -14,17 +18,44 @@ import (
 // AuthHandler handles authentication requests
 type AuthHandler struct {
 	userService *usecase.UserService
+	rdb         *redis.Client
 }
 
-// NewAuthHandler creates a new auth handler
-func NewAuthHandler(userService *usecase.UserService) *AuthHandler {
-	return &AuthHandler{
-		userService: userService,
+// NewAuthHandler creates a new auth handler. Pass an optional *redis.Client to enable IP rate limiting.
+func NewAuthHandler(userService *usecase.UserService, rdb ...*redis.Client) *AuthHandler {
+	h := &AuthHandler{userService: userService}
+	if len(rdb) > 0 {
+		h.rdb = rdb[0]
 	}
+	return h
+}
+
+// checkIPRateLimit enforces a per-IP rate limit for sensitive endpoints using Redis.
+// Returns true if the caller is rate-limited and should be rejected.
+func (h *AuthHandler) checkIPRateLimit(c *gin.Context, action string, max int, window time.Duration) bool {
+	if h.rdb == nil {
+		return false
+	}
+	key := fmt.Sprintf("ratelimit:%s:ip:%s", action, c.ClientIP())
+	ctx := context.Background()
+	count, err := h.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return false // fail open
+	}
+	if count == 1 {
+		h.rdb.Expire(ctx, key, window) //nolint:errcheck
+	}
+	return count > int64(max)
 }
 
 // Register handles user registration
 func (h *AuthHandler) Register(c *gin.Context) {
+	// IP rate limit: max 5 register attempts per IP per hour
+	if h.checkIPRateLimit(c, "register", 5, time.Hour) {
+		response.Error(c, apperr.ErrRateLimited)
+		return
+	}
+
 	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, apperr.ErrValidationFailed.WithDetail(err.Error()))
@@ -99,7 +130,6 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 // Logout handles user logout
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// Extract token from Authorization header
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
 		response.Error(c, apperr.ErrUnauthorized)
