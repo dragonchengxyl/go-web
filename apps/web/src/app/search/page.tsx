@@ -6,11 +6,6 @@ import Link from 'next/link';
 import { apiClient, Post } from '@/lib/api-client';
 import { PostCard } from '@/components/post/post-card';
 
-function highlight(text: string, query: string): string {
-  if (!query.trim()) return text;
-  return text; // return plain string; we render via dangerouslySetInnerHTML in JSX below
-}
-
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query.trim() || !text) return <>{text}</>;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -56,11 +51,10 @@ function SearchContent() {
   const [users, setUsers] = useState<UserResult[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
-    if (token) { apiClient.setToken(token); setIsLoggedIn(true); }
+    if (token) { apiClient.setToken(token); }
   }, []);
 
   useEffect(() => {
@@ -78,16 +72,6 @@ function SearchContent() {
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', t);
     router.replace(`/search?${params}`);
-  }
-
-  function handleLike(post: Post) {
-    if (!isLoggedIn) return;
-    const fn = post.is_liked_by_me ? apiClient.unlikePost(post.id) : apiClient.likePost(post.id);
-    fn.then(() => setPosts(prev => prev.map(p =>
-      p.id === post.id
-        ? { ...p, is_liked_by_me: !p.is_liked_by_me, like_count: p.is_liked_by_me ? p.like_count - 1 : p.like_count + 1 }
-        : p
-    ))).catch(() => {});
   }
 
   if (!query) {
@@ -140,7 +124,7 @@ function SearchContent() {
                 <p className="text-center py-12 text-muted-foreground">未找到相关动态</p>
               ) : (
                 posts.map(post => (
-                  <PostCard key={post.id} post={post} onLike={() => handleLike(post)} />
+                  <PostCard key={post.id} post={post} />
                 ))
               )}
             </div>

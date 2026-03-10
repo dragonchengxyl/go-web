@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Post, apiClient } from '@/lib/api-client';
 import { Heart, MessageCircle, MoreHorizontal, Pin, Flag } from 'lucide-react';
 import Link from 'next/link';
@@ -80,15 +81,21 @@ function ReportModal({ postId, onClose }: { postId: string; onClose: () => void 
 
 interface PostCardProps {
   post: Post;
-  onLike?: () => void;
   showFull?: boolean;
 }
 
-export function PostCard({ post, onLike, showFull = false }: PostCardProps) {
+export function PostCard({ post, showFull = false }: PostCardProps) {
+  const queryClient = useQueryClient();
   const createdAgo = timeAgo(post.created_at);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [liked, setLiked] = useState(post.is_liked_by_me ?? false);
+  const [likeCount, setLikeCount] = useState(post.like_count);
+  const [bounceKey, setBounceKey] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const isPending = post.moderation_status === 'pending';
+  const isBlocked = post.moderation_status === 'blocked';
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -100,8 +107,50 @@ export function PostCard({ post, onLike, showFull = false }: PostCardProps) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  const likeMutation = useMutation({
+    mutationFn: () => liked ? apiClient.unlikePost(post.id) : apiClient.likePost(post.id),
+    onMutate: () => {
+      const prevLiked = liked;
+      const prevCount = likeCount;
+      if (!liked) {
+        setLiked(true);
+        setLikeCount(c => c + 1);
+        setBounceKey(k => k + 1);
+      } else {
+        setLiked(false);
+        setLikeCount(c => c - 1);
+      }
+      return { prevLiked, prevCount };
+    },
+    onError: (_err, _vars, context) => {
+      if (context) {
+        setLiked(context.prevLiked);
+        setLikeCount(context.prevCount);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['post', post.id] });
+    },
+  });
+
   return (
-    <div className="bg-card border rounded-xl p-4 hover:border-primary/30 transition-colors">
+    <div className="relative bg-card border rounded-xl p-4 hover:border-primary/30 transition-colors">
+      {/* Moderation overlays */}
+      {isPending && (
+        <div className="absolute inset-0 bg-gray-100/60 dark:bg-gray-900/60 rounded-xl flex items-center justify-center z-10 pointer-events-none">
+          <span className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300 text-xs px-2 py-1 rounded-full">
+            ⏳ 审核中
+          </span>
+        </div>
+      )}
+      {isBlocked && (
+        <div className="absolute inset-0 bg-gray-200/80 dark:bg-gray-900/80 rounded-xl flex items-center justify-center z-10 pointer-events-none">
+          <span className="bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300 text-xs px-3 py-1.5 rounded-full">
+            内容不符合社区规范
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
@@ -125,6 +174,12 @@ export function PostCard({ post, onLike, showFull = false }: PostCardProps) {
                     <Pin className="h-3 w-3" />
                     置顶
                   </span>
+                </>
+              )}
+              {post.content_labels?.is_ai_generated && (
+                <>
+                  <span>·</span>
+                  <span className="text-purple-500">AI 生成</span>
                 </>
               )}
             </div>
@@ -188,15 +243,20 @@ export function PostCard({ post, onLike, showFull = false }: PostCardProps) {
       {/* Actions */}
       <div className="flex items-center gap-4 pt-2 border-t">
         <button
-          onClick={onLike}
-          className={`flex items-center gap-1.5 text-sm transition-colors ${
-            post.is_liked_by_me ? 'text-red-500 hover:text-red-600' : 'text-muted-foreground hover:text-red-500'
+          key={bounceKey}
+          onClick={() => !isPending && !isBlocked && likeMutation.mutate()}
+          disabled={isPending || isBlocked}
+          className={`flex items-center gap-1.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            liked ? 'text-red-500 hover:text-red-600' : 'text-muted-foreground hover:text-red-500'
           }`}
         >
-          <Heart className={`h-4 w-4 ${post.is_liked_by_me ? 'fill-current' : ''}`} />
-          <span>{post.like_count}</span>
+          <Heart className={`h-4 w-4 ${liked ? 'fill-current animate-bounce' : ''}`} />
+          <span>{likeCount}</span>
         </button>
-        <Link href={`/posts/${post.id}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors">
+        <Link
+          href={isPending || isBlocked ? '#' : `/posts/${post.id}`}
+          className={`flex items-center gap-1.5 text-sm text-muted-foreground transition-colors ${isPending || isBlocked ? 'opacity-40 pointer-events-none' : 'hover:text-primary'}`}
+        >
           <MessageCircle className="h-4 w-4" />
           <span>{post.comment_count}</span>
         </Link>

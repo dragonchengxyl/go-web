@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { apiClient, Post } from '@/lib/api-client';
 import { PostCard } from '@/components/post/post-card';
 import { Button } from '@/components/ui/button';
@@ -11,15 +11,13 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef(1);
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
-    if (token) { apiClient.setToken(token); setIsLoggedIn(true); }
+    if (token) { apiClient.setToken(token); }
     loadPage(1);
   }, []);
 
@@ -32,10 +30,8 @@ export default function FeedPage() {
       const more = items.length === 20;
       setHasMore(more);
       pageRef.current = p;
-      setPage(p);
       return more;
     } catch {
-      // Not logged in or no follows — show empty state
       if (p === 1) setPosts([]);
       setHasMore(false);
       return false;
@@ -55,16 +51,6 @@ export default function FeedPage() {
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
   }, [loadingMore]);
-
-  function handleLike(post: Post) {
-    if (!isLoggedIn) return;
-    const fn = post.is_liked_by_me ? apiClient.unlikePost(post.id) : apiClient.likePost(post.id);
-    fn.then(() => setPosts(prev => prev.map(p =>
-      p.id === post.id
-        ? { ...p, is_liked_by_me: !p.is_liked_by_me, like_count: p.is_liked_by_me ? p.like_count - 1 : p.like_count + 1 }
-        : p
-    ))).catch(() => {});
-  }
 
   if (loading) {
     return (
@@ -116,7 +102,7 @@ export default function FeedPage() {
       ) : (
         <div className="space-y-4">
           {posts.map(post => (
-            <PostCard key={post.id} post={post} onLike={() => handleLike(post)} />
+            <PostCard key={post.id} post={post} />
           ))}
           {/* Infinite scroll sentinel */}
           {hasMore && (

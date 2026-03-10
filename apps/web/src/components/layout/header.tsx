@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { GlobalSearch } from '@/components/search/global-search';
 import { apiClient } from '@/lib/api-client';
+import { useWS } from '@/contexts/ws-context';
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const { subscribe } = useWS();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -26,21 +28,16 @@ export function Header() {
     if (!token) return;
     apiClient.setToken(token);
 
-    const fetchUnread = async () => {
-      try {
-        const data = await apiClient.getUnreadCount();
-        setUnreadCount(data.count);
-      } catch {
-        // not logged in or error — ignore
-      }
-    };
+    // Initial fetch for total count
+    apiClient.getUnreadCount().then(data => {
+      setUnreadCount(data.count);
+    }).catch(() => {});
 
-    fetchUnread();
-
-    // Re-check every 60 seconds
-    const interval = setInterval(fetchUnread, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    // Real-time increment via WS
+    return subscribe('notification', () => {
+      setUnreadCount(c => c + 1);
+    });
+  }, [subscribe]);
 
   return (
     <header
@@ -68,30 +65,21 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6 flex-shrink-0">
-            <Link
-              href="/feed"
-              className="text-sm font-medium hover:text-primary transition-colors"
-            >
+            <Link href="/feed" className="text-sm font-medium hover:text-primary transition-colors">
               动态
             </Link>
-            <Link
-              href="/explore"
-              className="text-sm font-medium hover:text-primary transition-colors flex items-center gap-1"
-            >
+            <Link href="/explore" className="text-sm font-medium hover:text-primary transition-colors flex items-center gap-1">
               <Compass className="h-4 w-4" />
               发现
             </Link>
-            <Link
-              href="/music"
-              className="text-sm font-medium hover:text-primary transition-colors"
-            >
+            <Link href="/music" className="text-sm font-medium hover:text-primary transition-colors">
               音乐
             </Link>
-            <Link
-              href="/leaderboard"
-              className="text-sm font-medium hover:text-primary transition-colors"
-            >
+            <Link href="/leaderboard" className="text-sm font-medium hover:text-primary transition-colors">
               排行
+            </Link>
+            <Link href="/sponsor" className="text-sm font-medium hover:text-primary transition-colors text-orange-500">
+              ❤ 赞助
             </Link>
           </nav>
 
@@ -136,54 +124,29 @@ export function Header() {
         {isMobileMenuOpen && (
           <div className="md:hidden py-4 border-t">
             <nav className="flex flex-col space-y-4">
-              <Link
-                href="/feed"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/feed" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 动态
               </Link>
-              <Link
-                href="/explore"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/explore" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 发现
               </Link>
-              <Link
-                href="/music"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/music" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 音乐
               </Link>
-              <Link
-                href="/messages"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/messages" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 消息
               </Link>
-              <Link
-                href="/notifications"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/notifications" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 通知{unreadCount > 0 && ` (${unreadCount})`}
               </Link>
-              <Link
-                href="/profile"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/profile" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 个人主页
               </Link>
-              <Link
-                href="/leaderboard"
-                className="text-sm font-medium hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
+              <Link href="/leaderboard" className="text-sm font-medium hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 排行榜
+              </Link>
+              <Link href="/sponsor" className="text-sm font-medium hover:text-primary transition-colors text-orange-500" onClick={() => setIsMobileMenuOpen(false)}>
+                ❤ 赞助
               </Link>
             </nav>
           </div>

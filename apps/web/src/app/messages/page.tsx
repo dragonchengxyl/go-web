@@ -1,20 +1,36 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiClient, Conversation } from '@/lib/api-client';
+import { apiClient, Conversation, Message } from '@/lib/api-client';
 import Link from 'next/link';
 import { MessageCircle } from 'lucide-react';
+import { useWS } from '@/contexts/ws-context';
 
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const { subscribe } = useWS();
 
   useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) apiClient.setToken(token);
+
     apiClient.getConversations(1, 50)
       .then((res) => setConversations(res.conversations || []))
       .catch(() => setConversations([]))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    return subscribe('chat', (payload: unknown) => {
+      const msg = payload as Message & { conversation_id: string };
+      setConversations(convs => convs.map(c =>
+        c.id === msg.conversation_id
+          ? { ...c, last_message: msg, unread_count: (c.unread_count ?? 0) + 1 }
+          : c
+      ));
+    });
+  }, [subscribe]);
 
   if (loading) {
     return (

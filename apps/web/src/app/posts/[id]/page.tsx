@@ -124,22 +124,6 @@ export default function PostDetailPage() {
     }
   }
 
-  async function handleLike() {
-    if (!isLoggedIn || !post) return;
-    try {
-      if (post.is_liked_by_me) {
-        await apiClient.unlikePost(post.id);
-      } else {
-        await apiClient.likePost(post.id);
-      }
-      setPost(p => p ? {
-        ...p,
-        is_liked_by_me: !p.is_liked_by_me,
-        like_count: p.is_liked_by_me ? p.like_count - 1 : p.like_count + 1,
-      } : p);
-    } catch { /* ignore */ }
-  }
-
   async function handleComment() {
     if (!commentText.trim() || !postId) return;
     setSubmitting(true);
@@ -184,7 +168,7 @@ export default function PostDetailPage() {
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
       {/* Post */}
-      <PostCard post={post} showFull onLike={handleLike} />
+      <PostCard post={post} showFull />
 
       {/* Action bar */}
       <div className="flex items-center gap-2 mt-3 mb-6">

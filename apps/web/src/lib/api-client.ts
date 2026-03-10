@@ -27,6 +27,8 @@ export interface LeaderboardEntry {
   level: number
 }
 
+export type ModerationStatus = 'pending' | 'approved' | 'blocked'
+
 export interface Post {
   id: string
   author_id: string
@@ -34,7 +36,9 @@ export interface Post {
   content: string
   media_urls?: string[]
   tags?: string[]
+  content_labels?: Record<string, boolean>
   visibility: 'public' | 'followers_only' | 'private'
+  moderation_status: ModerationStatus
   like_count: number
   comment_count: number
   is_pinned: boolean
@@ -43,6 +47,15 @@ export interface Post {
   author_username?: string
   author_avatar_key?: string
   is_liked_by_me?: boolean
+}
+
+export interface OSSUploadPolicy {
+  host: string
+  OSSAccessKeyId: string
+  policy: string
+  signature: string
+  expire: number
+  dir: string
 }
 
 export interface UserFollow {
@@ -245,8 +258,12 @@ class ApiClient {
     return this.get<Post>(`/posts/${id}`)
   }
 
-  async createPost(data: { title?: string; content: string; media_urls?: string[]; tags?: string[]; visibility?: string }) {
+  async createPost(data: { title?: string; content: string; media_urls?: string[]; tags?: string[]; visibility?: string; is_ai_generated?: boolean }) {
     return this.post<Post>('/posts', data)
+  }
+
+  async getOSSPolicy(purpose?: string): Promise<OSSUploadPolicy> {
+    return this.post<OSSUploadPolicy>('/upload/oss-policy', { purpose: purpose ?? 'post' })
   }
 
   async updatePost(id: string, data: { title?: string; content: string; media_urls?: string[]; tags?: string[]; visibility?: string }) {

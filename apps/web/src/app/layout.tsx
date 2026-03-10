@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { MusicPlayer } from '@/components/music-player';
+import { ModerationToast } from '@/components/moderation-toast';
 
 export const metadata: Metadata = {
   title: '独立游戏工作室 - Indie Game Studio',
@@ -34,6 +35,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <MusicPlayer />
+          <ModerationToast />
         </Providers>
       </body>
     </html>
