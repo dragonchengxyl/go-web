@@ -63,7 +63,7 @@ func (h *CommentHandler) CreateComment(c *gin.Context) {
 		notifSvc := h.notificationService
 		postSvc := h.postService
 		go func() {
-			defer func() { recover() }()
+			defer func() { _ = recover() }()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			p, err := postSvc.GetPost(ctx, targetID)

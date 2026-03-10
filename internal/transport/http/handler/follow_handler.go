@@ -49,7 +49,7 @@ func (h *FollowHandler) Follow(c *gin.Context) {
 		targetID := followeeID
 		notifSvc := h.notificationService
 		go func() {
-			defer func() { recover() }()
+			defer func() { _ = recover() }()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			_ = notifSvc.Notify(ctx, &notification.Notification{
