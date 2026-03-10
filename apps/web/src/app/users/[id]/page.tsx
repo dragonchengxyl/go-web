@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { UserPlus, UserMinus, MessageCircle, MapPin, Globe, ShieldX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PostCard } from '@/components/post/post-card';
 import { apiClient, Post, FollowStats } from '@/lib/api-client';
 
@@ -23,13 +22,6 @@ interface UserProfile {
   created_at: string
 }
 
-interface FollowUser {
-  follower_id: string
-  followee_id: string
-  created_at: string
-  username?: string
-}
-
 export default function UserProfilePage() {
   const params = useParams();
   const userId = params.id as string;
@@ -37,8 +29,6 @@ export default function UserProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<FollowStats | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [followers, setFollowers] = useState<FollowUser[]>([]);
-  const [following, setFollowing] = useState<FollowUser[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
@@ -67,7 +57,6 @@ export default function UserProfilePage() {
       setStats(statsData);
       setPosts(postsData.posts ?? []);
 
-      // Check if current user is following this user
       if (apiClient.getToken()) {
         try {
           const me = await apiClient.getMe();
@@ -85,16 +74,6 @@ export default function UserProfilePage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function loadFollowers() {
-    const data = await apiClient.getFollowers(userId, 1, 50);
-    setFollowers(data.followers ?? []);
-  }
-
-  async function loadFollowing() {
-    const data = await apiClient.getFollowing(userId, 1, 50);
-    setFollowing(data.following ?? []);
   }
 
   async function handleFollow() {
@@ -167,7 +146,6 @@ export default function UserProfilePage() {
       <div className="bg-card border rounded-xl p-6 mb-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            {/* Avatar */}
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
               <span className="text-2xl font-bold text-primary">
                 {displayName[0]?.toUpperCase() || '?'}
@@ -184,7 +162,6 @@ export default function UserProfilePage() {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center gap-2">
             {!isSelf && apiClient.getToken() && (
               <>
@@ -200,7 +177,7 @@ export default function UserProfilePage() {
                     <><UserPlus className="h-4 w-4 mr-1" />关注</>
                   )}
                 </Button>
-                <Link href={`/messages`}>
+                <Link href="/messages">
                   <Button variant="outline" size="sm">
                     <MessageCircle className="h-4 w-4" />
                   </Button>
@@ -225,12 +202,10 @@ export default function UserProfilePage() {
           </div>
         </div>
 
-        {/* Bio */}
         {profile.bio && (
           <p className="mt-3 text-sm text-muted-foreground">{profile.bio}</p>
         )}
 
-        {/* Meta info */}
         <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
           {profile.location && (
             <span className="flex items-center gap-1">
@@ -245,16 +220,16 @@ export default function UserProfilePage() {
           )}
         </div>
 
-        {/* Follow stats */}
+        {/* Follow stats — clickable links */}
         <div className="flex gap-6 mt-4 pt-4 border-t text-sm">
-          <div>
+          <Link href={`/users/${userId}/followers`} className="hover:underline">
             <span className="font-bold">{stats?.follower_count ?? 0}</span>
             <span className="text-muted-foreground ml-1">粉丝</span>
-          </div>
-          <div>
+          </Link>
+          <Link href={`/users/${userId}/following`} className="hover:underline">
             <span className="font-bold">{stats?.following_count ?? 0}</span>
             <span className="text-muted-foreground ml-1">关注</span>
-          </div>
+          </Link>
           <div>
             <span className="font-bold">{posts.length}</span>
             <span className="text-muted-foreground ml-1">帖子</span>
@@ -262,61 +237,14 @@ export default function UserProfilePage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="posts" onValueChange={(v) => {
-        if (v === 'followers') loadFollowers();
-        if (v === 'following') loadFollowing();
-      }}>
-        <TabsList className="w-full">
-          <TabsTrigger value="posts" className="flex-1">动态</TabsTrigger>
-          <TabsTrigger value="followers" className="flex-1">粉丝</TabsTrigger>
-          <TabsTrigger value="following" className="flex-1">关注中</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="posts" className="mt-4 space-y-3">
-          {posts.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">暂无帖子</div>
-          ) : (
-            posts.map(post => <PostCard key={post.id} post={post} />)
-          )}
-        </TabsContent>
-
-        <TabsContent value="followers" className="mt-4 space-y-2">
-          {followers.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">暂无粉丝</div>
-          ) : (
-            followers.map(f => (
-              <Link key={f.follower_id} href={`/users/${f.follower_id}`}
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors border">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-bold text-primary">
-                    {(f.username || f.follower_id)[0]?.toUpperCase()}
-                  </span>
-                </div>
-                <span className="text-sm font-medium">{f.username || f.follower_id}</span>
-              </Link>
-            ))
-          )}
-        </TabsContent>
-
-        <TabsContent value="following" className="mt-4 space-y-2">
-          {following.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">未关注任何人</div>
-          ) : (
-            following.map(f => (
-              <Link key={f.followee_id} href={`/users/${f.followee_id}`}
-                className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors border">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-bold text-primary">
-                    {(f.username || f.followee_id)[0]?.toUpperCase()}
-                  </span>
-                </div>
-                <span className="text-sm font-medium">{f.username || f.followee_id}</span>
-              </Link>
-            ))
-          )}
-        </TabsContent>
-      </Tabs>
+      {/* Posts */}
+      <div className="space-y-3">
+        {posts.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">暂无帖子</div>
+        ) : (
+          posts.map(post => <PostCard key={post.id} post={post} />)
+        )}
+      </div>
     </div>
   );
 }

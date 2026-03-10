@@ -8,9 +8,9 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About */}
           <div>
-            <h3 className="font-bold text-lg mb-4">关于我们</h3>
+            <h3 className="font-bold text-lg mb-4">关于社区</h3>
             <p className="text-sm text-muted-foreground">
-              致力于创造独特而富有创意的独立游戏体验
+              一个温暖而包容的 Furry 同好社区，分享你的故事与创作
             </p>
           </div>
 
@@ -19,57 +19,44 @@ export function Footer() {
             <h3 className="font-bold text-lg mb-4">快速链接</h3>
             <ul className="space-y-2">
               <li>
-                <Link
-                  href="/games"
-                  className="text-sm text-muted-foreground hover:text-primary"
-                >
-                  游戏列表
+                <Link href="/feed" className="text-sm text-muted-foreground hover:text-primary">
+                  动态
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/music"
-                  className="text-sm text-muted-foreground hover:text-primary"
-                >
-                  音乐专辑
+                <Link href="/explore" className="text-sm text-muted-foreground hover:text-primary">
+                  发现
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/community"
-                  className="text-sm text-muted-foreground hover:text-primary"
-                >
-                  社区
+                <Link href="/notifications" className="text-sm text-muted-foreground hover:text-primary">
+                  通知
+                </Link>
+              </li>
+              <li>
+                <Link href="/sponsor" className="text-sm text-muted-foreground hover:text-primary">
+                  赞助支持
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Support */}
+          {/* Account */}
           <div>
-            <h3 className="font-bold text-lg mb-4">支持</h3>
+            <h3 className="font-bold text-lg mb-4">账号</h3>
             <ul className="space-y-2">
               <li>
-                <Link
-                  href="/help"
-                  className="text-sm text-muted-foreground hover:text-primary"
-                >
-                  帮助中心
+                <Link href="/settings" className="text-sm text-muted-foreground hover:text-primary">
+                  设置
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/privacy"
-                  className="text-sm text-muted-foreground hover:text-primary"
-                >
+                <Link href="/privacy" className="text-sm text-muted-foreground hover:text-primary">
                   隐私政策
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/terms"
-                  className="text-sm text-muted-foreground hover:text-primary"
-                >
+                <Link href="/terms" className="text-sm text-muted-foreground hover:text-primary">
                   服务条款
                 </Link>
               </li>
@@ -97,7 +84,7 @@ export function Footer() {
                 <Twitter className="h-5 w-5" />
               </a>
               <a
-                href="mailto:contact@studio.com"
+                href="mailto:contact@furry.community"
                 className="text-muted-foreground hover:text-primary"
               >
                 <Mail className="h-5 w-5" />
@@ -107,7 +94,7 @@ export function Footer() {
         </div>
 
         <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-          <p>&copy; 2026 独立游戏工作室. All rights reserved.</p>
+          <p>&copy; 2026 Furry 同好社区. All rights reserved.</p>
         </div>
       </div>
     </footer>

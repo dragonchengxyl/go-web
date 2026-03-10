@@ -9,24 +9,6 @@ interface ApiResponse<T> {
   timestamp?: number
 }
 
-export interface Achievement {
-  id: string
-  name: string
-  description: string
-  icon: string
-  points: number
-  unlocked_at?: string
-}
-
-export interface LeaderboardEntry {
-  rank: number
-  user_id: string
-  username: string
-  avatar?: string
-  points: number
-  level: number
-}
-
 export type ModerationStatus = 'pending' | 'approved' | 'blocked'
 
 export interface Post {
@@ -383,26 +365,6 @@ class ApiClient {
     return this.post<TipOrder>('/tips', { to_user_id: toUserId, amount, message })
   }
 
-  async validateCoupon(code: string) {
-    return this.post<{ valid: boolean; discount: number; type: string; discount_type: string }>('/coupons/validate', { code })
-  }
-
-  async createOrder(items: any[], couponCode?: string, _ref?: string) {
-    return this.post<{ id: string; order_no: string; total_cents: number }>('/orders', { items, coupon_code: couponCode })
-  }
-
-  async payOrderAlipay(orderId: string, returnUrl?: string) {
-    return this.post<{ pay_url: string }>(`/orders/${orderId}/pay/alipay`, { return_url: returnUrl })
-  }
-
-  async payOrderWechat(orderId: string) {
-    return this.post<{ qr_code: string }>(`/orders/${orderId}/pay/wechat`, {})
-  }
-
-  async payOrder(orderId: string, method: string) {
-    return this.post<{ pay_url?: string; qr_code?: string }>(`/orders/${orderId}/pay`, { method })
-  }
-
   async getReceivedTips(userId: string, page?: number, pageSize?: number) {    const q = new URLSearchParams()
     if (page) q.set('page', String(page))
     if (pageSize) q.set('page_size', String(pageSize))
@@ -434,84 +396,20 @@ class ApiClient {
     return this.get<{ count: number }>('/notifications/unread-count')
   }
 
-  // ── Music ─────────────────────────────────────────────────────────────
-
-  async getAlbums(params?: { page?: number; page_size?: number; search?: string; tag?: string }) {
-    const q = new URLSearchParams()
-    if (params?.page) q.set('page', String(params.page))
-    if (params?.page_size) q.set('page_size', String(params.page_size))
-    if (params?.search) q.set('search', params.search)
-    return this.get<{ albums: any[]; total: number; page: number; size: number }>(`/albums?${q}`)
-  }
-
-  async getAlbumBySlug(slug: string) {
-    return this.get<any>(`/albums/slug/${slug}`)
-  }
-
-  async getGames(params?: { page?: number; page_size?: number; search?: string; tag?: string }) {
-    const q = new URLSearchParams()
-    if (params?.page) q.set('page', String(params.page))
-    if (params?.page_size) q.set('page_size', String(params.page_size))
-    if (params?.search) q.set('search', params.search)
-    return this.get<{ games: any[]; total: number }>(`/games?${q}`)
-  }
-
-  async getGameBySlug(slug: string) {
-    return this.get<any>(`/games/slug/${slug}`)
-  }
-
-  async getProducts(params?: { product_type?: string; is_active?: boolean; page?: number }) {
-    const q = new URLSearchParams()
-    if (params?.product_type) q.set('product_type', params.product_type)
-    if (params?.is_active !== undefined) q.set('is_active', String(params.is_active))
-    if (params?.page) q.set('page', String(params.page))
-    return this.get<{ products: any[]; total: number }>(`/products?${q}`)
-  }
-
-  async getOrders(page?: number, pageSize?: number) {
-    const q = new URLSearchParams()
-    if (page) q.set('page', String(page))
-    if (pageSize) q.set('page_size', String(pageSize))
-    return this.get<{ orders: any[]; total: number }>(`/orders?${q}`)
-  }
-
-  async getOrder(orderId: string) {
-    return this.get<any>(`/orders/${orderId}`)
-  }
-
   // ── Search ────────────────────────────────────────────────────────────
 
   async searchAll(query: string) {
     return this.get<{ albums: any[]; games?: any[]; users?: any[]; posts?: any[]; query: string }>(`/search?q=${encodeURIComponent(query)}`)
   }
 
-  async searchAlbums(query: string) {
-    return this.get<any[]>(`/search/albums?q=${encodeURIComponent(query)}`)
-  }
-
   async getPopularSearches(): Promise<string[]> {
     return this.get<string[]>('/search/popular')
   }
 
-  // ── Achievements ──────────────────────────────────────────────────────
+  // ── Block / Report ────────────────────────────────────────────────────
 
-  async getUserAchievements(userId: string): Promise<Achievement[]> {
-    return this.get<Achievement[]>(`/users/${userId}/achievements`)
-  }
-
-  async getMyAchievements(): Promise<Achievement[]> {
-    return this.get<Achievement[]>('/users/me/achievements')
-  }
-
-  async getMyPoints(): Promise<{ total: number; level: number }> {
-    return this.get<{ total: number; level: number }>('/users/me/points')
-  }
-
-  async getLeaderboard(type?: 'all' | 'weekly'): Promise<LeaderboardEntry[]> {
-    if (type === 'weekly') {
-      return this.get<LeaderboardEntry[]>('/leaderboard/weekly')
-    }
-    return this.get<LeaderboardEntry[]>('/leaderboard')
+  async getBlockedUsers() {
+    return this.get<{ users: any[]; total: number }>('/users/me/blocked')
   }
 
   async blockUser(userId: string) {
