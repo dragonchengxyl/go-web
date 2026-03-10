@@ -61,7 +61,10 @@
       "Read(//home/chenlongting/.claude/**)",
       "Bash(cp:*)",
       "Bash(/home/chenlongting/go-web/internal/usecase/user_admin.go:*)",
-      "Bash(/home/chenlongting/go-web/internal/usecase/post_service.go:*)"
+      "Bash(/home/chenlongting/go-web/internal/usecase/post_service.go:*)",
+      "Bash(bash -n /home/chenlongting/go-web/dev.sh && echo \"语法正确\")",
+      "Bash(grep -n \"TODO\\\\|placeholder\" /home/chenlongting/go-web/apps/web/src/app/posts/create/page.tsx | head -10\ngrep -n \"TODO\\\\|placeholder\" /home/chenlongting/go-web/apps/web/src/app/posts/\\\\[id\\\\]/page.tsx | head -10\ngrep -n \"TODO\\\\|placeholder\" /home/chenlongting/go-web/apps/web/src/app/messages/\\\\[id\\\\]/page.tsx | head -10)",
+      "WebSearch"
     ]
   }
 }
