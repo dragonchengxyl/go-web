@@ -19,7 +19,7 @@ type PasswordStrength struct {
 func DefaultPasswordStrength() PasswordStrength {
 	return PasswordStrength{
 		MinLength:      8,
-		RequireUpper:   true,
+		RequireUpper:   false,
 		RequireLower:   true,
 		RequireNumber:  true,
 		RequireSpecial: false,

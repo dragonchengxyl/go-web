@@ -6,8 +6,30 @@ import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Mail, Lock, User } from 'lucide-react';
+import { Mail, Lock, User, Check, X } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
+
+function PasswordHints({ password }: { password: string }) {
+  const rules = [
+    { label: '至少 8 个字符', ok: password.length >= 8 },
+    { label: '包含小写字母', ok: /[a-z]/.test(password) },
+    { label: '包含数字', ok: /[0-9]/.test(password) },
+  ];
+
+  if (!password) return null;
+
+  return (
+    <ul className="mt-1.5 space-y-1">
+      {rules.map((r) => (
+        <li key={r.label} className={cn('flex items-center gap-1.5 text-xs', r.ok ? 'text-green-500' : 'text-muted-foreground')}>
+          {r.ok ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+          {r.label}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -81,7 +103,7 @@ export default function RegisterPage() {
                 <Input
                   id="username"
                   type="text"
-                  placeholder="请输入用户名"
+                  placeholder="3-20 位字母、数字、下划线"
                   className="pl-10"
                   value={formData.username}
                   onChange={e => setFormData({ ...formData, username: e.target.value })}
@@ -113,13 +135,14 @@ export default function RegisterPage() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="请输入密码"
+                  placeholder="至少 8 位，含小写字母和数字"
                   className="pl-10"
                   value={formData.password}
                   onChange={e => setFormData({ ...formData, password: e.target.value })}
                   required
                 />
               </div>
+              <PasswordHints password={formData.password} />
             </div>
 
             <div className="space-y-2">
@@ -136,6 +159,11 @@ export default function RegisterPage() {
                   required
                 />
               </div>
+              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <X className="w-3 h-3" /> 两次密码不一致
+                </p>
+              )}
             </div>
 
             <Button
