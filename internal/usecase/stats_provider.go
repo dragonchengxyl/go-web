@@ -9,4 +9,5 @@ type StatsProvider interface {
 	GetDashboardStats(ctx context.Context) (*DashboardStats, error)
 	GetRevenueChart(ctx context.Context, days int) ([]ChartPoint, error)
 	GetUserGrowthChart(ctx context.Context, days int) ([]ChartPoint, error)
+	GetPopularGames(ctx context.Context, limit int) ([]PopularGame, error)
 }

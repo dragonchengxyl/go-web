@@ -101,3 +101,9 @@ func (c *StatsGRPCClient) GetUserGrowthChart(ctx context.Context, days int) ([]u
 	}
 	return points, nil
 }
+
+// GetPopularGames implements usecase.StatsProvider.
+// Games feature has been removed; returns an empty slice for backward compatibility.
+func (c *StatsGRPCClient) GetPopularGames(_ context.Context, _ int) ([]usecase.PopularGame, error) {
+	return []usecase.PopularGame{}, nil
+}

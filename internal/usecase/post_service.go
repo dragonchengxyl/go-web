@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/infra/moderation"
+	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"go.uber.org/zap"
 )
@@ -20,6 +21,7 @@ type PostService struct {
 	moderator    moderation.Moderator // may be nil (moderation disabled)
 	logger       *zap.Logger
 	allowedHosts []string // OSS media URL whitelist; empty = skip validation
+	publisher    *streams.Publisher // may be nil (events disabled)
 }
 
 func NewPostService(postRepo post.Repository, opts ...PostServiceOption) *PostService {
@@ -48,6 +50,13 @@ func WithAllowedHosts(hosts []string) PostServiceOption {
 	}
 }
 
+// WithPublisher enables event publishing via Redis Streams.
+func WithPublisher(p *streams.Publisher) PostServiceOption {
+	return func(s *PostService) {
+		s.publisher = p
+	}
+}
+
 // CreatePostInput represents input for creating a post
 type CreatePostInput struct {
 	AuthorID      uuid.UUID
@@ -57,6 +66,7 @@ type CreatePostInput struct {
 	Tags          []string
 	ContentLabels map[string]bool
 	Visibility    post.Visibility
+	GroupID       *uuid.UUID
 }
 
 func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*post.Post, error) {
@@ -106,8 +116,20 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建帖子失败", err)
 	}
 
-	// Trigger async content moderation if moderator is configured.
-	if s.moderator != nil {
+	// Publish post.created event if publisher is configured (moderation-svc consumes it).
+	if s.publisher != nil {
+		go func() {
+			_ = s.publisher.Publish(context.Background(), streams.EventPostCreated, streams.PostCreatedPayload{
+				PostID:    p.ID.String(),
+				AuthorID:  p.AuthorID.String(),
+				Content:   p.Content,
+				MediaURLs: p.MediaURLs,
+			})
+		}()
+	}
+
+	// Trigger async content moderation if moderator is configured (in-process fallback).
+	if s.publisher == nil && s.moderator != nil {
 		postID := p.ID
 		content := p.Content
 		mediaURLs := p.MediaURLs

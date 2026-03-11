@@ -29,15 +29,18 @@ type RouterConfig struct {
 	OrderService        *usecase.OrderService
 	PaymentService      *usecase.PaymentService
 	SearchService       *usecase.SearchService
-	StatsService        *usecase.StatsService
+	StatsService        usecase.StatsProvider
 	AchievementService  *usecase.AchievementService
 	PostService         *usecase.PostService
 	FollowService       *usecase.FollowService
 	ChatService         *usecase.ChatService
 	TipService          *usecase.TipService
-	NotificationService *usecase.NotificationService
-	OSSService          *usecase.OSSService
-	Hub                 ws.HubInterface
+	NotificationService    *usecase.NotificationService
+	OSSService             *usecase.OSSService
+	EventService           *usecase.EventService
+	GroupService           *usecase.GroupService
+	RecommendationService  *usecase.RecommendationService
+	Hub                    ws.HubInterface
 	TokenStore          *redis.TokenStore
 	ReportRepo          report.Repository
 	BlockRepo           block.Repository
@@ -144,6 +147,24 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			posts.GET("/:id", postHandler.GetPost)
 		}
 
+		// Events (public read)
+		if cfg.EventService != nil {
+			eventHandler := handler.NewEventHandler(cfg.EventService)
+			events := v1.Group("/events")
+			events.GET("", eventHandler.ListEvents)
+			events.GET("/:id", eventHandler.GetEvent)
+			events.GET("/:id/attendees", eventHandler.ListAttendees)
+		}
+
+		// Groups (public read)
+		if cfg.GroupService != nil {
+			groupHandler := handler.NewGroupHandler(cfg.GroupService)
+			groups := v1.Group("/groups")
+			groups.GET("", groupHandler.ListGroups)
+			groups.GET("/:id", groupHandler.GetGroup)
+			groups.GET("/:id/members", groupHandler.ListMembers)
+		}
+
 		// Users public profile
 		v1.GET("/users/:id/achievements", achievementHandler.GetUserAchievements)
 		v1.GET("/users/:id/followers", followHandler.ListFollowers)
@@ -177,6 +198,35 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 			// Feed
 			protected.GET("/feed", postHandler.GetFeed)
+
+			// Personalised recommendations
+			if cfg.RecommendationService != nil {
+				recHandler := handler.NewRecommendationHandler(cfg.RecommendationService)
+				protected.GET("/posts/recommended", recHandler.GetRecommended)
+			}
+
+			// Events (authenticated write)
+			if cfg.EventService != nil {
+				eventHandler := handler.NewEventHandler(cfg.EventService)
+				protected.POST("/events", eventHandler.CreateEvent)
+				protected.PUT("/events/:id", eventHandler.UpdateEvent)
+				protected.DELETE("/events/:id", eventHandler.CancelEvent)
+				protected.POST("/events/:id/attend", eventHandler.AttendEvent)
+				protected.GET("/users/me/events", eventHandler.MyEvents)
+				protected.GET("/users/me/attending", eventHandler.MyAttending)
+			}
+
+			// Groups (authenticated write)
+			if cfg.GroupService != nil {
+				groupHandler := handler.NewGroupHandler(cfg.GroupService)
+				protected.POST("/groups", groupHandler.CreateGroup)
+				protected.PUT("/groups/:id", groupHandler.UpdateGroup)
+				protected.POST("/groups/:id/join", groupHandler.JoinGroup)
+				protected.DELETE("/groups/:id/leave", groupHandler.LeaveGroup)
+				protected.PUT("/groups/:id/members/:uid", groupHandler.UpdateMemberRole)
+				protected.DELETE("/groups/:id/members/:uid", groupHandler.KickMember)
+				protected.GET("/users/me/groups", groupHandler.MyGroups)
+			}
 
 			// Follow
 			protected.POST("/users/:id/follow", followHandler.Follow)

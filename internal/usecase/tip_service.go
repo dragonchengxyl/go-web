@@ -7,16 +7,27 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/order"
+	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 // TipService handles tip (donation) functionality
 type TipService struct {
 	orderRepo order.Repository
+	publisher *streams.Publisher // may be nil
 }
 
-func NewTipService(orderRepo order.Repository) *TipService {
-	return &TipService{orderRepo: orderRepo}
+func NewTipService(orderRepo order.Repository, opts ...func(*TipService)) *TipService {
+	s := &TipService{orderRepo: orderRepo}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// WithTipPublisher injects an event publisher into TipService.
+func WithTipPublisher(p *streams.Publisher) func(*TipService) {
+	return func(s *TipService) { s.publisher = p }
 }
 
 // CreateTipInput represents input for creating a tip
@@ -63,6 +74,18 @@ func (s *TipService) CreateTip(ctx context.Context, input CreateTipInput) (*orde
 	if err := s.orderRepo.Create(ctx, o); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建打赏订单失败", err)
 	}
+
+	if s.publisher != nil {
+		go func() {
+			_ = s.publisher.Publish(context.Background(), streams.EventTipSent, streams.TipSentPayload{
+				TipID:       o.ID.String(),
+				SenderID:    input.FromUserID.String(),
+				ReceiverID:  input.ToUserID.String(),
+				AmountCents: amountCents,
+			})
+		}()
+	}
+
 	return o, nil
 }
 

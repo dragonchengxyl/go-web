@@ -490,6 +490,145 @@ class ApiClient {
     }
     return data.data
   }
+
+  // ── Events ───────────────────────────────────────────────────────────────
+
+  async listEvents(page = 1, pageSize = 20) {
+    return this.request<{ events: Event[]; total: number; page: number; page_size: number }>(
+      `/events?page=${page}&page_size=${pageSize}`
+    )
+  }
+
+  async getEvent(id: string) {
+    return this.request<Event>(`/events/${id}`)
+  }
+
+  async createEvent(data: {
+    title: string
+    description?: string
+    location?: string
+    is_online?: boolean
+    start_time: string
+    end_time: string
+    max_capacity?: number
+    tags?: string[]
+  }) {
+    return this.request<Event>('/events', { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async attendEvent(eventId: string, status = 'attending') {
+    return this.request<void>(`/events/${eventId}/attend`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    })
+  }
+
+  async listEventAttendees(eventId: string, page = 1, pageSize = 20) {
+    return this.request<{ attendees: EventAttendee[]; total: number }>(
+      `/events/${eventId}/attendees?page=${page}&page_size=${pageSize}`
+    )
+  }
+
+  async myEvents(page = 1, pageSize = 20) {
+    return this.request<{ events: Event[]; total: number }>(
+      `/users/me/events?page=${page}&page_size=${pageSize}`
+    )
+  }
+
+  async myAttending(page = 1, pageSize = 20) {
+    return this.request<{ events: Event[]; total: number }>(
+      `/users/me/attending?page=${page}&page_size=${pageSize}`
+    )
+  }
+
+  // ── Groups ───────────────────────────────────────────────────────────────
+
+  async listGroups(params?: { search?: string; privacy?: string; page?: number; page_size?: number }) {
+    const q = new URLSearchParams()
+    if (params?.search) q.set('search', params.search)
+    if (params?.privacy) q.set('privacy', params.privacy)
+    if (params?.page) q.set('page', String(params.page))
+    if (params?.page_size) q.set('page_size', String(params.page_size))
+    return this.request<{ groups: Group[]; total: number; page: number; page_size: number }>(
+      `/groups?${q.toString()}`
+    )
+  }
+
+  async getGroup(id: string) {
+    return this.request<Group>(`/groups/${id}`)
+  }
+
+  async createGroup(data: { name: string; description?: string; tags?: string[]; privacy?: 'public' | 'private' }) {
+    return this.request<Group>('/groups', { method: 'POST', body: JSON.stringify(data) })
+  }
+
+  async joinGroup(id: string) {
+    return this.request<void>(`/groups/${id}/join`, { method: 'POST' })
+  }
+
+  async leaveGroup(id: string) {
+    return this.request<void>(`/groups/${id}/leave`, { method: 'DELETE' })
+  }
+
+  async listGroupMembers(id: string, page = 1, pageSize = 20) {
+    return this.request<{ members: GroupMember[]; total: number }>(
+      `/groups/${id}/members?page=${page}&page_size=${pageSize}`
+    )
+  }
+
+  async myGroups(page = 1, pageSize = 20) {
+    return this.request<{ groups: Group[]; total: number }>(
+      `/users/me/groups?page=${page}&page_size=${pageSize}`
+    )
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)
+
+// ── Domain types ───────────────────────────────────────────────────────────
+
+export interface Event {
+  id: string
+  organizer_id: string
+  title: string
+  description: string
+  location: string
+  is_online: boolean
+  start_time: string
+  end_time: string
+  max_capacity: number
+  tags: string[]
+  status: 'draft' | 'published' | 'cancelled' | 'completed'
+  attendee_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface EventAttendee {
+  event_id: string
+  user_id: string
+  status: 'attending' | 'maybe' | 'not_going'
+  joined_at: string
+}
+
+export interface Group {
+  id: string
+  owner_id: string
+  name: string
+  description: string
+  avatar_key?: string
+  tags: string[]
+  privacy: 'public' | 'private'
+  member_count: number
+  post_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface GroupMember {
+  group_id: string
+  user_id: string
+  role: 'owner' | 'moderator' | 'member'
+  joined_at: string
+}
+

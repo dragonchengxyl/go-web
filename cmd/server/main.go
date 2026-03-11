@@ -12,14 +12,17 @@ import (
 	"time"
 
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/infra/embedding"
+	"github.com/studio/platform/internal/infra/grpcclient"
 	"github.com/studio/platform/internal/infra/moderation"
 	"github.com/studio/platform/internal/infra/oss"
+	paymentpkg "github.com/studio/platform/internal/infra/payment"
 	paymentalipay "github.com/studio/platform/internal/infra/payment/alipay"
 	"github.com/studio/platform/internal/infra/payment/mock"
 	paymentwechat "github.com/studio/platform/internal/infra/payment/wechat"
-	paymentpkg "github.com/studio/platform/internal/infra/payment"
 	"github.com/studio/platform/internal/infra/postgres"
 	"github.com/studio/platform/internal/infra/redis"
+	"github.com/studio/platform/internal/infra/streams"
 	transporthttp "github.com/studio/platform/internal/transport/http"
 	"github.com/studio/platform/internal/transport/ws"
 	"github.com/studio/platform/internal/usecase"
@@ -80,6 +83,8 @@ func main() {
 	followRepo := postgres.NewFollowRepository(pool)
 	chatRepo := postgres.NewChatRepository(pool)
 	notificationRepo := postgres.NewNotificationRepository(pool)
+	eventRepo := postgres.NewEventRepository(pool)
+	groupRepo := postgres.NewGroupRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
@@ -112,11 +117,30 @@ func main() {
 	// Initialize services
 	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT)
 	musicService := usecase.NewMusicService(albumRepo, trackRepo, storageService)
-	commentService := usecase.NewCommentService(commentRepo)
+
+	// Redis Streams publisher (event bus)
+	publisher := streams.NewPublisher(redisClient)
+
+	commentService := usecase.NewCommentService(commentRepo, usecase.WithCommentPublisher(publisher))
 	orderService := usecase.NewOrderService(orderRepo, nil, nil)
 	paymentService := usecase.NewPaymentService(orderRepo, alipayGW, wechatGW)
 	searchService := usecase.NewSearchService(pool)
-	statsService := usecase.NewStatsService(pool)
+
+	// Stats service: use gRPC client if configured, otherwise local.
+	var statsService usecase.StatsProvider
+	if cfg.GRPC.StatsAddr != "" {
+		sc, err := grpcclient.NewStatsGRPCClient(cfg.GRPC.StatsAddr)
+		if err != nil {
+			logger.Warn("stats gRPC client init failed, falling back to local", zap.Error(err))
+			statsService = usecase.NewStatsService(pool)
+		} else {
+			statsService = sc
+			logger.Info("Using remote stats gRPC service", zap.String("addr", cfg.GRPC.StatsAddr))
+		}
+	} else {
+		statsService = usecase.NewStatsService(pool)
+	}
+
 	achievementService := usecase.NewAchievementService(achievementRepo, leaderboard)
 	postService := usecase.NewPostService(postRepo)
 	// Enable content moderation if Aliyun Green is configured
@@ -129,15 +153,26 @@ func main() {
 		postService = usecase.NewPostService(postRepo,
 			usecase.WithModerator(moderator, logger),
 			usecase.WithAllowedHosts(cfg.OSS.AllowedHosts),
+			usecase.WithPublisher(publisher),
 		)
 		logger.Info("Aliyun Green content moderation enabled")
 	} else if len(cfg.OSS.AllowedHosts) > 0 {
-		postService = usecase.NewPostService(postRepo, usecase.WithAllowedHosts(cfg.OSS.AllowedHosts))
+		postService = usecase.NewPostService(postRepo,
+			usecase.WithAllowedHosts(cfg.OSS.AllowedHosts),
+			usecase.WithPublisher(publisher),
+		)
+	} else {
+		postService = usecase.NewPostService(postRepo, usecase.WithPublisher(publisher))
 	}
-	followService := usecase.NewFollowService(followRepo)
+	followService := usecase.NewFollowService(followRepo, usecase.WithFollowPublisher(publisher))
 	chatService := usecase.NewChatService(chatRepo)
-	tipService := usecase.NewTipService(orderRepo)
+	tipService := usecase.NewTipService(orderRepo, usecase.WithTipPublisher(publisher))
 	ossService := usecase.NewOSSService(storageService)
+
+	eventService := usecase.NewEventService(eventRepo)
+	groupService := usecase.NewGroupService(groupRepo)
+	embedder := embedding.NewSimpleEmbedder()
+	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)
@@ -152,28 +187,31 @@ func main() {
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
-		Config:             cfg,
-		Logger:             logger,
-		Pool:               pool,
-		RedisClient:        redisClient,
-		UserService:        userService,
-		MusicService:       musicService,
-		CommentService:     commentService,
-		OrderService:       orderService,
-		PaymentService:     paymentService,
-		SearchService:      searchService,
-		StatsService:       statsService,
-		AchievementService: achievementService,
-		PostService:        postService,
-		FollowService:      followService,
-		ChatService:        chatService,
-		TipService:          tipService,
-		NotificationService: notificationService,
-		OSSService:          ossService,
-		Hub:                 hub,
-		TokenStore:         tokenStore,
-		ReportRepo:         reportRepo,
-		BlockRepo:          blockRepo,
+		Config:                cfg,
+		Logger:                logger,
+		Pool:                  pool,
+		RedisClient:           redisClient,
+		UserService:           userService,
+		MusicService:          musicService,
+		CommentService:        commentService,
+		OrderService:          orderService,
+		PaymentService:        paymentService,
+		SearchService:         searchService,
+		StatsService:          statsService,
+		AchievementService:    achievementService,
+		PostService:           postService,
+		FollowService:         followService,
+		ChatService:           chatService,
+		TipService:            tipService,
+		NotificationService:   notificationService,
+		OSSService:            ossService,
+		EventService:          eventService,
+		GroupService:          groupService,
+		RecommendationService: recommendationService,
+		Hub:                   hub,
+		TokenStore:            tokenStore,
+		ReportRepo:            reportRepo,
+		BlockRepo:             blockRepo,
 	})
 
 	// Start server

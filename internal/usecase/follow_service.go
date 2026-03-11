@@ -6,16 +6,27 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/follow"
+	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 // FollowService handles follow-related business logic
 type FollowService struct {
 	followRepo follow.Repository
+	publisher  *streams.Publisher // may be nil
 }
 
-func NewFollowService(followRepo follow.Repository) *FollowService {
-	return &FollowService{followRepo: followRepo}
+func NewFollowService(followRepo follow.Repository, opts ...func(*FollowService)) *FollowService {
+	s := &FollowService{followRepo: followRepo}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// WithFollowPublisher injects an event publisher into FollowService.
+func WithFollowPublisher(p *streams.Publisher) func(*FollowService) {
+	return func(s *FollowService) { s.publisher = p }
 }
 
 func (s *FollowService) Follow(ctx context.Context, followerID, followeeID uuid.UUID) error {
@@ -36,7 +47,18 @@ func (s *FollowService) Follow(ctx context.Context, followerID, followeeID uuid.
 		FolloweeID: followeeID,
 		CreatedAt:  time.Now(),
 	}
-	return s.followRepo.Follow(ctx, f)
+	if err := s.followRepo.Follow(ctx, f); err != nil {
+		return err
+	}
+	if s.publisher != nil {
+		go func() {
+			_ = s.publisher.Publish(context.Background(), streams.EventUserFollowed, streams.UserFollowedPayload{
+				FollowerID: followerID.String(),
+				FolloweeID: followeeID.String(),
+			})
+		}()
+	}
+	return nil
 }
 
 func (s *FollowService) Unfollow(ctx context.Context, followerID, followeeID uuid.UUID) error {

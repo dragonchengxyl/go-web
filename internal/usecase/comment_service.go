@@ -7,19 +7,28 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/comment"
+	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 // CommentService handles comment-related business logic
 type CommentService struct {
 	commentRepo comment.Repository
+	publisher   *streams.Publisher // may be nil
 }
 
 // NewCommentService creates a new CommentService
-func NewCommentService(commentRepo comment.Repository) *CommentService {
-	return &CommentService{
-		commentRepo: commentRepo,
+func NewCommentService(commentRepo comment.Repository, opts ...func(*CommentService)) *CommentService {
+	s := &CommentService{commentRepo: commentRepo}
+	for _, o := range opts {
+		o(s)
 	}
+	return s
+}
+
+// WithCommentPublisher injects an event publisher into CommentService.
+func WithCommentPublisher(p *streams.Publisher) func(*CommentService) {
+	return func(s *CommentService) { s.publisher = p }
 }
 
 // CreateCommentInput represents input for creating a comment
@@ -50,6 +59,18 @@ func (s *CommentService) CreateComment(ctx context.Context, userID uuid.UUID, in
 
 	if err := s.commentRepo.Create(ctx, c); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建评论失败", err)
+	}
+
+	// Publish comment.created event
+	if s.publisher != nil {
+		go func() {
+			_ = s.publisher.Publish(context.Background(), streams.EventCommentCreated, streams.CommentCreatedPayload{
+				CommentID:     c.ID.String(),
+				PostID:        "",
+				CommentableID: c.CommentableID.String(),
+				AuthorID:      c.UserID.String(),
+			})
+		}()
 	}
 
 	// Increment parent reply count if this is a reply

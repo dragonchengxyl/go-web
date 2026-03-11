@@ -16,7 +16,7 @@ import (
 
 // AdminHandler handles admin HTTP requests
 type AdminHandler struct {
-	statsService   *usecase.StatsService
+	statsService   usecase.StatsProvider
 	userService    *usecase.UserService
 	commentService *usecase.CommentService
 	postService    *usecase.PostService
@@ -25,7 +25,7 @@ type AdminHandler struct {
 
 // NewAdminHandler creates a new AdminHandler
 func NewAdminHandler(
-	statsService *usecase.StatsService,
+	statsService usecase.StatsProvider,
 	userService *usecase.UserService,
 	_ any, // was gameService - no longer needed
 	commentService *usecase.CommentService,
