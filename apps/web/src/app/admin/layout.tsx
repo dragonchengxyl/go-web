@@ -27,14 +27,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     try {
-      const token = localStorage.getItem('token')
-      if (!token) { router.replace('/'); return }
+      const token = localStorage.getItem('access_token')
+      if (!token) { router.replace('/login'); return }
       const payload = JSON.parse(atob(token.split('.')[1]))
       if (!['admin', 'moderator', 'super_admin'].includes(payload.role)) {
         router.replace('/')
       }
     } catch {
-      router.replace('/')
+      router.replace('/login')
     }
   }, [router])
 

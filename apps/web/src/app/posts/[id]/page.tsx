@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useState, useRef, Suspense } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Heart, MessageCircle, Share2, Gift, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -86,8 +86,10 @@ function TipModal({ toUserId, onClose }: { toUserId: string; onClose: () => void
   );
 }
 
-export default function PostDetailPage() {
+function PostDetailContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const justSubmitted = searchParams.get('submitted') === '1';
   const postId = params.id as string;
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -169,8 +171,16 @@ export default function PostDetailPage() {
 
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
+      {/* Post submitted success banner */}
+      {justSubmitted && (
+        <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 text-sm">
+          <span className="mt-0.5 text-base leading-none">✅</span>
+          <p>帖子已成功提交！正在等待审核，审核通过后将对所有用户可见。</p>
+        </div>
+      )}
+
       {/* Moderation pending banner (only visible to the author) */}
-      {post.moderation_status === 'pending' && currentUserId === post.author_id && (
+      {post.moderation_status === 'pending' && currentUserId === post.author_id && !justSubmitted && (
         <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 text-sm">
           <span className="mt-0.5 text-base leading-none">⏳</span>
           <p>您的帖子正在审核中，审核通过后将对其他用户可见。通常在 24 小时内完成。</p>
@@ -262,5 +272,13 @@ export default function PostDetailPage() {
         <TipModal toUserId={post.author_id} onClose={() => setShowTip(false)} />
       )}
     </div>
+  );
+}
+
+export default function PostDetailPage() {
+  return (
+    <Suspense fallback={<div className="max-w-2xl mx-auto pt-20 px-4"><div className="h-64 bg-muted animate-pulse rounded-xl" /></div>}>
+      <PostDetailContent />
+    </Suspense>
   );
 }

@@ -122,7 +122,7 @@ export default function CreatePostPage() {
         is_ai_generated: isAIGenerated || undefined,
       });
       localStorage.removeItem(DRAFT_KEY);
-      router.push(`/posts/${post.id}`);
+      router.push(`/posts/${post.id}?submitted=1`);
     } catch (err: any) {
       setError(err.message || '发布失败');
     } finally {

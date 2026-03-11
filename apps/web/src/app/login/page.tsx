@@ -15,6 +15,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registered = searchParams.get('registered');
+  const from = searchParams.get('from') || '/feed';
   const { login } = useAuth();
 
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -24,7 +25,7 @@ function LoginForm() {
     mutationFn: () => apiClient.login(formData.email, formData.password),
     onSuccess: async (data) => {
       await login(data.access_token, data.refresh_token);
-      router.push('/feed');
+      router.push(from);
     },
     onError: (err: any) => {
       setError(err.message || '登录失败，请检查邮箱和密码');
