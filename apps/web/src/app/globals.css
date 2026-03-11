@@ -2,12 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-      'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  }
+/* ── Google Fonts ──────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=LXGW+WenKai:wght@300;400;700&display=swap');
 
+@layer base {
   :root {
     --background: 0 0% 99%;
     --foreground: 240 10% 10%;
@@ -29,6 +27,11 @@
     --input: 263 20% 90%;
     --ring: 263 58% 55%;
     --radius: 0.75rem;
+
+    /* Geist-family heading font */
+    --font-sans: var(--font-geist-sans), 'PingFang SC', 'Hiragino Sans GB',
+      'Noto Sans SC', 'Source Han Sans CN', sans-serif;
+    --font-warmth: 'LXGW WenKai', 'PingFang SC', sans-serif;
   }
 
   .dark {
@@ -52,13 +55,93 @@
     --input: 250 20% 18%;
     --ring: 263 70% 70%;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
+
+  html {
+    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.025em;
+    font-feature-settings: 'kern' 1, 'liga' 1, 'ss01' 1;
+  }
+}
+
+/* ── Noise texture overlay (fixed, pointer-events-none) ──────────────── */
+/* Applied via .noise class on homepage dark sections */
+.noise-overlay::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.032;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+}
+
+/* ── Retro perspective grid (for hero background) ────────────────────── */
+.retro-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* ── Typography utilities ─────────────────────────────────────────────── */
+.font-warmth {
+  font-family: var(--font-warmth);
+}
+
+.heading-tight {
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Bento grid ───────────────────────────────────────────────────────── */
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto;
+  gap: 1rem;
+  grid-template-areas:
+    "create create social"
+    "events chat   social";
+}
+.bento-create { grid-area: create; }
+.bento-social  { grid-area: social; }
+.bento-events  { grid-area: events; }
+.bento-chat    { grid-area: chat; }
+
+@media (max-width: 768px) {
+  .bento-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "create create"
+      "social chat"
+      "events events";
+  }
+}
+
+@media (max-width: 480px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "create"
+      "social"
+      "events"
+      "chat";
   }
 }

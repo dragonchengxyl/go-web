@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { GeistSans } from 'geist/font/sans';
 import { Providers } from '@/components/providers';
 import { Header } from '@/components/layout/header';
 import { MusicPlayer } from '@/components/music-player';
 import { ModerationToast } from '@/components/moderation-toast';
+import { LenisProvider } from '@/components/lenis-provider';
 
 export const metadata: Metadata = {
   title: 'Furry 同好社区',
@@ -31,14 +33,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <body>
-        <Providers>
-          <Header />
-          {children}
-          <MusicPlayer />
-          <ModerationToast />
-        </Providers>
+    <html lang="zh-CN" suppressHydrationWarning className={GeistSans.variable}>
+      <body className={GeistSans.className}>
+        <LenisProvider>
+          <Providers>
+            <Header />
+            {children}
+            <MusicPlayer />
+            <ModerationToast />
+          </Providers>
+        </LenisProvider>
       </body>
     </html>
   );
