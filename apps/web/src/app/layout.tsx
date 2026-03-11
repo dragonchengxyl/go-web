@@ -5,22 +5,22 @@ import { MusicPlayer } from '@/components/music-player';
 import { ModerationToast } from '@/components/moderation-toast';
 
 export const metadata: Metadata = {
-  title: '独立游戏工作室 - Indie Game Studio',
-  description: '探索独立游戏的无限可能',
-  keywords: ['独立游戏', 'indie game', 'game studio', 'OST', '游戏音乐'],
-  authors: [{ name: 'Indie Game Studio' }],
+  title: 'Furry 同好社区',
+  description: '毛毛们的温暖家园，分享兽设、创作与生活',
+  keywords: ['furry', 'fursuit', '兽迷', '兽设', '同好社区'],
+  authors: [{ name: 'Furry 同好社区' }],
   openGraph: {
     type: 'website',
     locale: 'zh_CN',
-    url: 'https://studio.example.com',
-    siteName: '独立游戏工作室',
-    title: '独立游戏工作室 - Indie Game Studio',
-    description: '探索独立游戏的无限可能',
+    url: 'https://furry.example.com',
+    siteName: 'Furry 同好社区',
+    title: 'Furry 同好社区',
+    description: '毛毛们的温暖家园',
   },
   twitter: {
     card: 'summary_large_image',
-    title: '独立游戏工作室',
-    description: '探索独立游戏的无限可能',
+    title: 'Furry 同好社区',
+    description: '毛毛们的温暖家园',
   },
 };
 

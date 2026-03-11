@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Mail, Lock, User, Check, X } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/auth-context';
 
 function PasswordHints({ password }: { password: string }) {
   const rules = [
@@ -33,6 +34,7 @@ function PasswordHints({ password }: { password: string }) {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -43,8 +45,9 @@ export default function RegisterPage() {
 
   const registerMutation = useMutation({
     mutationFn: () => apiClient.register(formData.username, formData.email, formData.password),
-    onSuccess: () => {
-      router.push('/login?registered=true');
+    onSuccess: async (data) => {
+      await login(data.access_token);
+      router.push('/feed');
     },
     onError: (err: any) => {
       setError(err.message || '注册失败，请重试');

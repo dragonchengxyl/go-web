@@ -9,20 +9,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Mail, Lock } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/auth-context';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registered = searchParams.get('registered');
+  const { login } = useAuth();
 
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
 
   const loginMutation = useMutation({
     mutationFn: () => apiClient.login(formData.email, formData.password),
-    onSuccess: (data) => {
-      apiClient.setToken(data.access_token);
-      router.push('/');
+    onSuccess: async (data) => {
+      await login(data.access_token);
+      router.push('/feed');
     },
     onError: (err: any) => {
       setError(err.message || '登录失败，请检查邮箱和密码');

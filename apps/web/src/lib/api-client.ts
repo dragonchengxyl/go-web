@@ -135,8 +135,10 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       if (token) {
         localStorage.setItem('access_token', token)
+        document.cookie = `_auth=1; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`
       } else {
         localStorage.removeItem('access_token')
+        document.cookie = '_auth=; path=/; max-age=0'
       }
     }
   }
