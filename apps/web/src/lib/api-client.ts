@@ -633,6 +633,16 @@ class ApiClient {
       `/users/me/groups?page=${page}&page_size=${pageSize}`
     )
   }
+
+  // ── Leaderboard ──────────────────────────────────────────────────────────
+
+  async getLeaderboard(limit = 20) {
+    return this.get<LeaderboardEntry[]>(`/leaderboard?limit=${limit}`)
+  }
+
+  async getWeeklyLeaderboard(limit = 20) {
+    return this.get<LeaderboardEntry[]>(`/leaderboard/weekly?limit=${limit}`)
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)
@@ -682,5 +692,12 @@ export interface GroupMember {
   user_id: string
   role: 'owner' | 'moderator' | 'member'
   joined_at: string
+}
+
+export interface LeaderboardEntry {
+  rank: number
+  user_id: string
+  username: string
+  score: number
 }
 

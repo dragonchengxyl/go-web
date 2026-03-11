@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { apiClient } from '@/lib/api-client'
+import Link from 'next/link'
+import { apiClient, Post, FollowStats } from '@/lib/api-client'
+import { PostGalleryCard } from '@/components/post/post-gallery-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Camera, Loader2 } from 'lucide-react'
+import { Camera, Loader2, MapPin, Globe, Edit2, Grid3X3, Heart, MessageCircle } from 'lucide-react'
 
 interface UserProfile {
   id: string
@@ -29,10 +31,21 @@ function avatarUrl(key?: string): string | null {
   return `/uploads/images/${key}`
 }
 
+const ROLE_BADGE: Record<string, { label: string; color: string }> = {
+  super_admin: { label: 'Super Admin', color: 'bg-red-500/10 text-red-500' },
+  admin: { label: '管理员', color: 'bg-orange-500/10 text-orange-500' },
+  moderator: { label: '审核员', color: 'bg-yellow-500/10 text-yellow-600' },
+  creator: { label: '创作者', color: 'bg-brand-purple/10 text-brand-purple' },
+  supporter: { label: '支持者', color: 'bg-brand-teal/10 text-brand-teal' },
+  member: { label: '成员', color: 'bg-muted text-muted-foreground' },
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [stats, setStats] = useState<FollowStats | null>(null)
+  const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -50,7 +63,10 @@ export default function ProfilePage() {
     const token = localStorage.getItem('access_token')
     if (!token) { router.push('/login'); return }
     apiClient.setToken(token)
-    apiClient.getMe().then((u: UserProfile) => {
+
+    Promise.all([
+      apiClient.getMe(),
+    ]).then(async ([u]: [UserProfile]) => {
       setProfile(u)
       setFormData({
         bio: u.bio || '',
@@ -59,6 +75,12 @@ export default function ProfilePage() {
         furry_name: u.furry_name || '',
         species: u.species || '',
       })
+      const [statsData, postsData] = await Promise.all([
+        apiClient.getFollowStats(u.id).catch(() => null),
+        apiClient.getUserPosts(u.id, 1, 30).catch(() => ({ posts: [] })),
+      ])
+      setStats(statsData)
+      setPosts(postsData.posts ?? [])
     }).catch(() => router.push('/login')).finally(() => setLoading(false))
   }, [router])
 
@@ -100,144 +122,210 @@ export default function ProfilePage() {
   }
 
   if (loading) {
-    return <div className="max-w-2xl mx-auto pt-20 px-4 text-center py-16 text-muted-foreground">加载中...</div>
+    return (
+      <div className="max-w-4xl mx-auto pt-20 px-4">
+        <div className="h-48 bg-muted animate-pulse rounded-2xl mb-4" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-8">
+          {[1,2,3,4,5,6].map(i => <div key={i} className="aspect-[4/3] bg-muted animate-pulse rounded-xl" />)}
+        </div>
+      </div>
+    )
   }
   if (!profile) return null
 
   const av = avatarUrl(profile.avatar_key)
   const displayName = profile.furry_name || profile.username
+  const roleBadge = ROLE_BADGE[profile.role]
+  const totalLikes = posts.reduce((sum, p) => sum + p.like_count, 0)
 
   return (
-    <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">个人中心</h1>
-      </div>
+    <div className="max-w-4xl mx-auto pt-20 px-4 pb-12">
+      {/* Profile card */}
+      <div className="bg-card border rounded-2xl overflow-hidden mb-8">
+        {/* Cover banner */}
+        <div className="h-32 bg-gradient-to-br from-brand-purple/40 via-brand-teal/30 to-brand-coral/20" />
 
-      {/* Avatar + basic info */}
-      <div className="flex items-start gap-5 mb-8">
-        <div className="relative flex-shrink-0">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-            {av ? (
-              <img src={av} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-2xl font-bold text-primary">{profile.username[0]?.toUpperCase()}</span>
+        <div className="px-6 pb-6">
+          {/* Avatar row */}
+          <div className="flex items-end justify-between -mt-12 mb-4">
+            <div className="relative flex-shrink-0">
+              <div className="w-24 h-24 rounded-full bg-background border-4 border-background overflow-hidden shadow-lg">
+                {av ? (
+                  <img src={av} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-brand-purple to-brand-teal flex items-center justify-center">
+                    <span className="text-3xl font-bold text-white">{profile.username[0]?.toUpperCase()}</span>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="absolute bottom-1 right-1 bg-primary rounded-full p-1.5 text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+              >
+                {avatarUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            </div>
+
+            {!isEditing && (
+              <Button onClick={() => setIsEditing(true)} variant="outline" size="sm" className="flex items-center gap-1.5">
+                <Edit2 className="h-3.5 w-3.5" />
+                编辑资料
+              </Button>
             )}
           </div>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={avatarUploading}
-            className="absolute bottom-0 right-0 bg-primary rounded-full p-1.5 text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            {avatarUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-        </div>
-        <div>
-          <p className="text-xl font-bold">{displayName}</p>
-          <p className="text-sm text-muted-foreground">@{profile.username}</p>
-          {profile.species && <p className="text-sm text-muted-foreground mt-0.5">兽种: {profile.species}</p>}
-          <p className="text-xs text-muted-foreground mt-1">{profile.email}</p>
-        </div>
-      </div>
 
-      {/* Profile form */}
-      {!isEditing ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            {profile.furry_name && (
-              <div>
-                <p className="text-xs text-muted-foreground">Furry 名</p>
-                <p className="font-medium">{profile.furry_name}</p>
-              </div>
-            )}
+          {/* Name + badge */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold">{displayName}</h1>
+              {roleBadge && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleBadge.color}`}>
+                  {roleBadge.label}
+                </span>
+              )}
+            </div>
+            <p className="text-muted-foreground text-sm">@{profile.username}</p>
             {profile.species && (
-              <div>
-                <p className="text-xs text-muted-foreground">兽种</p>
-                <p className="font-medium">{profile.species}</p>
-              </div>
+              <p className="text-sm text-primary mt-0.5">🐾 {profile.species}</p>
             )}
           </div>
-          {profile.bio && (
-            <div>
-              <p className="text-xs text-muted-foreground">简介</p>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{profile.bio}</p>
+
+          {/* Bio */}
+          {profile.bio && !isEditing && (
+            <p className="text-sm text-muted-foreground leading-relaxed mb-3 whitespace-pre-wrap">{profile.bio}</p>
+          )}
+
+          {/* Links */}
+          {!isEditing && (
+            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mb-4">
+              {profile.location && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5" />{profile.location}
+                </span>
+              )}
+              {profile.website && (
+                <a href={profile.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-primary transition-colors">
+                  <Globe className="h-3.5 w-3.5" />{profile.website}
+                </a>
+              )}
             </div>
           )}
-          {profile.website && (
+
+          {/* Stats row */}
+          <div className="flex gap-6 text-sm border-t pt-4">
+            <Link href={`/users/${profile.id}/followers`} className="hover:text-primary transition-colors">
+              <span className="font-bold">{stats?.follower_count ?? 0}</span>
+              <span className="text-muted-foreground ml-1">粉丝</span>
+            </Link>
+            <Link href={`/users/${profile.id}/following`} className="hover:text-primary transition-colors">
+              <span className="font-bold">{stats?.following_count ?? 0}</span>
+              <span className="text-muted-foreground ml-1">关注</span>
+            </Link>
             <div>
-              <p className="text-xs text-muted-foreground">网站</p>
-              <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">{profile.website}</a>
+              <span className="font-bold">{posts.length}</span>
+              <span className="text-muted-foreground ml-1">帖子</span>
             </div>
-          )}
-          {profile.location && (
             <div>
-              <p className="text-xs text-muted-foreground">位置</p>
-              <p className="text-sm">{profile.location}</p>
+              <span className="font-bold">{totalLikes}</span>
+              <span className="text-muted-foreground ml-1">获赞</span>
             </div>
+          </div>
+
+          {/* Edit form */}
+          {isEditing && (
+            <form onSubmit={handleSave} className="space-y-4 mt-4 border-t pt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="furry_name">Furry 名</Label>
+                  <Input
+                    id="furry_name"
+                    value={formData.furry_name}
+                    onChange={e => setFormData({ ...formData, furry_name: e.target.value })}
+                    placeholder="你的Furry角色名..."
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="species">兽种</Label>
+                  <Input
+                    id="species"
+                    value={formData.species}
+                    onChange={e => setFormData({ ...formData, species: e.target.value })}
+                    placeholder="狼、狐、龙..."
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="bio">个人简介</Label>
+                <Textarea
+                  id="bio"
+                  value={formData.bio}
+                  onChange={e => setFormData({ ...formData, bio: e.target.value })}
+                  placeholder="介绍一下你自己和你的兽设..."
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="website">个人网站</Label>
+                  <Input
+                    id="website"
+                    value={formData.website}
+                    onChange={e => setFormData({ ...formData, website: e.target.value })}
+                    placeholder="https://..."
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="location">位置</Label>
+                  <Input
+                    id="location"
+                    value={formData.location}
+                    onChange={e => setFormData({ ...formData, location: e.target.value })}
+                    placeholder="城市/地区"
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {error && <p className="text-destructive text-sm">{error}</p>}
+              <div className="flex gap-2">
+                <Button type="submit" disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
+                <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>取消</Button>
+              </div>
+            </form>
           )}
-          <Button onClick={() => setIsEditing(true)} className="mt-2">编辑资料</Button>
+        </div>
+      </div>
+
+      {/* Posts gallery */}
+      <div className="flex items-center gap-2 mb-5">
+        <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="font-semibold">我的帖子</h2>
+      </div>
+
+      {posts.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <Grid3X3 className="h-8 w-8 opacity-40" />
+          </div>
+          <p className="font-medium mb-2">还没有帖子</p>
+          <p className="text-sm mb-6">分享你的兽设和创作吧</p>
+          <Link href="/posts/create">
+            <Button className="bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110">
+              发布第一条动态
+            </Button>
+          </Link>
         </div>
       ) : (
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="furry_name">Furry 名</Label>
-              <Input
-                id="furry_name"
-                value={formData.furry_name}
-                onChange={e => setFormData({ ...formData, furry_name: e.target.value })}
-                placeholder="你的Furry角色名..."
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="species">兽种</Label>
-              <Input
-                id="species"
-                value={formData.species}
-                onChange={e => setFormData({ ...formData, species: e.target.value })}
-                placeholder="狼、狐、龙..."
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="bio">个人简介</Label>
-            <Textarea
-              id="bio"
-              value={formData.bio}
-              onChange={e => setFormData({ ...formData, bio: e.target.value })}
-              placeholder="介绍一下你自己和你的兽设..."
-              rows={4}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label htmlFor="website">个人网站</Label>
-            <Input
-              id="website"
-              value={formData.website}
-              onChange={e => setFormData({ ...formData, website: e.target.value })}
-              placeholder="https://..."
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label htmlFor="location">位置</Label>
-            <Input
-              id="location"
-              value={formData.location}
-              onChange={e => setFormData({ ...formData, location: e.target.value })}
-              placeholder="城市/地区"
-              className="mt-1"
-            />
-          </div>
-          {error && <p className="text-destructive text-sm">{error}</p>}
-          <div className="flex gap-2">
-            <Button type="submit" disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
-            <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>取消</Button>
-          </div>
-        </form>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {posts.map(post => (
+            <PostGalleryCard key={post.id} post={post} />
+          ))}
+        </div>
       )}
     </div>
   )

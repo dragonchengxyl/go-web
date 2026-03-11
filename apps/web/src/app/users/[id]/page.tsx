@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus, UserMinus, MessageCircle, MapPin, Globe, ShieldX } from 'lucide-react';
+import { UserPlus, UserMinus, MessageCircle, MapPin, Globe, ShieldX, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PostCard } from '@/components/post/post-card';
+import { PostGalleryCard } from '@/components/post/post-gallery-card';
 import { apiClient, Post, FollowStats } from '@/lib/api-client';
 
 interface UserProfile {
@@ -20,6 +20,21 @@ interface UserProfile {
   avatar_key?: string
   role: string
   created_at: string
+}
+
+function avatarUrl(key?: string): string | null {
+  if (!key) return null
+  if (key.startsWith('http') || key.startsWith('/')) return key
+  return `/uploads/images/${key}`
+}
+
+const ROLE_BADGE: Record<string, { label: string; color: string }> = {
+  super_admin: { label: 'Super Admin', color: 'bg-red-500/10 text-red-500' },
+  admin: { label: '管理员', color: 'bg-orange-500/10 text-orange-500' },
+  moderator: { label: '审核员', color: 'bg-yellow-500/10 text-yellow-600' },
+  creator: { label: '创作者', color: 'bg-brand-purple/10 text-brand-purple' },
+  supporter: { label: '支持者', color: 'bg-brand-teal/10 text-brand-teal' },
+  member: { label: '成员', color: 'bg-muted text-muted-foreground' },
 }
 
 export default function UserProfilePage() {
@@ -51,7 +66,7 @@ export default function UserProfilePage() {
       const [profileData, statsData, postsData] = await Promise.all([
         apiClient.getUser(userId),
         apiClient.getFollowStats(userId),
-        apiClient.getUserPosts(userId, 1, 20),
+        apiClient.getUserPosts(userId, 1, 30),
       ]);
       setProfile(profileData);
       setStats(statsData);
@@ -120,10 +135,10 @@ export default function UserProfilePage() {
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto pt-20 px-4">
-        <div className="h-32 bg-muted animate-pulse rounded-xl mb-4" />
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />)}
+      <div className="max-w-4xl mx-auto pt-20 px-4">
+        <div className="h-48 bg-muted animate-pulse rounded-2xl mb-4" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-8">
+          {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="aspect-[4/3] bg-muted animate-pulse rounded-xl" />)}
         </div>
       </div>
     );
@@ -131,120 +146,159 @@ export default function UserProfilePage() {
 
   if (!profile) {
     return (
-      <div className="max-w-2xl mx-auto pt-20 px-4 text-center py-16 text-muted-foreground">
-        用户不存在
+      <div className="max-w-4xl mx-auto pt-20 px-4 text-center py-16 text-muted-foreground">
+        <p className="text-xl font-medium mb-2">用户不存在</p>
+        <p className="text-sm">该用户可能已注销或不存在</p>
       </div>
     );
   }
 
   const isSelf = myId === userId;
   const displayName = profile.furry_name || profile.username;
+  const av = avatarUrl(profile.avatar_key);
+  const roleBadge = ROLE_BADGE[profile.role];
+  const totalLikes = posts.reduce((sum, p) => sum + p.like_count, 0);
 
   return (
-    <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
-      {/* Profile Header */}
-      <div className="bg-card border rounded-xl p-6 mb-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <span className="text-2xl font-bold text-primary">
-                {displayName[0]?.toUpperCase() || '?'}
+    <div className="max-w-4xl mx-auto pt-20 px-4 pb-12">
+      {/* Profile card */}
+      <div className="bg-card border rounded-2xl overflow-hidden mb-8">
+        {/* Cover banner */}
+        <div className="h-32 bg-gradient-to-br from-brand-purple/40 via-brand-teal/30 to-brand-coral/20" />
+
+        <div className="px-6 pb-6">
+          {/* Avatar row */}
+          <div className="flex items-end justify-between -mt-12 mb-4">
+            <div className="w-24 h-24 rounded-full bg-background border-4 border-background overflow-hidden shadow-lg flex-shrink-0">
+              {av ? (
+                <img src={av} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-brand-purple to-brand-teal flex items-center justify-center">
+                  <span className="text-3xl font-bold text-white">{displayName[0]?.toUpperCase() || '?'}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {!isSelf && apiClient.getToken() && (
+                <>
+                  <Button
+                    variant={isFollowing ? 'outline' : 'default'}
+                    size="sm"
+                    onClick={handleFollow}
+                    disabled={followLoading || isBlocked}
+                    className={isFollowing ? '' : 'bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110'}
+                  >
+                    {isFollowing ? (
+                      <><UserMinus className="h-4 w-4 mr-1" />取消关注</>
+                    ) : (
+                      <><UserPlus className="h-4 w-4 mr-1" />关注 TA</>
+                    )}
+                  </Button>
+                  <Link href="/messages">
+                    <Button variant="outline" size="sm">
+                      <MessageCircle className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleBlock}
+                    disabled={blockLoading}
+                    className={isBlocked ? 'text-muted-foreground' : 'text-red-500 hover:text-red-600'}
+                    title={isBlocked ? '取消屏蔽' : '屏蔽用户'}
+                  >
+                    <ShieldX className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+              {isSelf && (
+                <Link href="/profile">
+                  <Button variant="outline" size="sm">编辑资料</Button>
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Name + badge */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold">{displayName}</h1>
+              {roleBadge && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleBadge.color}`}>
+                  {roleBadge.label}
+                </span>
+              )}
+            </div>
+            {profile.furry_name && (
+              <p className="text-muted-foreground text-sm">@{profile.username}</p>
+            )}
+            {profile.species && (
+              <p className="text-sm text-primary mt-0.5">🐾 {profile.species}</p>
+            )}
+          </div>
+
+          {/* Bio */}
+          {profile.bio && (
+            <p className="text-sm text-muted-foreground leading-relaxed mb-3 whitespace-pre-wrap">{profile.bio}</p>
+          )}
+
+          {/* Links */}
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mb-4">
+            {profile.location && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5" />{profile.location}
               </span>
+            )}
+            {profile.website && (
+              <a href={profile.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-primary transition-colors">
+                <Globe className="h-3.5 w-3.5" />{profile.website}
+              </a>
+            )}
+          </div>
+
+          {/* Stats row */}
+          <div className="flex gap-6 text-sm border-t pt-4">
+            <Link href={`/users/${userId}/followers`} className="hover:text-primary transition-colors">
+              <span className="font-bold">{stats?.follower_count ?? 0}</span>
+              <span className="text-muted-foreground ml-1">粉丝</span>
+            </Link>
+            <Link href={`/users/${userId}/following`} className="hover:text-primary transition-colors">
+              <span className="font-bold">{stats?.following_count ?? 0}</span>
+              <span className="text-muted-foreground ml-1">关注</span>
+            </Link>
+            <div>
+              <span className="font-bold">{posts.length}</span>
+              <span className="text-muted-foreground ml-1">帖子</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold">{displayName}</h1>
-              {profile.furry_name && (
-                <p className="text-sm text-muted-foreground">@{profile.username}</p>
-              )}
-              {profile.species && (
-                <p className="text-sm text-primary">🐾 {profile.species}</p>
-              )}
+              <span className="font-bold">{totalLikes}</span>
+              <span className="text-muted-foreground ml-1">获赞</span>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            {!isSelf && apiClient.getToken() && (
-              <>
-                <Button
-                  variant={isFollowing ? 'outline' : 'default'}
-                  size="sm"
-                  onClick={handleFollow}
-                  disabled={followLoading || isBlocked}
-                >
-                  {isFollowing ? (
-                    <><UserMinus className="h-4 w-4 mr-1" />取消关注</>
-                  ) : (
-                    <><UserPlus className="h-4 w-4 mr-1" />关注</>
-                  )}
-                </Button>
-                <Link href="/messages">
-                  <Button variant="outline" size="sm">
-                    <MessageCircle className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleBlock}
-                  disabled={blockLoading}
-                  className={isBlocked ? 'text-muted-foreground' : 'text-red-500 hover:text-red-600'}
-                  title={isBlocked ? '取消屏蔽' : '屏蔽用户'}
-                >
-                  <ShieldX className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-            {isSelf && (
-              <Link href="/profile">
-                <Button variant="outline" size="sm">编辑资料</Button>
-              </Link>
-            )}
-          </div>
-        </div>
-
-        {profile.bio && (
-          <p className="mt-3 text-sm text-muted-foreground">{profile.bio}</p>
-        )}
-
-        <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
-          {profile.location && (
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />{profile.location}
-            </span>
-          )}
-          {profile.website && (
-            <a href={profile.website} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 hover:text-primary">
-              <Globe className="h-3 w-3" />{profile.website}
-            </a>
-          )}
-        </div>
-
-        {/* Follow stats — clickable links */}
-        <div className="flex gap-6 mt-4 pt-4 border-t text-sm">
-          <Link href={`/users/${userId}/followers`} className="hover:underline">
-            <span className="font-bold">{stats?.follower_count ?? 0}</span>
-            <span className="text-muted-foreground ml-1">粉丝</span>
-          </Link>
-          <Link href={`/users/${userId}/following`} className="hover:underline">
-            <span className="font-bold">{stats?.following_count ?? 0}</span>
-            <span className="text-muted-foreground ml-1">关注</span>
-          </Link>
-          <div>
-            <span className="font-bold">{posts.length}</span>
-            <span className="text-muted-foreground ml-1">帖子</span>
-          </div>
         </div>
       </div>
 
-      {/* Posts */}
-      <div className="space-y-3">
-        {posts.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">暂无帖子</div>
-        ) : (
-          posts.map(post => <PostCard key={post.id} post={post} />)
-        )}
+      {/* Posts gallery */}
+      <div className="flex items-center gap-2 mb-5">
+        <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="font-semibold">TA 的帖子</h2>
       </div>
+
+      {posts.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <Grid3X3 className="h-8 w-8 opacity-40" />
+          </div>
+          <p>暂无帖子</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {posts.map(post => (
+            <PostGalleryCard key={post.id} post={post} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

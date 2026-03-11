@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiClient, Post } from '@/lib/api-client';
+import { apiClient, Post, Group } from '@/lib/api-client';
 import { PostCard } from '@/components/post/post-card';
+import { Users, FileText } from 'lucide-react';
 
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query.trim() || !text) return <>{text}</>;
@@ -38,7 +39,20 @@ interface UserResult {
   bio?: string;
 }
 
-type TabType = 'posts' | 'users' | 'albums';
+type TabType = 'posts' | 'users' | 'groups' | 'albums';
+
+const GRADIENTS = [
+  'from-purple-500 to-teal-400',
+  'from-teal-400 to-blue-500',
+  'from-orange-400 to-pink-500',
+  'from-blue-500 to-indigo-600',
+  'from-green-400 to-teal-500',
+];
+function hashGradient(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
+}
 
 function SearchContent() {
   const searchParams = useSearchParams();
@@ -49,6 +63,7 @@ function SearchContent() {
   const [tab, setTab] = useState<TabType>(tabParam);
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<UserResult[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -60,9 +75,14 @@ function SearchContent() {
   useEffect(() => {
     if (!query) return;
     setLoading(true);
-    apiClient.searchAll(query).then(res => {
-      setPosts(res.posts || []);
+
+    Promise.all([
+      apiClient.searchAll(query).catch(() => ({ albums: [], users: [], posts: [], query })),
+      apiClient.listGroups({ search: query, page: 1, page_size: 20 }).catch(() => ({ groups: [] })),
+    ]).then(([res, groupRes]) => {
+      setPosts((res.posts as Post[]) || []);
       setUsers((res.users as UserResult[]) || []);
+      setGroups(groupRes.groups || []);
       setAlbums(res.albums || []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [query]);
@@ -85,6 +105,7 @@ function SearchContent() {
   const tabs: { id: TabType; label: string; count: number }[] = [
     { id: 'posts', label: '动态', count: posts.length },
     { id: 'users', label: '用户', count: users.length },
+    { id: 'groups', label: '圈子', count: groups.length },
     { id: 'albums', label: '音乐', count: albums.length },
   ];
 
@@ -121,11 +142,12 @@ function SearchContent() {
           {tab === 'posts' && (
             <div className="space-y-4">
               {posts.length === 0 ? (
-                <p className="text-center py-12 text-muted-foreground">未找到相关动态</p>
+                <div className="text-center py-16 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p>未找到相关动态</p>
+                </div>
               ) : (
-                posts.map(post => (
-                  <PostCard key={post.id} post={post} />
-                ))
+                posts.map(post => <PostCard key={post.id} post={post} />)
               )}
             </div>
           )}
@@ -133,20 +155,53 @@ function SearchContent() {
           {tab === 'users' && (
             <div className="space-y-3">
               {users.length === 0 ? (
-                <p className="text-center py-12 text-muted-foreground">未找到相关用户</p>
+                <div className="text-center py-16 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p>未找到相关用户</p>
+                </div>
               ) : (
                 users.map(u => (
                   <Link key={u.id} href={`/users/${u.id}`} className="flex items-center gap-3 p-4 rounded-xl border hover:bg-muted/50 transition-colors">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <span className="font-bold text-primary">{(u.furry_name || u.username)[0]?.toUpperCase()}</span>
+                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${hashGradient(u.id)} flex items-center justify-center flex-shrink-0`}>
+                      <span className="font-bold text-white">{(u.furry_name || u.username)[0]?.toUpperCase()}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold truncate">
                         <Highlight text={u.furry_name || u.username} query={query} />
                       </p>
                       <p className="text-sm text-muted-foreground">@<Highlight text={u.username} query={query} /></p>
-                      {u.species && <p className="text-xs text-muted-foreground">{u.species}</p>}
+                      {u.species && <p className="text-xs text-primary">🐾 {u.species}</p>}
                       {u.bio && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{u.bio}</p>}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          )}
+
+          {tab === 'groups' && (
+            <div className="space-y-3">
+              {groups.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p>未找到相关圈子</p>
+                </div>
+              ) : (
+                groups.map(g => (
+                  <Link key={g.id} href={`/groups/${g.id}`} className="flex items-center gap-3 p-4 rounded-xl border hover:bg-muted/50 transition-colors">
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${hashGradient(g.id)} flex items-center justify-center flex-shrink-0 text-xl`}>
+                      🐾
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold truncate">
+                        <Highlight text={g.name} query={query} />
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {g.member_count} 成员 · {g.post_count} 帖子 · {g.privacy === 'private' ? '🔒 私密' : '🌍 公开'}
+                      </p>
+                      {g.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{g.description}</p>
+                      )}
                     </div>
                   </Link>
                 ))
@@ -157,7 +212,9 @@ function SearchContent() {
           {tab === 'albums' && (
             <div className="space-y-3">
               {albums.length === 0 ? (
-                <p className="text-center py-12 text-muted-foreground">未找到相关音乐</p>
+                <div className="text-center py-16 text-muted-foreground">
+                  <p>未找到相关音乐</p>
+                </div>
               ) : (
                 albums.map((album: any) => (
                   <Link key={album.id} href={`/music/${album.slug}`} className="flex items-center gap-3 p-4 rounded-xl border hover:bg-muted/50 transition-colors">

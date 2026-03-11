@@ -2,8 +2,30 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Users, FileText, Lock, Globe, Crown, Shield, UserPlus, UserMinus } from 'lucide-react';
 import { apiClient, Group, GroupMember } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
+
+const ROLE_CONFIG: Record<string, { label: string; icon: typeof Crown; color: string }> = {
+  owner: { label: '圈主', icon: Crown, color: 'text-yellow-500' },
+  moderator: { label: '管理员', icon: Shield, color: 'text-blue-500' },
+  member: { label: '成员', icon: Users, color: 'text-muted-foreground' },
+};
+
+const GRADIENTS = [
+  'from-purple-500 to-teal-400',
+  'from-teal-400 to-blue-500',
+  'from-orange-400 to-pink-500',
+  'from-blue-500 to-indigo-600',
+  'from-green-400 to-teal-500',
+  'from-pink-500 to-purple-600',
+];
+function hashGradient(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
+}
 
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -11,14 +33,31 @@ export default function GroupDetailPage() {
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  const [isMember, setIsMember] = useState(false);
+  const [myId, setMyId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      apiClient.setToken(token);
+      setIsLoggedIn(true);
+      apiClient.getMe().then(me => {
+        setMyId(me?.id ?? null);
+      }).catch(() => {});
+    }
     if (!id) return;
     Promise.all([apiClient.getGroup(id), apiClient.listGroupMembers(id)])
       .then(([g, mRes]) => {
         setGroup(g);
-        setMembers(mRes.members ?? []);
+        const list = mRes.members ?? [];
+        setMembers(list);
+        if (token) {
+          apiClient.getMe().then(me => {
+            setIsMember(list.some(m => m.user_id === me?.id));
+          }).catch(() => {});
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -30,8 +69,13 @@ export default function GroupDetailPage() {
     setError('');
     try {
       await apiClient.joinGroup(id);
-      const updated = await apiClient.getGroup(id);
+      const [updated, mRes] = await Promise.all([
+        apiClient.getGroup(id),
+        apiClient.listGroupMembers(id),
+      ]);
       setGroup(updated);
+      setMembers(mRes.members ?? []);
+      setIsMember(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '加入失败');
     } finally {
@@ -45,8 +89,13 @@ export default function GroupDetailPage() {
     setError('');
     try {
       await apiClient.leaveGroup(id);
-      const updated = await apiClient.getGroup(id);
+      const [updated, mRes] = await Promise.all([
+        apiClient.getGroup(id),
+        apiClient.listGroupMembers(id),
+      ]);
       setGroup(updated);
+      setMembers(mRes.members ?? []);
+      setIsMember(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '退出失败');
     } finally {
@@ -56,111 +105,157 @@ export default function GroupDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
-      </main>
+      <div className="max-w-2xl mx-auto pt-20 px-4">
+        <div className="h-8 w-32 bg-muted animate-pulse rounded mb-6" />
+        <div className="h-48 bg-muted animate-pulse rounded-2xl mb-4" />
+        <div className="h-32 bg-muted animate-pulse rounded-2xl" />
+      </div>
     );
   }
 
   if (!group) {
     return (
-      <main className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <p className="text-white/50">圈子不存在或已被删除</p>
-      </main>
+      <div className="max-w-2xl mx-auto pt-20 px-4 text-center py-16 text-muted-foreground">
+        <p className="text-xl font-medium mb-2">圈子不存在</p>
+        <p className="text-sm mb-6">该圈子可能已被删除</p>
+        <Link href="/groups"><Button variant="outline">返回圈子列表</Button></Link>
+      </div>
     );
   }
 
-  const ROLE_LABEL: Record<string, string> = {
-    owner: '圈主',
-    moderator: '管理员',
-    member: '成员',
-  };
+  const isOwner = myId && members.find(m => m.user_id === myId)?.role === 'owner';
+  const gradient = hashGradient(group.id);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/30 to-slate-950 px-4 py-10">
-      <div className="mx-auto max-w-2xl">
-        {/* Header */}
-        <div className="flex items-start gap-4 mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-purple-600/40 flex items-center justify-center text-3xl shrink-0">
-            🐾
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-white">{group.name}</h1>
+    <div className="max-w-2xl mx-auto pt-20 px-4 pb-12">
+      {/* Back */}
+      <Link href="/groups">
+        <Button variant="ghost" size="sm" className="mb-6 -ml-2">
+          <ArrowLeft className="h-4 w-4 mr-1" />返回圈子
+        </Button>
+      </Link>
+
+      {/* Header card */}
+      <div className="bg-card border rounded-2xl overflow-hidden mb-5">
+        {/* Banner */}
+        <div className={`h-24 bg-gradient-to-br ${gradient} opacity-60`} />
+
+        <div className="px-6 pb-6">
+          {/* Avatar row */}
+          <div className="flex items-end justify-between -mt-8 mb-4">
+            <div className="w-16 h-16 rounded-2xl bg-card border-4 border-background shadow-md flex items-center justify-center text-2xl bg-gradient-to-br from-brand-purple/20 to-brand-teal/20">
+              🐾
+            </div>
+            <div className="flex items-center gap-1.5">
               {group.privacy === 'private' && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-white/10 text-white/40">🔒 私密</span>
+                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                  <Lock className="h-3 w-3" />私密
+                </span>
+              )}
+              {group.privacy === 'public' && (
+                <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
+                  <Globe className="h-3 w-3" />公开
+                </span>
               )}
             </div>
-            <div className="mt-1 flex gap-4 text-sm text-white/50">
-              <span>👥 {group.member_count} 成员</span>
-              <span>📝 {group.post_count} 帖子</span>
+          </div>
+
+          <h1 className="text-xl font-bold mb-1">{group.name}</h1>
+
+          <div className="flex gap-4 text-sm text-muted-foreground mb-3">
+            <span className="flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" />{group.member_count} 成员
+            </span>
+            <span className="flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5" />{group.post_count} 帖子
+            </span>
+          </div>
+
+          {group.tags?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {group.tags.map(t => (
+                <Link key={t} href={`/tags/${encodeURIComponent(t)}`}>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer">
+                    #{t}
+                  </span>
+                </Link>
+              ))}
             </div>
-          </div>
+          )}
+
+          {group.description && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{group.description}</p>
+          )}
         </div>
+      </div>
 
-        {/* Tags */}
-        {group.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {group.tags.map((t) => (
-              <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300">
-                #{t}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Description */}
-        {group.description && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 mb-6">
-            <p className="text-white/70 whitespace-pre-wrap leading-relaxed">{group.description}</p>
-          </div>
-        )}
-
-        {/* Join / Leave */}
-        <div className="mb-8">
-          {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
-          <div className="flex gap-3">
-            <Button
-              onClick={handleJoin}
-              disabled={joining}
-              className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-2.5"
-            >
-              {joining ? '处理中…' : '加入圈子'}
-            </Button>
+      {/* Join/Leave */}
+      {!isOwner && isLoggedIn && (
+        <div className="mb-5">
+          {error && <p className="text-destructive text-sm mb-2">{error}</p>}
+          {isMember ? (
             <Button
               onClick={handleLeave}
               disabled={joining}
               variant="outline"
-              className="border-white/20 text-white/70 hover:text-white"
+              className="w-full"
+              size="lg"
             >
-              退出
+              <UserMinus className="h-4 w-4 mr-2" />
+              {joining ? '处理中…' : '退出圈子'}
             </Button>
-          </div>
+          ) : (
+            <Button
+              onClick={handleJoin}
+              disabled={joining}
+              size="lg"
+              className="w-full bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              {joining ? '处理中…' : '加入圈子'}
+            </Button>
+          )}
         </div>
+      )}
 
-        {/* Members */}
-        {members.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-white mb-3">成员（{members.length}）</h2>
-            <div className="space-y-2">
-              {members.map((m) => (
-                <div
-                  key={m.user_id}
-                  className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-2.5"
+      {!isLoggedIn && (
+        <Link href="/login" className="block mb-5">
+          <Button size="lg" className="w-full bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110">
+            <UserPlus className="h-4 w-4 mr-2" />
+            登录后加入
+          </Button>
+        </Link>
+      )}
+
+      {/* Members */}
+      {members.length > 0 && (
+        <div className="bg-card border rounded-2xl p-6">
+          <h2 className="font-semibold mb-4">成员（{members.length}）</h2>
+          <div className="space-y-2">
+            {members.map(m => {
+              const roleConf = ROLE_CONFIG[m.role] ?? ROLE_CONFIG.member;
+              const RoleIcon = roleConf.icon;
+              const mGradient = hashGradient(m.user_id);
+              return (
+                <Link key={m.user_id} href={`/users/${m.user_id}`}
+                  className="flex items-center justify-between p-2.5 rounded-xl hover:bg-muted/60 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-purple-600/40 flex items-center justify-center text-xs text-purple-200">
+                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${mGradient} flex items-center justify-center text-xs text-white font-bold flex-shrink-0`}>
                       {m.user_id.slice(0, 2).toUpperCase()}
                     </div>
-                    <span className="text-sm text-white/70">{m.user_id.slice(0, 8)}…</span>
+                    <span className="text-sm font-medium">{m.user_id.slice(0, 8)}…</span>
                   </div>
-                  <span className="text-xs text-white/40">{ROLE_LABEL[m.role] ?? m.role}</span>
-                </div>
-              ))}
-            </div>
+                  <span className={`flex items-center gap-1 text-xs ${roleConf.color}`}>
+                    <RoleIcon className="h-3 w-3" />
+                    {roleConf.label}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
-        )}
-      </div>
-    </main>
+        </div>
+      )}
+    </div>
   );
 }

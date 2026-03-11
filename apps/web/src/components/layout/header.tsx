@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import { Menu, X, Bell, MessageCircle, Compass, PenSquare, LogOut, Settings, User } from 'lucide-react';
+import { Menu, X, Bell, MessageCircle, Compass, PenSquare, LogOut, Settings, User, Users, Calendar, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { GlobalSearch } from '@/components/search/global-search';
@@ -15,6 +15,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 const NAV_LINKS = [
   { href: '/feed', label: '动态' },
   { href: '/explore', label: '发现', icon: Compass },
+  { href: '/groups', label: '圈子', icon: Users },
+  { href: '/events', label: '活动', icon: Calendar },
+  { href: '/leaderboard', label: '排行', icon: Trophy },
   { href: '/sponsor', label: '赞助', className: 'text-orange-500' },
 ];
 
@@ -161,7 +164,7 @@ export function Header() {
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-5 flex-shrink-0">
+          <nav className="hidden md:flex items-center space-x-3 flex-shrink-0">
             {NAV_LINKS.map(({ href, label, icon: Icon, className }) => (
               <Link
                 key={href}

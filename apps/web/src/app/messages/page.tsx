@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { apiClient, Conversation, Message } from '@/lib/api-client';
 import Link from 'next/link';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Users } from 'lucide-react';
 import { useWS } from '@/contexts/ws-context';
+import { Button } from '@/components/ui/button';
 
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -51,8 +52,18 @@ export default function MessagesPage() {
         消息
       </h1>
       {conversations.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <p>暂无消息</p>
+        <div className="text-center py-20 text-muted-foreground">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <MessageCircle className="h-8 w-8 opacity-40" />
+          </div>
+          <p className="font-medium mb-2">还没有私信</p>
+          <p className="text-sm mb-6">去关注感兴趣的用户，与他们开始对话吧</p>
+          <Link href="/explore">
+            <Button className="bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110">
+              <Users className="h-4 w-4 mr-2" />
+              发现用户
+            </Button>
+          </Link>
         </div>
       ) : (
         <div className="space-y-1">

@@ -3,10 +3,11 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Heart, MessageCircle, Share2, Gift, Send } from 'lucide-react';
+import { Heart, MessageCircle, Share2, Gift, Send, Flag, MapPin, Globe, UserPlus, UserMinus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { PostCard } from '@/components/post/post-card';
+import { PostGalleryCard } from '@/components/post/post-gallery-card';
 import { apiClient, Post, Comment } from '@/lib/api-client';
 
 function timeAgo(dateStr: string): string {
@@ -19,6 +20,78 @@ function timeAgo(dateStr: string): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}天前`;
   return new Date(dateStr).toLocaleDateString('zh-CN');
+}
+
+const GRADIENTS = [
+  'from-purple-500 to-teal-400',
+  'from-teal-400 to-blue-500',
+  'from-orange-400 to-pink-500',
+  'from-blue-500 to-indigo-600',
+  'from-green-400 to-teal-500',
+];
+function hashGradient(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
+}
+
+const REPORT_REASONS = ['垃圾信息', '色情低俗', '违法内容', '侮辱谩骂', '欺诈诈骗', '其他'];
+
+function ReportModal({ postId, onClose }: { postId: string; onClose: () => void }) {
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleSubmit() {
+    if (!reason) return;
+    setLoading(true);
+    try {
+      await apiClient.createReport('post', postId, reason);
+      setDone(true);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-background rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+        {done ? (
+          <div className="text-center py-4">
+            <p className="text-green-500 font-semibold mb-2">举报已提交</p>
+            <p className="text-sm text-muted-foreground mb-4">感谢你的反馈，我们会尽快处理</p>
+            <Button onClick={onClose} className="w-full">关闭</Button>
+          </div>
+        ) : (
+          <>
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <Flag className="h-5 w-5 text-destructive" />
+              举报帖子
+            </h3>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {REPORT_REASONS.map(r => (
+                <button
+                  key={r}
+                  onClick={() => setReason(r)}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${reason === r ? 'bg-destructive text-destructive-foreground border-destructive' : 'hover:border-destructive hover:text-destructive'}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={onClose}>取消</Button>
+              <Button variant="destructive" className="flex-1" onClick={handleSubmit} disabled={!reason || loading}>
+                {loading ? '提交中…' : '提交举报'}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function TipModal({ toUserId, onClose }: { toUserId: string; onClose: () => void }) {
@@ -86,6 +159,133 @@ function TipModal({ toUserId, onClose }: { toUserId: string; onClose: () => void
   );
 }
 
+interface AuthorProfile {
+  id: string
+  username: string
+  furry_name?: string
+  species?: string
+  bio?: string
+  location?: string
+  website?: string
+  avatar_key?: string
+}
+
+function AuthorCard({ authorId, currentUserId }: { authorId: string; currentUserId: string | null }) {
+  const [author, setAuthor] = useState<AuthorProfile | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  useEffect(() => {
+    if (!authorId) return;
+    apiClient.getUser(authorId).then(u => setAuthor(u)).catch(() => {});
+    if (apiClient.getToken() && currentUserId && currentUserId !== authorId) {
+      apiClient.getFollowers(authorId, 1, 1000).then(res => {
+        setIsFollowing(res.followers?.some(f => f.follower_id === currentUserId) ?? false);
+      }).catch(() => {});
+    }
+  }, [authorId, currentUserId]);
+
+  async function handleFollow() {
+    if (!apiClient.getToken()) return;
+    setFollowLoading(true);
+    try {
+      if (isFollowing) {
+        await apiClient.unfollowUser(authorId);
+        setIsFollowing(false);
+      } else {
+        await apiClient.followUser(authorId);
+        setIsFollowing(true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setFollowLoading(false);
+    }
+  }
+
+  if (!author) return null;
+
+  const displayName = author.furry_name || author.username;
+  const gradient = hashGradient(author.id);
+  const isSelf = currentUserId === authorId;
+
+  return (
+    <div className="bg-card border rounded-xl p-5 mt-6">
+      <div className="flex items-start gap-3">
+        <Link href={`/users/${author.id}`} className="flex-shrink-0">
+          <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white font-bold hover:brightness-110 transition-all`}>
+            {displayName[0]?.toUpperCase()}
+          </div>
+        </Link>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <Link href={`/users/${author.id}`} className="font-semibold hover:text-primary transition-colors">
+                {displayName}
+              </Link>
+              {author.furry_name && (
+                <p className="text-xs text-muted-foreground">@{author.username}</p>
+              )}
+              {author.species && (
+                <p className="text-xs text-primary">🐾 {author.species}</p>
+              )}
+            </div>
+            {!isSelf && apiClient.getToken() && (
+              <Button
+                variant={isFollowing ? 'outline' : 'default'}
+                size="sm"
+                onClick={handleFollow}
+                disabled={followLoading}
+                className={isFollowing ? '' : 'bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110 flex-shrink-0'}
+              >
+                {isFollowing
+                  ? <><UserMinus className="h-3.5 w-3.5 mr-1" />取消关注</>
+                  : <><UserPlus className="h-3.5 w-3.5 mr-1" />关注 TA</>
+                }
+              </Button>
+            )}
+          </div>
+          {author.bio && (
+            <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">{author.bio}</p>
+          )}
+          <div className="flex gap-3 mt-1.5 text-xs text-muted-foreground">
+            {author.location && (
+              <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{author.location}</span>
+            )}
+            {author.website && (
+              <a href={author.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 hover:text-primary">
+                <Globe className="h-3 w-3" />{author.website}
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SidebarMorePosts({ authorId, currentPostId }: { authorId: string; currentPostId: string }) {
+  const [posts, setPosts] = useState<Post[]>([]);
+
+  useEffect(() => {
+    if (!authorId) return;
+    apiClient.getUserPosts(authorId, 1, 7).then(res => {
+      setPosts((res.posts ?? []).filter(p => p.id !== currentPostId).slice(0, 6));
+    }).catch(() => {});
+  }, [authorId, currentPostId]);
+
+  if (posts.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <h3 className="font-semibold text-sm text-muted-foreground mb-4">TA 的其他创作</h3>
+      <div className="grid grid-cols-2 gap-3">
+        {posts.map(p => <PostGalleryCard key={p.id} post={p} />)}
+      </div>
+    </div>
+  );
+}
+
 function PostDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -98,6 +298,7 @@ function PostDetailContent() {
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showTip, setShowTip] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
@@ -164,7 +365,8 @@ function PostDetailContent() {
   if (!post) {
     return (
       <div className="max-w-2xl mx-auto pt-20 px-4 text-center py-16 text-muted-foreground">
-        帖子不存在或已被删除
+        <p className="text-xl font-medium mb-2">帖子不存在</p>
+        <p className="text-sm">该帖子可能已被删除或不存在</p>
       </div>
     );
   }
@@ -179,7 +381,7 @@ function PostDetailContent() {
         </div>
       )}
 
-      {/* Moderation pending banner (only visible to the author) */}
+      {/* Moderation pending banner */}
       {post.moderation_status === 'pending' && currentUserId === post.author_id && !justSubmitted && (
         <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 text-sm">
           <span className="mt-0.5 text-base leading-none">⏳</span>
@@ -191,7 +393,7 @@ function PostDetailContent() {
       <PostCard post={post} showFull />
 
       {/* Action bar */}
-      <div className="flex items-center gap-2 mt-3 mb-6">
+      <div className="flex items-center gap-1 mt-3 mb-6">
         <Button variant="ghost" size="sm" onClick={() => commentInputRef.current?.focus()} className="text-muted-foreground">
           <MessageCircle className="h-4 w-4 mr-1" />
           评论 ({commentTotal})
@@ -200,6 +402,12 @@ function PostDetailContent() {
           <Share2 className="h-4 w-4 mr-1" />
           分享
         </Button>
+        {isLoggedIn && post.author_id && currentUserId !== post.author_id && (
+          <Button variant="ghost" size="sm" onClick={() => setShowReport(true)} className="text-muted-foreground hover:text-destructive">
+            <Flag className="h-4 w-4 mr-1" />
+            举报
+          </Button>
+        )}
         {isLoggedIn && post.author_id && (
           <Button variant="ghost" size="sm" onClick={() => setShowTip(true)} className="text-yellow-600 hover:text-yellow-700 ml-auto">
             <Gift className="h-4 w-4 mr-1" />
@@ -233,11 +441,24 @@ function PostDetailContent() {
         <h3 className="font-semibold text-sm text-muted-foreground">
           {commentTotal > 0 ? `${commentTotal} 条评论` : '暂无评论'}
         </h3>
+        {comments.length === 0 && !isLoggedIn && (
+          <div className="text-center py-8 text-muted-foreground">
+            <MessageCircle className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">
+              <Link href="/login" className="text-primary hover:underline">登录</Link>后参与评论
+            </p>
+          </div>
+        )}
+        {comments.length === 0 && isLoggedIn && (
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">还没有评论，来抢沙发吧</p>
+          </div>
+        )}
         {comments.map(c => (
           <div key={c.id} className="flex gap-3">
             <Link href={`/users/${c.user_id}`}>
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 hover:opacity-80 transition-opacity">
-                <span className="text-xs font-bold text-primary">
+              <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${hashGradient(c.user_id)} flex items-center justify-center flex-shrink-0 hover:brightness-110 transition-all`}>
+                <span className="text-xs font-bold text-white">
                   {(c.author_username || c.user_id)[0]?.toUpperCase()}
                 </span>
               </div>
@@ -259,17 +480,26 @@ function PostDetailContent() {
             </div>
           </div>
         ))}
-
-        {!isLoggedIn && commentTotal === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            <Link href="/login" className="text-primary hover:underline">登录</Link>后参与评论
-          </p>
-        )}
       </div>
+
+      {/* Author card */}
+      {post.author_id && (
+        <AuthorCard authorId={post.author_id} currentUserId={currentUserId} />
+      )}
+
+      {/* More from author */}
+      {post.author_id && (
+        <SidebarMorePosts authorId={post.author_id} currentPostId={post.id} />
+      )}
 
       {/* Tip modal */}
       {showTip && (
         <TipModal toUserId={post.author_id} onClose={() => setShowTip(false)} />
+      )}
+
+      {/* Report modal */}
+      {showReport && (
+        <ReportModal postId={post.id} onClose={() => setShowReport(false)} />
       )}
     </div>
   );
