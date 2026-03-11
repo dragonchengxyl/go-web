@@ -128,6 +128,32 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	response.Success(c, tokens)
 }
 
+// ForgotPassword initiates a password reset flow
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req dto.ForgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.ErrValidationFailed.WithDetail(err.Error()))
+		return
+	}
+	// Always return success to prevent email enumeration
+	_ = h.userService.ForgotPassword(c.Request.Context(), req.Email)
+	response.Success(c, gin.H{"message": "如果该邮箱已注册，您将收到一封重置密码的邮件"})
+}
+
+// ResetPassword resets a user's password using a valid reset token
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req dto.ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.ErrValidationFailed.WithDetail(err.Error()))
+		return
+	}
+	if err := h.userService.ResetPassword(c.Request.Context(), req.Token, req.NewPassword); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "密码重置成功，请重新登录"})
+}
+
 // ChangePassword handles password change for authenticated users
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	uid, ok := getUserID(c)

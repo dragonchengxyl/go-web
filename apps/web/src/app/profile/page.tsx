@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { LogOut, Camera, Loader2 } from 'lucide-react'
+import { Camera, Loader2 } from 'lucide-react'
 
 interface UserProfile {
   id: string
@@ -99,11 +99,6 @@ export default function ProfilePage() {
     }
   }
 
-  function handleLogout() {
-    apiClient.setToken(null)
-    router.push('/login')
-  }
-
   if (loading) {
     return <div className="max-w-2xl mx-auto pt-20 px-4 text-center py-16 text-muted-foreground">加载中...</div>
   }
@@ -116,10 +111,6 @@ export default function ProfilePage() {
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">个人中心</h1>
-        <Button variant="outline" size="sm" onClick={handleLogout}>
-          <LogOut className="h-4 w-4 mr-1" />
-          退出
-        </Button>
       </div>
 
       {/* Avatar + basic info */}

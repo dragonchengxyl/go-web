@@ -95,3 +95,28 @@ func (s *TokenStore) IsTokenBlacklisted(ctx context.Context, jti string) (bool, 
 	}
 	return exists > 0, nil
 }
+
+// SaveResetToken stores a password-reset token mapped to a user ID (30-minute TTL)
+func (s *TokenStore) SaveResetToken(ctx context.Context, token, userID string) error {
+	key := fmt.Sprintf("auth:reset:%s", token)
+	return s.client.Set(ctx, key, userID, 30*time.Minute).Err()
+}
+
+// GetResetToken returns the user ID associated with the reset token
+func (s *TokenStore) GetResetToken(ctx context.Context, token string) (string, error) {
+	key := fmt.Sprintf("auth:reset:%s", token)
+	val, err := s.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", fmt.Errorf("reset token not found or expired")
+		}
+		return "", fmt.Errorf("failed to get reset token: %w", err)
+	}
+	return val, nil
+}
+
+// DeleteResetToken removes a used password-reset token
+func (s *TokenStore) DeleteResetToken(ctx context.Context, token string) error {
+	key := fmt.Sprintf("auth:reset:%s", token)
+	return s.client.Del(ctx, key).Err()
+}
