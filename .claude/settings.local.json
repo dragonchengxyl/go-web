@@ -74,7 +74,12 @@
       "Bash(find /home/chenlongting/go-web/internal/infra/postgres -name \"*stats*\" -o -name \"*dashboard*\" 2>/dev/null | head -20)",
       "Bash(protoc --version)",
       "Bash(buf --version)",
-      "Read(//home/chenlongting/go-web/apps/web/$GOPATH/bin/**)"
+      "Read(//home/chenlongting/go-web/apps/web/$GOPATH/bin/**)",
+      "Bash(grep -n \"status.*pending\\\\|moderation\" /home/chenlongting/go-web/apps/web/src/app/posts/create/page.tsx 2>/dev/null | head -10\ngrep -n \"onboarding\\\\|welcome\" /home/chenlongting/go-web/apps/web/src/app/feed/page.tsx | head -5)",
+      "Bash(grep -rn \"refresh_token\\\\|refreshToken\" /home/chenlongting/go-web/apps/web/src/lib/api-client.ts | head -10\ngrep -rn \"401\\\\|Unauthorized\\\\|token.*expir\" /home/chenlongting/go-web/apps/web/src/lib/api-client.ts | head -10)",
+      "Bash(grep -n \"pending\\\\|moderation\" /home/chenlongting/go-web/apps/web/src/app/posts/create/page.tsx 2>/dev/null | head -10\ngrep -n \"empty\\\\|no.*post\\\\|recommend\" /home/chenlongting/go-web/apps/web/src/app/feed/page.tsx 2>/dev/null | head -10)",
+      "Bash(grep -n \"empty\\\\|explore\\\\|no.*follow\\\\|没有\" /home/chenlongting/go-web/apps/web/src/app/feed/page.tsx | head -15\ngrep -n \"pending\\\\|审核\\\\|moderation\" /home/chenlongting/go-web/apps/web/src/app/posts/create/page.tsx | head -10)",
+      "Bash(cat /home/chenlongting/go-web/internal/pkg/email/token.go 2>/dev/null || find /home/chenlongting/go-web/internal/pkg/email -name \"*.go\" | head -10)"
     ]
   }
 }
