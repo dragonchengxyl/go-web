@@ -142,28 +142,22 @@ func main() {
 	}
 
 	achievementService := usecase.NewAchievementService(achievementRepo, leaderboard)
-	postService := usecase.NewPostService(postRepo)
-	// Enable content moderation if Aliyun Green is configured
+
+	// Build PostService options dynamically to avoid ineffectual assignments.
+	postOpts := []usecase.PostServiceOption{usecase.WithPublisher(publisher)}
+	if len(cfg.OSS.AllowedHosts) > 0 {
+		postOpts = append(postOpts, usecase.WithAllowedHosts(cfg.OSS.AllowedHosts))
+	}
 	if cfg.Moderation.AccessKeyID != "" {
 		moderator := moderation.NewAliyunGreen(
 			cfg.Moderation.AccessKeyID,
 			cfg.Moderation.AccessKeySecret,
 			cfg.Moderation.Endpoint,
 		)
-		postService = usecase.NewPostService(postRepo,
-			usecase.WithModerator(moderator, logger),
-			usecase.WithAllowedHosts(cfg.OSS.AllowedHosts),
-			usecase.WithPublisher(publisher),
-		)
+		postOpts = append(postOpts, usecase.WithModerator(moderator, logger))
 		logger.Info("Aliyun Green content moderation enabled")
-	} else if len(cfg.OSS.AllowedHosts) > 0 {
-		postService = usecase.NewPostService(postRepo,
-			usecase.WithAllowedHosts(cfg.OSS.AllowedHosts),
-			usecase.WithPublisher(publisher),
-		)
-	} else {
-		postService = usecase.NewPostService(postRepo, usecase.WithPublisher(publisher))
 	}
+	postService := usecase.NewPostService(postRepo, postOpts...)
 	followService := usecase.NewFollowService(followRepo, usecase.WithFollowPublisher(publisher))
 	chatService := usecase.NewChatService(chatRepo)
 	tipService := usecase.NewTipService(orderRepo, usecase.WithTipPublisher(publisher))
