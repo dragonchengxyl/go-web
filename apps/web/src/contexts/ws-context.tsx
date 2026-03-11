@@ -2,7 +2,16 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef } from 'react'
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || ''
+
+// Build the WebSocket base URL at runtime so it follows the page's host/port
+// (works behind the Next.js dev proxy without hardcoding localhost:8080).
+function getWsBase(): string {
+  if (WS_URL) return WS_URL
+  if (typeof window === 'undefined') return 'ws://localhost:8080'
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}`
+}
 const BACKOFF = [1000, 2000, 4000, 8000, 16000, 30000]
 
 type WSStatus = 'connecting' | 'connected' | 'disconnected'
@@ -83,7 +92,7 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
     if (!isTokenValid(token)) return
 
     dispatch({ type: 'CONNECTING' })
-    const ws = new WebSocket(`${WS_URL}/ws/chat?token=${token}`)
+    const ws = new WebSocket(`${getWsBase()}/ws/chat?token=${token}`)
     wsRef.current = ws
 
     ws.onopen = () => {
