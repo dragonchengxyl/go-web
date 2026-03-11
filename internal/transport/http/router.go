@@ -179,6 +179,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		protected.Use(authMiddleware.Authenticate())
 		{
 			protected.POST("/auth/logout", authHandler.Logout)
+			protected.PUT("/auth/password", authHandler.ChangePassword)
 
 			// Profile
 			protected.GET("/users/me", userHandler.GetProfile)

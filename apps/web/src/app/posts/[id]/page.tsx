@@ -97,6 +97,7 @@ export default function PostDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showTip, setShowTip] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -104,6 +105,7 @@ export default function PostDetailPage() {
     if (token) {
       apiClient.setToken(token);
       setIsLoggedIn(true);
+      apiClient.getMe().then(u => setCurrentUserId(u.id)).catch(() => {});
     }
     if (postId) loadData(postId);
   }, [postId]);
@@ -167,6 +169,14 @@ export default function PostDetailPage() {
 
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
+      {/* Moderation pending banner (only visible to the author) */}
+      {post.moderation_status === 'pending' && currentUserId === post.author_id && (
+        <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 text-sm">
+          <span className="mt-0.5 text-base leading-none">⏳</span>
+          <p>您的帖子正在审核中，审核通过后将对其他用户可见。通常在 24 小时内完成。</p>
+        </div>
+      )}
+
       {/* Post */}
       <PostCard post={post} showFull />
 

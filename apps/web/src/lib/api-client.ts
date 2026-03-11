@@ -122,6 +122,7 @@ export interface Notification {
 class ApiClient {
   private baseUrl: string
   private token: string | null = null
+  private refreshing: Promise<void> | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
@@ -138,8 +139,15 @@ class ApiClient {
         document.cookie = `_auth=1; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`
       } else {
         localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
         document.cookie = '_auth=; path=/; max-age=0'
       }
+    }
+  }
+
+  setRefreshToken(token: string) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('refresh_token', token)
     }
   }
 
@@ -147,9 +155,32 @@ class ApiClient {
     return this.token
   }
 
+  private async tryRefresh(): Promise<boolean> {
+    const refreshToken = typeof window !== 'undefined'
+      ? localStorage.getItem('refresh_token')
+      : null
+    if (!refreshToken) return false
+
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+      const data: ApiResponse<{ access_token: string; refresh_token: string }> = await res.json()
+      if (data.code !== 0) return false
+      this.setToken(data.data.access_token)
+      this.setRefreshToken(data.data.refresh_token)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   private async request<T = any>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    isRetry = false
   ): Promise<T> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -164,6 +195,25 @@ class ApiClient {
       ...options,
       headers,
     })
+
+    if (response.status === 401 && !isRetry) {
+      if (!this.refreshing) {
+        this.refreshing = this.tryRefresh().then(ok => {
+          this.refreshing = null
+          if (!ok) {
+            this.setToken(null)
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login'
+            }
+          }
+        })
+      }
+      await this.refreshing
+      if (this.token) {
+        return this.request<T>(endpoint, options, true)
+      }
+      throw new Error('登录已过期，请重新登录')
+    }
 
     const data: ApiResponse<T> = await response.json()
 

@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Lock } from 'lucide-react';
 
 interface UserProfile {
   id: string
@@ -22,6 +24,102 @@ interface BlockedUser {
   species?: string
 }
 
+function ChangePasswordForm() {
+  const [form, setForm] = useState({ old_password: '', new_password: '', confirm: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setSuccess(false);
+    if (form.new_password !== form.confirm) {
+      setError('两次输入的新密码不一致');
+      return;
+    }
+    if (form.new_password.length < 8) {
+      setError('新密码至少 8 位');
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiClient.put('/auth/password', {
+        old_password: form.old_password,
+        new_password: form.new_password,
+      });
+      setSuccess(true);
+      setForm({ old_password: '', new_password: '', confirm: '' });
+    } catch (err: any) {
+      setError(err.message || '修改失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {error && (
+        <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">{error}</div>
+      )}
+      {success && (
+        <div className="bg-green-500/10 text-green-600 dark:text-green-400 text-sm p-3 rounded-lg">
+          密码修改成功
+        </div>
+      )}
+      <div className="space-y-2">
+        <label className="text-sm font-medium">当前密码</label>
+        <div className="relative">
+          <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="password"
+            className="pl-10"
+            placeholder="请输入当前密码"
+            value={form.old_password}
+            onChange={e => setForm({ ...form, old_password: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">新密码</label>
+        <div className="relative">
+          <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="password"
+            className="pl-10"
+            placeholder="至少 8 位"
+            value={form.new_password}
+            onChange={e => setForm({ ...form, new_password: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-medium">确认新密码</label>
+        <div className="relative">
+          <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="password"
+            className="pl-10"
+            placeholder="再次输入新密码"
+            value={form.confirm}
+            onChange={e => setForm({ ...form, confirm: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+      <Button
+        type="submit"
+        disabled={loading}
+        className="bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110"
+      >
+        {loading ? '修改中...' : '修改密码'}
+      </Button>
+    </form>
+  );
+}
+
 export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [blocked, setBlocked] = useState<BlockedUser[]>([]);
@@ -29,8 +127,6 @@ export default function SettingsPage() {
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (token) apiClient.setToken(token);
     apiClient.getMe().then(setProfile).catch(() => {});
   }, []);
 
@@ -66,6 +162,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="account" onValueChange={(v) => { if (v === 'privacy') loadBlocked(); }}>
         <TabsList className="w-full mb-6">
           <TabsTrigger value="account" className="flex-1">账号</TabsTrigger>
+          <TabsTrigger value="security" className="flex-1">安全</TabsTrigger>
           <TabsTrigger value="privacy" className="flex-1">隐私</TabsTrigger>
         </TabsList>
 
@@ -101,10 +198,19 @@ export default function SettingsPage() {
                   如需修改资料，请前往{' '}
                   <a href="/profile" className="text-primary hover:underline">个人资料页</a>。
                 </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  密码修改功能即将上线，敬请期待。
-                </p>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Security Tab */}
+        <TabsContent value="security">
+          <Card>
+            <CardHeader>
+              <CardTitle>修改密码</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChangePasswordForm />
             </CardContent>
           </Card>
         </TabsContent>

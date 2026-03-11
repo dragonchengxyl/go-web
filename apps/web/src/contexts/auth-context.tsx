@@ -14,7 +14,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoggedIn: boolean;
   loading: boolean;
-  login: (token: string) => Promise<void>;
+  login: (token: string, refreshToken?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -22,7 +22,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   isLoggedIn: false,
   loading: true,
-  login: async () => {},
+  login: async (_token: string, _refreshToken?: string) => {},
   logout: () => {},
 });
 
@@ -55,7 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchMe]);
 
-  const login = useCallback(async (token: string) => {
+  const login = useCallback(async (token: string, refreshToken?: string) => {
+    if (refreshToken) apiClient.setRefreshToken(refreshToken);
     await fetchMe(token);
   }, [fetchMe]);
 

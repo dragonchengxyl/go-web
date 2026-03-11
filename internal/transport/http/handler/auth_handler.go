@@ -128,6 +128,27 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	response.Success(c, tokens)
 }
 
+// ChangePassword handles password change for authenticated users
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		return
+	}
+	var req dto.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.ErrValidationFailed.WithDetail(err.Error()))
+		return
+	}
+	if err := h.userService.ChangePassword(c.Request.Context(), uid, usecase.ChangePasswordInput{
+		OldPassword: req.OldPassword,
+		NewPassword: req.NewPassword,
+	}); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "密码修改成功"})
+}
+
 // Logout handles user logout
 func (h *AuthHandler) Logout(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")

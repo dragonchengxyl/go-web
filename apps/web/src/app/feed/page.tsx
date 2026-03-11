@@ -6,8 +6,85 @@ import { PostCard } from '@/components/post/post-card';
 import { PostCardSkeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { PenSquare, Compass } from 'lucide-react';
+import { PenSquare, Compass, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface RecommendedUser {
+  id: string;
+  username: string;
+  furry_name?: string;
+  species?: string;
+}
+
+function RecommendedUsers() {
+  const [users, setUsers] = useState<RecommendedUser[]>([]);
+  const [following, setFollowing] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    apiClient.getExplore(1, 12).then(res => {
+      const posts: Post[] = res.posts || [];
+      const seen = new Set<string>();
+      const list: RecommendedUser[] = [];
+      for (const p of posts) {
+        if (!seen.has(p.author_id) && list.length < 6) {
+          seen.add(p.author_id);
+          list.push({
+            id: p.author_id,
+            username: p.author_username || p.author_id,
+            furry_name: undefined,
+            species: undefined,
+          });
+        }
+      }
+      setUsers(list);
+    }).catch(() => {});
+  }, []);
+
+  async function handleFollow(userId: string) {
+    try {
+      if (following.has(userId)) {
+        await apiClient.unfollowUser(userId);
+        setFollowing(prev => { const s = new Set(prev); s.delete(userId); return s; });
+      } else {
+        await apiClient.followUser(userId);
+        setFollowing(prev => new Set(prev).add(userId));
+      }
+    } catch {}
+  }
+
+  if (users.length === 0) return null;
+
+  return (
+    <div className="mt-8">
+      <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+        <UserPlus className="h-4 w-4 text-brand-purple" />
+        推荐关注
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {users.map(u => (
+          <div key={u.id} className="flex items-center justify-between p-3 bg-card border rounded-xl hover:shadow-sm transition-shadow">
+            <Link href={`/users/${u.id}`} className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-purple to-brand-teal flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {(u.username)[0]?.toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">@{u.username}</p>
+              </div>
+            </Link>
+            <Button
+              size="sm"
+              variant={following.has(u.id) ? 'outline' : 'default'}
+              className={following.has(u.id) ? '' : 'bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110'}
+              onClick={() => handleFollow(u.id)}
+            >
+              {following.has(u.id) ? '已关注' : '关注'}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -92,7 +169,7 @@ export default function FeedPage() {
       </div>
 
       {posts.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
+        <div className="text-center py-12 text-muted-foreground">
           <Compass className="h-16 w-16 mx-auto mb-4 opacity-30 animate-float" />
           <p className="text-lg font-medium mb-2">还没有关注流内容</p>
           <p className="text-sm mb-6">关注感兴趣的创作者，他们的动态会出现在这里</p>
@@ -107,6 +184,7 @@ export default function FeedPage() {
               <Button variant="outline">发布第一条动态</Button>
             </Link>
           </div>
+          <RecommendedUsers />
         </div>
       ) : (
         <motion.div
