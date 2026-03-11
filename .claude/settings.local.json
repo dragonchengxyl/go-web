@@ -71,7 +71,10 @@
       "Bash(make help:*)",
       "Bash(ls configs/config.local.yaml 2>/dev/null || echo \"❌ config.local.yaml 不存在（需要 make dev-setup）\"\nls configs/config.prod.yaml 2>/dev/null || echo \"❌ config.prod.yaml 不存在（需要 make dev-setup）\"\ndocker ps --format \"{{.Names}}\" 2>/dev/null | grep -E \"studio\" || echo \"❌ 本地 Docker infra 未运行\")",
       "Bash(ls configs/config.prod.yaml 2>/dev/null || echo \"❌ config.prod.yaml 不存在\"\ndocker ps --format \"{{.Names}}\" 2>/dev/null | grep -E \"studio\" || echo \"❌ 本地 Docker infra 未运行\")",
-      "Bash(find /home/chenlongting/go-web/internal/infra/postgres -name \"*stats*\" -o -name \"*dashboard*\" 2>/dev/null | head -20)"
+      "Bash(find /home/chenlongting/go-web/internal/infra/postgres -name \"*stats*\" -o -name \"*dashboard*\" 2>/dev/null | head -20)",
+      "Bash(protoc --version)",
+      "Bash(buf --version)",
+      "Read(//home/chenlongting/go-web/apps/web/$GOPATH/bin/**)"
     ]
   }
 }

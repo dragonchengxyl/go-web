@@ -1,0 +1,61 @@
+syntax = "proto3";
+package notification.v1;
+option go_package = "github.com/studio/platform/proto/notification/v1;notificationv1";
+import "proto/common/v1/common.proto";
+
+message Notification {
+  string id = 1;
+  string user_id = 2;
+  string type = 3;
+  string actor_id = 4;
+  string target_type = 5;
+  string target_id = 6;
+  string message = 7;
+  bool is_read = 8;
+  int64 created_at = 9;
+}
+
+message SendRequest {
+  string user_id = 1;
+  string type = 2;
+  string actor_id = 3;
+  string target_type = 4;
+  string target_id = 5;
+  string message = 6;
+}
+
+message SendResponse {
+  string id = 1;
+}
+
+message ListRequest {
+  string user_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListResponse {
+  repeated Notification notifications = 1;
+  int64 total = 2;
+}
+
+message MarkReadRequest {
+  string user_id = 1;
+  repeated string ids = 2;
+}
+
+message UserRequest {
+  string user_id = 1;
+}
+
+message CountResponse {
+  int64 count = 1;
+}
+
+service NotificationService {
+  rpc Send(SendRequest) returns (SendResponse);
+  rpc List(ListRequest) returns (ListResponse);
+  rpc MarkRead(MarkReadRequest) returns (common.v1.Empty);
+  rpc CountUnread(UserRequest) returns (CountResponse);
+  rpc StreamUserNotifications(UserRequest) returns (stream Notification);
+}

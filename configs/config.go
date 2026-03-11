@@ -15,6 +15,7 @@ type Config struct {
 	Payment    PaymentConfig    `mapstructure:"payment"`
 	Moderation ModerationConfig `mapstructure:"moderation"`
 	Sponsor    SponsorConfig    `mapstructure:"sponsor"`
+	GRPC       GRPCConfig       `mapstructure:"grpc"`
 }
 
 type ServerConfig struct {
@@ -100,5 +101,17 @@ type SponsorConfig struct {
 	AlipayQRURL    string  `mapstructure:"alipay_qr_url"`
 	WechatQRURL    string  `mapstructure:"wechat_qr_url"`
 	Message        string  `mapstructure:"message"`
+}
+
+// GRPCConfig holds gRPC service addresses and ports.
+type GRPCConfig struct {
+	// Client addresses — empty string means use local in-process implementation.
+	StatsAddr        string `mapstructure:"stats_addr"`
+	NotificationAddr string `mapstructure:"notification_addr"`
+	ModerationAddr   string `mapstructure:"moderation_addr"`
+	// Server ports — used by the individual service binaries.
+	StatsPort        int `mapstructure:"stats_port"`
+	NotificationPort int `mapstructure:"notification_port"`
+	ModerationPort   int `mapstructure:"moderation_port"`
 }
 

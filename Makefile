@@ -1,4 +1,4 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -13,9 +13,29 @@ build: ## Build the application
 build-cli: ## Build the CLI tool
 	go build -o bin/studio-cli ./cmd/studio-cli
 
+proto-gen: ## Generate Go code from proto files
+	protoc --go_out=. --go_opt=paths=source_relative \
+	       --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+	       proto/common/v1/common.proto \
+	       proto/stats/v1/stats.proto \
+	       proto/notification/v1/notification.proto \
+	       proto/moderation/v1/moderation.proto
+
+build-stats-svc: ## Build the stats microservice
+	go build -o bin/stats-svc ./cmd/stats-svc
+
+build-moderation-svc: ## Build the moderation microservice
+	go build -o bin/moderation-svc ./cmd/moderation-svc
+
+build-notification-svc: ## Build the notification microservice
+	go build -o bin/notification-svc ./cmd/notification-svc
+
 build-all: ## Build all binaries
 	@make build
 	@make build-cli
+	@make build-stats-svc
+	@make build-moderation-svc
+	@make build-notification-svc
 	@echo "✓ All binaries built successfully"
 
 run: ## Run the application (local config by default)

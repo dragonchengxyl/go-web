@@ -1,0 +1,36 @@
+syntax = "proto3";
+package stats.v1;
+option go_package = "github.com/studio/platform/proto/stats/v1;statsv1";
+import "proto/common/v1/common.proto";
+
+message DashboardStats {
+  int64 total_users = 1;
+  int64 new_users_today = 2;
+  int64 total_downloads = 3;
+  int64 downloads_today = 4;
+  double total_revenue = 5;
+  double revenue_today = 6;
+  int64 total_games = 7;
+  int64 total_orders = 8;
+  int64 total_posts = 9;
+  int64 total_reports = 10;
+}
+
+message ChartRequest {
+  int32 days = 1;
+}
+
+message ChartResponse {
+  repeated ChartPoint points = 1;
+}
+
+message ChartPoint {
+  string date = 1;
+  double value = 2;
+}
+
+service StatsService {
+  rpc GetDashboardStats(common.v1.Empty) returns (DashboardStats);
+  rpc GetRevenueChart(ChartRequest) returns (ChartResponse);
+  rpc StreamUserGrowth(ChartRequest) returns (stream ChartPoint);
+}

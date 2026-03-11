@@ -1,0 +1,21 @@
+syntax = "proto3";
+package moderation.v1;
+option go_package = "github.com/studio/platform/proto/moderation/v1;moderationv1";
+
+message ReviewTextRequest {
+  string text = 1;
+}
+
+message ReviewImageRequest {
+  string url = 1;
+}
+
+message ReviewResult {
+  string decision = 1;
+  repeated string labels = 2;
+}
+
+service ModerationService {
+  rpc ReviewText(ReviewTextRequest) returns (ReviewResult);
+  rpc ReviewImage(ReviewImageRequest) returns (ReviewResult);
+}
