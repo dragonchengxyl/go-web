@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Providers } from '@/components/providers';
+import { Header } from '@/components/layout/header';
 import { MusicPlayer } from '@/components/music-player';
 import { ModerationToast } from '@/components/moderation-toast';
 
@@ -33,6 +34,7 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <body>
         <Providers>
+          <Header />
           {children}
           <MusicPlayer />
           <ModerationToast />
