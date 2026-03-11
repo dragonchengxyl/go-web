@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import { Menu, X, Bell, MessageCircle, Compass, PenSquare, LogOut, Settings, User, Users, Calendar, Trophy } from 'lucide-react';
+import { Menu, X, Bell, MessageCircle, Compass, PenSquare, LogOut, Settings, Users, Calendar, Trophy, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { GlobalSearch } from '@/components/search/global-search';
@@ -48,64 +48,78 @@ function UserAvatar() {
   }
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(v => !v)}
+    <div className="flex items-center gap-1" ref={ref}>
+      {/* 头像 — 直接跳转个人中心 */}
+      <Link
+        href="/profile"
         className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-purple to-brand-teal flex items-center justify-center text-white font-bold text-sm shadow-sm hover:brightness-110 transition-all focus:outline-none focus:ring-2 focus:ring-brand-purple/50"
-        title={user.username}
+        title={`${user.username} 的个人中心`}
       >
         {initial}
-      </button>
+      </Link>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -4 }}
-            transition={{ duration: 0.12 }}
-            className="absolute right-0 mt-2 w-48 rounded-xl bg-background border border-border shadow-lg overflow-hidden z-50"
-          >
-            <div className="px-3 py-2.5 border-b border-border">
-              <p className="text-sm font-semibold truncate">{user.username}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-            </div>
-            <div className="py-1">
+      {/* 展开更多选项 */}
+      <div className="relative">
+        <button
+          onClick={() => setOpen(v => !v)}
+          className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded focus:outline-none"
+          title="更多选项"
+        >
+          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', open && 'rotate-180')} />
+        </button>
+
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -4 }}
+              transition={{ duration: 0.12 }}
+              className="absolute right-0 mt-2 w-52 rounded-xl bg-background border border-border shadow-lg overflow-hidden z-50"
+            >
+              {/* 用户信息头 */}
               <Link
                 href="/profile"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                className="flex items-center gap-3 px-3 py-3 border-b border-border hover:bg-muted/60 transition-colors"
               >
-                <User className="h-4 w-4 text-muted-foreground" />
-                我的主页
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-brand-purple to-brand-teal flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                  {initial}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{user.username}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                </div>
               </Link>
-              <Link
-                href="/creator"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
-              >
-                <PenSquare className="h-4 w-4 text-muted-foreground" />
-                创作中心
-              </Link>
-              <Link
-                href="/settings"
-                onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
-              >
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                设置
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-                退出登录
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <div className="py-1">
+                <Link
+                  href="/creator"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <PenSquare className="h-4 w-4 text-muted-foreground" />
+                  创作中心
+                </Link>
+                <Link
+                  href="/settings"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                  设置
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  退出登录
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
