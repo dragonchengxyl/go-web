@@ -8,6 +8,7 @@ const nextConfig = {
   },
   experimental: {
     optimizePackageImports: ['lucide-react'],
+    proxyWebSockets: true,
   },
   async rewrites() {
     return [
