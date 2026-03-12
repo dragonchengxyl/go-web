@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export default function CreateGroupPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
@@ -45,6 +47,27 @@ export default function CreateGroupPage() {
 
   const inputCls =
     'w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500/50';
+
+  if (!authLoading && user && !user.email_verified_at) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/30 to-slate-950 px-4 py-10">
+        <div className="mx-auto max-w-lg">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+            <h1 className="text-2xl font-bold text-white mb-2">先验证邮箱</h1>
+            <p className="text-white/60 mb-6">创建圈子前需要先完成邮箱验证。</p>
+            <div className="flex justify-center gap-3">
+              <Button onClick={() => router.push('/settings')} className="bg-purple-600 hover:bg-purple-500 text-white">
+                去设置验证
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/groups')} className="border-white/20 text-white/80">
+                返回圈子
+              </Button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950/30 to-slate-950 px-4 py-10">

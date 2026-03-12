@@ -20,7 +20,7 @@ type PostService struct {
 	postRepo     post.Repository
 	moderator    moderation.Moderator // may be nil (moderation disabled)
 	logger       *zap.Logger
-	allowedHosts []string // OSS media URL whitelist; empty = skip validation
+	allowedHosts []string           // OSS media URL whitelist; empty = skip validation
 	publisher    *streams.Publisher // may be nil (events disabled)
 }
 
@@ -311,6 +311,14 @@ func (s *PostService) ListFeed(ctx context.Context, followeeIDs []uuid.UUID, pag
 }
 
 func (s *PostService) LikePost(ctx context.Context, userID, postID uuid.UUID) error {
+	p, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		if errors.Is(err, post.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return err
+	}
+
 	hasLiked, err := s.postRepo.HasLiked(ctx, userID, postID)
 	if err != nil {
 		return err
@@ -328,6 +336,16 @@ func (s *PostService) LikePost(ctx context.Context, userID, postID uuid.UUID) er
 		return err
 	}
 	_ = s.postRepo.IncrementLikeCount(ctx, postID)
+
+	if s.publisher != nil && p.AuthorID != userID {
+		go func() {
+			_ = s.publisher.Publish(context.Background(), streams.EventPostLiked, streams.PostLikedPayload{
+				PostID:   postID.String(),
+				ActorID:  userID.String(),
+				AuthorID: p.AuthorID.String(),
+			})
+		}()
+	}
 	return nil
 }
 

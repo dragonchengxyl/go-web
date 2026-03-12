@@ -11,12 +11,13 @@ import (
 
 // GroupHandler handles group HTTP endpoints.
 type GroupHandler struct {
-	groupSvc *usecase.GroupService
+	groupSvc    *usecase.GroupService
+	userService *usecase.UserService
 }
 
 // NewGroupHandler creates a new GroupHandler.
-func NewGroupHandler(groupSvc *usecase.GroupService) *GroupHandler {
-	return &GroupHandler{groupSvc: groupSvc}
+func NewGroupHandler(groupSvc *usecase.GroupService, userService *usecase.UserService) *GroupHandler {
+	return &GroupHandler{groupSvc: groupSvc, userService: userService}
 }
 
 // ListGroups handles GET /api/v1/groups
@@ -71,6 +72,17 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	if !ok {
 		response.Error(c, apperr.New(apperr.CodeUnauthorized, "未登录"))
 		return
+	}
+	if h.userService != nil {
+		u, err := h.userService.GetProfile(c.Request.Context(), userID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if u.EmailVerifiedAt == nil {
+			response.Error(c, apperr.New(apperr.CodeForbidden, "请先验证邮箱后再创建圈子"))
+			return
+		}
 	}
 
 	var req createGroupRequest

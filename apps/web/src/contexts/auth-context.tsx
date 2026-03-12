@@ -8,6 +8,7 @@ interface AuthUser {
   username: string;
   email: string;
   role: string;
+  email_verified_at?: string | null;
 }
 
 interface AuthContextValue {
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         username: data.username,
         email: data.email,
         role: data.role,
+        email_verified_at: data.email_verified_at ?? null,
       });
     } catch {
       apiClient.setToken(null);

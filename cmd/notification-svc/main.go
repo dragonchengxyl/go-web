@@ -92,6 +92,80 @@ func main() {
 		logger.Info("Starting notification stream consumer")
 		_ = consumer.Start(ctx, streams.GroupNotification, func(ctx context.Context, ev streams.StreamEvent) error {
 			switch ev.Type {
+			case streams.EventUserFollowed:
+				var p streams.UserFollowedPayload
+				if err := json.Unmarshal(ev.Payload, &p); err != nil {
+					return fmt.Errorf("notification-svc: unmarshal user.followed: %w", err)
+				}
+				followeeID, err := uuid.Parse(p.FolloweeID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid followee_id: %w", err)
+				}
+				followerID, err := uuid.Parse(p.FollowerID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid follower_id: %w", err)
+				}
+				return notificationService.Notify(ctx, &notification.Notification{
+					UserID:     followeeID,
+					Type:       notification.TypeFollow,
+					ActorID:    &followerID,
+					TargetID:   &followerID,
+					TargetType: "user",
+					CreatedAt:  time.Now(),
+				})
+
+			case streams.EventPostLiked:
+				var p streams.PostLikedPayload
+				if err := json.Unmarshal(ev.Payload, &p); err != nil {
+					return fmt.Errorf("notification-svc: unmarshal post.liked: %w", err)
+				}
+				authorID, err := uuid.Parse(p.AuthorID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid author_id: %w", err)
+				}
+				actorID, err := uuid.Parse(p.ActorID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid actor_id: %w", err)
+				}
+				postID, err := uuid.Parse(p.PostID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid post_id: %w", err)
+				}
+				return notificationService.Notify(ctx, &notification.Notification{
+					UserID:     authorID,
+					Type:       notification.TypeLike,
+					ActorID:    &actorID,
+					TargetID:   &postID,
+					TargetType: "post",
+					CreatedAt:  time.Now(),
+				})
+
+			case streams.EventCommentCreated:
+				var p streams.CommentCreatedPayload
+				if err := json.Unmarshal(ev.Payload, &p); err != nil {
+					return fmt.Errorf("notification-svc: unmarshal comment.created: %w", err)
+				}
+				targetUserID, err := uuid.Parse(p.TargetUserID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid target_user_id: %w", err)
+				}
+				authorID, err := uuid.Parse(p.AuthorID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid author_id: %w", err)
+				}
+				postID, err := uuid.Parse(p.PostID)
+				if err != nil {
+					return fmt.Errorf("notification-svc: invalid post_id: %w", err)
+				}
+				return notificationService.Notify(ctx, &notification.Notification{
+					UserID:     targetUserID,
+					Type:       notification.TypeComment,
+					ActorID:    &authorID,
+					TargetID:   &postID,
+					TargetType: "post",
+					CreatedAt:  time.Now(),
+				})
+
 			case streams.EventTipSent:
 				var p streams.TipSentPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {

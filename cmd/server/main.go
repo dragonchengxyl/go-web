@@ -139,8 +139,8 @@ func main() {
 	// Redis Streams publisher (event bus)
 	publisher := streams.NewPublisher(redisClient)
 
-	commentService := usecase.NewCommentService(commentRepo)
-	paymentService := usecase.NewPaymentService(orderRepo, alipayGW, wechatGW)
+	commentService := usecase.NewCommentService(commentRepo, usecase.WithCommentPublisher(publisher))
+	paymentService := usecase.NewPaymentServiceWithOptions(orderRepo, alipayGW, wechatGW, usecase.WithPaymentPublisher(publisher))
 	searchService := usecase.NewSearchService(pool)
 
 	// Stats service: use gRPC client if configured, otherwise local.
@@ -175,7 +175,7 @@ func main() {
 		logger.Info("Aliyun Green content moderation enabled")
 	}
 	postService := usecase.NewPostService(postRepo, postOpts...)
-	followService := usecase.NewFollowService(followRepo)
+	followService := usecase.NewFollowService(followRepo, usecase.WithFollowPublisher(publisher))
 	chatService := usecase.NewChatService(chatRepo)
 	tipService := usecase.NewTipService(orderRepo, usecase.WithTipPublisher(publisher))
 	ossService := usecase.NewOSSService(storageService)

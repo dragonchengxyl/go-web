@@ -1,12 +1,8 @@
 package handler
 
 import (
-	"context"
-	"time"
-
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/studio/platform/internal/domain/notification"
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/pkg/apperr"
@@ -16,16 +12,16 @@ import (
 
 // PostHandler handles post-related HTTP requests
 type PostHandler struct {
-	postService         *usecase.PostService
-	followService       *usecase.FollowService
-	notificationService *usecase.NotificationService
+	postService   *usecase.PostService
+	followService *usecase.FollowService
+	userService   *usecase.UserService
 }
 
-func NewPostHandler(postService *usecase.PostService, followService *usecase.FollowService, notificationService *usecase.NotificationService) *PostHandler {
+func NewPostHandler(postService *usecase.PostService, followService *usecase.FollowService, userService *usecase.UserService) *PostHandler {
 	return &PostHandler{
-		postService:         postService,
-		followService:       followService,
-		notificationService: notificationService,
+		postService:   postService,
+		followService: followService,
+		userService:   userService,
 	}
 }
 
@@ -36,14 +32,25 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		response.Error(c, apperr.ErrUnauthorized)
 		return
 	}
+	if h.userService != nil {
+		u, err := h.userService.GetProfile(c.Request.Context(), userID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if u.EmailVerifiedAt == nil {
+			response.Error(c, apperr.New(apperr.CodeForbidden, "请先验证邮箱后再发布内容"))
+			return
+		}
+	}
 
 	var req struct {
-		Title           string   `json:"title"`
-		Content         string   `json:"content" binding:"required"`
-		MediaURLs       []string `json:"media_urls"`
-		Tags            []string `json:"tags"`
-		Visibility      string   `json:"visibility"`
-		IsAIGenerated   bool     `json:"is_ai_generated"`
+		Title         string   `json:"title"`
+		Content       string   `json:"content" binding:"required"`
+		MediaURLs     []string `json:"media_urls"`
+		Tags          []string `json:"tags"`
+		Visibility    string   `json:"visibility"`
+		IsAIGenerated bool     `json:"is_ai_generated"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
@@ -166,30 +173,6 @@ func (h *PostHandler) LikePost(c *gin.Context) {
 	if err := h.postService.LikePost(c.Request.Context(), userID, postID); err != nil {
 		response.Error(c, err)
 		return
-	}
-
-	// Notify post author async (fire-and-forget)
-	if h.notificationService != nil {
-		actorID := userID
-		targetID := postID
-		notifSvc := h.notificationService
-		postSvc := h.postService
-		go func() {
-			defer func() { _ = recover() }()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			p, err := postSvc.GetPost(ctx, targetID)
-			if err != nil || p.AuthorID == actorID {
-				return
-			}
-			_ = notifSvc.Notify(ctx, &notification.Notification{
-				UserID:     p.AuthorID,
-				ActorID:    &actorID,
-				Type:       notification.TypeLike,
-				TargetID:   &targetID,
-				TargetType: "post",
-			})
-		}()
 	}
 
 	response.Success(c, gin.H{"message": "点赞成功"})

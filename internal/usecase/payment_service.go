@@ -3,18 +3,27 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/order"
 	"github.com/studio/platform/internal/infra/payment"
+	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
 // PaymentService handles the payment lifecycle.
 type PaymentService struct {
-	orderRepo      order.Repository
-	alipayGateway  payment.PaymentGateway
-	wechatGateway  payment.PaymentGateway
+	orderRepo     order.Repository
+	alipayGateway payment.PaymentGateway
+	wechatGateway payment.PaymentGateway
+	publisher     *streams.Publisher
+}
+
+type PaymentServiceOption func(*PaymentService)
+
+func WithPaymentPublisher(p *streams.Publisher) PaymentServiceOption {
+	return func(s *PaymentService) { s.publisher = p }
 }
 
 // NewPaymentService creates a new PaymentService.
@@ -23,11 +32,24 @@ func NewPaymentService(
 	alipayGateway payment.PaymentGateway,
 	wechatGateway payment.PaymentGateway,
 ) *PaymentService {
-	return &PaymentService{
+	return NewPaymentServiceWithOptions(orderRepo, alipayGateway, wechatGateway)
+}
+
+func NewPaymentServiceWithOptions(
+	orderRepo order.Repository,
+	alipayGateway payment.PaymentGateway,
+	wechatGateway payment.PaymentGateway,
+	opts ...PaymentServiceOption,
+) *PaymentService {
+	svc := &PaymentService{
 		orderRepo:     orderRepo,
 		alipayGateway: alipayGateway,
 		wechatGateway: wechatGateway,
 	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // InitiateAlipayPayment creates an Alipay page-pay URL for the given order.
@@ -76,7 +98,7 @@ func (s *PaymentService) HandleAlipayCallback(ctx context.Context, params map[st
 	if err != nil {
 		return apperr.New(apperr.CodeInvalidParam, "无效的订单号")
 	}
-	return s.orderRepo.UpdateStatus(ctx, orderID, order.OrderStatusPaid)
+	return s.markPaid(ctx, orderID, order.PaymentMethodAlipay)
 }
 
 // HandleWechatCallback verifies and processes a WeChat Pay async notification.
@@ -93,7 +115,7 @@ func (s *PaymentService) HandleWechatCallback(ctx context.Context, params map[st
 	if err != nil {
 		return apperr.New(apperr.CodeInvalidParam, "无效的订单号")
 	}
-	return s.orderRepo.UpdateStatus(ctx, orderID, order.OrderStatusPaid)
+	return s.markPaid(ctx, orderID, order.PaymentMethodWechat)
 }
 
 func (s *PaymentService) getPayableOrder(ctx context.Context, orderID uuid.UUID) (*order.Order, error) {
@@ -105,4 +127,42 @@ func (s *PaymentService) getPayableOrder(ctx context.Context, orderID uuid.UUID)
 		return nil, apperr.BadRequest("订单不在待支付状态")
 	}
 	return o, nil
+}
+
+func (s *PaymentService) markPaid(ctx context.Context, orderID uuid.UUID, method order.PaymentMethod) error {
+	o, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	if o.Status == order.OrderStatusPaid || o.Status == order.OrderStatusFulfilled {
+		return nil
+	}
+	if o.Status != order.OrderStatusPendingPayment {
+		return apperr.BadRequest("订单不在待支付状态")
+	}
+
+	now := time.Now()
+	o.Status = order.OrderStatusPaid
+	o.PaymentMethod = method
+	o.PaidAt = &now
+	o.UpdatedAt = now
+	if err := s.orderRepo.Update(ctx, o); err != nil {
+		return err
+	}
+
+	if s.publisher != nil {
+		if orderType, _ := o.Metadata["type"].(string); orderType == "tip" {
+			receiverID, _ := o.Metadata["to_user_id"].(string)
+			go func() {
+				_ = s.publisher.Publish(context.Background(), streams.EventTipSent, streams.TipSentPayload{
+					TipID:       o.ID.String(),
+					SenderID:    o.UserID.String(),
+					ReceiverID:  receiverID,
+					AmountCents: o.TotalCents,
+				})
+			}()
+		}
+	}
+
+	return nil
 }

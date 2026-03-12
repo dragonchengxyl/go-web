@@ -14,7 +14,6 @@ import (
 // TipService handles tip (donation) functionality
 type TipService struct {
 	orderRepo order.Repository
-	publisher *streams.Publisher // may be nil
 }
 
 func NewTipService(orderRepo order.Repository, opts ...func(*TipService)) *TipService {
@@ -27,7 +26,9 @@ func NewTipService(orderRepo order.Repository, opts ...func(*TipService)) *TipSe
 
 // WithTipPublisher injects an event publisher into TipService.
 func WithTipPublisher(p *streams.Publisher) func(*TipService) {
-	return func(s *TipService) { s.publisher = p }
+	return func(_ *TipService) {
+		_ = p
+	}
 }
 
 // CreateTipInput represents input for creating a tip
@@ -73,17 +74,6 @@ func (s *TipService) CreateTip(ctx context.Context, input CreateTipInput) (*orde
 
 	if err := s.orderRepo.Create(ctx, o); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建打赏订单失败", err)
-	}
-
-	if s.publisher != nil {
-		go func() {
-			_ = s.publisher.Publish(context.Background(), streams.EventTipSent, streams.TipSentPayload{
-				TipID:       o.ID.String(),
-				SenderID:    input.FromUserID.String(),
-				ReceiverID:  input.ToUserID.String(),
-				AmountCents: amountCents,
-			})
-		}()
 	}
 
 	return o, nil

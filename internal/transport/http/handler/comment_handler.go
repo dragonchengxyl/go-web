@@ -1,14 +1,11 @@
 package handler
 
 import (
-	"context"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/comment"
-	"github.com/studio/platform/internal/domain/notification"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -16,17 +13,15 @@ import (
 
 // CommentHandler handles comment-related HTTP requests
 type CommentHandler struct {
-	commentService      *usecase.CommentService
-	postService         *usecase.PostService
-	notificationService *usecase.NotificationService
+	commentService *usecase.CommentService
+	postService    *usecase.PostService
 }
 
 // NewCommentHandler creates a new CommentHandler
-func NewCommentHandler(commentService *usecase.CommentService, postService *usecase.PostService, notificationService *usecase.NotificationService) *CommentHandler {
+func NewCommentHandler(commentService *usecase.CommentService, postService *usecase.PostService) *CommentHandler {
 	return &CommentHandler{
-		commentService:      commentService,
-		postService:         postService,
-		notificationService: notificationService,
+		commentService: commentService,
+		postService:    postService,
 	}
 }
 
@@ -50,34 +45,22 @@ func (h *CommentHandler) CreateComment(c *gin.Context) {
 		return
 	}
 
+	if h.postService != nil && input.CommentableType == comment.CommentableTypePost {
+		postEntity, err := h.postService.GetPost(c.Request.Context(), input.CommentableID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		postID := postEntity.ID
+		targetUserID := postEntity.AuthorID
+		input.PostID = &postID
+		input.TargetUserID = &targetUserID
+	}
+
 	cmt, err := h.commentService.CreateComment(c.Request.Context(), userID, input)
 	if err != nil {
 		response.Error(c, err)
 		return
-	}
-
-	// Notify post author when commenting on a post (async, fire-and-forget)
-	if h.notificationService != nil && h.postService != nil && input.CommentableType == comment.CommentableTypePost {
-		actorID := userID
-		targetID := input.CommentableID
-		notifSvc := h.notificationService
-		postSvc := h.postService
-		go func() {
-			defer func() { _ = recover() }()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			p, err := postSvc.GetPost(ctx, targetID)
-			if err != nil || p.AuthorID == actorID {
-				return
-			}
-			_ = notifSvc.Notify(ctx, &notification.Notification{
-				UserID:     p.AuthorID,
-				ActorID:    &actorID,
-				Type:       notification.TypeComment,
-				TargetID:   &targetID,
-				TargetType: "post",
-			})
-		}()
 	}
 
 	response.Success(c, cmt)

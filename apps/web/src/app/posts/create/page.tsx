@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, ImagePlus, Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/auth-context';
 import { useOSSUpload } from '@/hooks/use-oss-upload';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,6 +22,7 @@ interface ImageItem {
 
 export default function CreatePostPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -131,6 +133,24 @@ export default function CreatePostPage() {
   };
 
   const anyUploading = images.some(img => img.uploading);
+  const emailVerified = !!user?.email_verified_at;
+
+  if (!authLoading && user && !emailVerified) {
+    return (
+      <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
+        <div className="rounded-2xl border bg-card p-8 text-center">
+          <h1 className="text-2xl font-bold mb-2">先验证邮箱</h1>
+          <p className="text-muted-foreground mb-6">
+            为了保护社区内容安全，发布动态前需要先完成邮箱验证。
+          </p>
+          <div className="flex justify-center gap-3">
+            <Button onClick={() => router.push('/settings')}>去设置验证</Button>
+            <Button variant="outline" onClick={() => router.push('/feed')}>返回动态</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">

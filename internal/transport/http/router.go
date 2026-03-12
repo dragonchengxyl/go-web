@@ -77,10 +77,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		authHandler := handler.NewAuthHandler(cfg.UserService, cfg.RedisClient)
 		userHandler := handler.NewUserHandler(cfg.UserService)
 		musicHandler := handler.NewMusicHandler(cfg.MusicService)
-		commentHandler := handler.NewCommentHandler(cfg.CommentService, cfg.PostService, cfg.NotificationService)
+		commentHandler := handler.NewCommentHandler(cfg.CommentService, cfg.PostService)
 		searchHandler := handler.NewSearchHandler(cfg.MusicService, cfg.SearchService, cfg.PostService, cfg.UserService)
-		postHandler := handler.NewPostHandler(cfg.PostService, cfg.FollowService, cfg.NotificationService)
-		followHandler := handler.NewFollowHandler(cfg.FollowService, cfg.NotificationService)
+		postHandler := handler.NewPostHandler(cfg.PostService, cfg.FollowService, cfg.UserService)
+		followHandler := handler.NewFollowHandler(cfg.FollowService)
 		chatHandler := handler.NewChatHandler(cfg.ChatService, cfg.Hub, cfg.Logger)
 		tipHandler := handler.NewTipHandler(cfg.TipService, cfg.PaymentService)
 		achievementHandler := handler.NewAchievementHandler(cfg.AchievementService)
@@ -151,7 +151,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 		// Events (public read)
 		if cfg.EventService != nil {
-			eventHandler := handler.NewEventHandler(cfg.EventService)
+			eventHandler := handler.NewEventHandler(cfg.EventService, cfg.UserService)
 			events := v1.Group("/events")
 			events.GET("", eventHandler.ListEvents)
 			events.GET("/:id", eventHandler.GetEvent)
@@ -160,7 +160,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 		// Groups (public read)
 		if cfg.GroupService != nil {
-			groupHandler := handler.NewGroupHandler(cfg.GroupService)
+			groupHandler := handler.NewGroupHandler(cfg.GroupService, cfg.UserService)
 			groups := v1.Group("/groups")
 			groups.GET("", groupHandler.ListGroups)
 			groups.GET("/:id", groupHandler.GetGroup)
@@ -211,7 +211,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 			// Events (authenticated write)
 			if cfg.EventService != nil {
-				eventHandler := handler.NewEventHandler(cfg.EventService)
+				eventHandler := handler.NewEventHandler(cfg.EventService, cfg.UserService)
 				protected.POST("/events", eventHandler.CreateEvent)
 				protected.PUT("/events/:id", eventHandler.UpdateEvent)
 				protected.DELETE("/events/:id", eventHandler.CancelEvent)
@@ -222,7 +222,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 			// Groups (authenticated write)
 			if cfg.GroupService != nil {
-				groupHandler := handler.NewGroupHandler(cfg.GroupService)
+				groupHandler := handler.NewGroupHandler(cfg.GroupService, cfg.UserService)
 				protected.POST("/groups", groupHandler.CreateGroup)
 				protected.PUT("/groups/:id", groupHandler.UpdateGroup)
 				protected.POST("/groups/:id/join", groupHandler.JoinGroup)

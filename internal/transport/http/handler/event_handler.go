@@ -13,12 +13,13 @@ import (
 
 // EventHandler handles event HTTP endpoints.
 type EventHandler struct {
-	eventSvc *usecase.EventService
+	eventSvc    *usecase.EventService
+	userService *usecase.UserService
 }
 
 // NewEventHandler creates a new EventHandler.
-func NewEventHandler(eventSvc *usecase.EventService) *EventHandler {
-	return &EventHandler{eventSvc: eventSvc}
+func NewEventHandler(eventSvc *usecase.EventService, userService *usecase.UserService) *EventHandler {
+	return &EventHandler{eventSvc: eventSvc, userService: userService}
 }
 
 // ListEvents handles GET /api/v1/events
@@ -67,6 +68,17 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 	if !ok {
 		response.Error(c, apperr.New(apperr.CodeUnauthorized, "未登录"))
 		return
+	}
+	if h.userService != nil {
+		u, err := h.userService.GetProfile(c.Request.Context(), userID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if u.EmailVerifiedAt == nil {
+			response.Error(c, apperr.New(apperr.CodeForbidden, "请先验证邮箱后再发起活动"))
+			return
+		}
 	}
 
 	var req createEventRequest

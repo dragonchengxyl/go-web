@@ -5,6 +5,7 @@ import { Providers } from '@/components/providers';
 import { Header } from '@/components/layout/header';
 import { MusicPlayer } from '@/components/music-player';
 import { ModerationToast } from '@/components/moderation-toast';
+import { VerifyEmailBanner } from '@/components/verify-email-banner';
 import { LenisProvider } from '@/components/lenis-provider';
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ export default function RootLayout({
         <LenisProvider>
           <Providers>
             <Header />
+            <VerifyEmailBanner />
             {children}
             <MusicPlayer />
             <ModerationToast />

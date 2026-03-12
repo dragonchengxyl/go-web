@@ -37,6 +37,8 @@ type CreateCommentInput struct {
 	CommentableID   uuid.UUID               `json:"commentable_id" binding:"required"`
 	ParentID        *uuid.UUID              `json:"parent_id,omitempty"`
 	Content         string                  `json:"content" binding:"required"`
+	PostID          *uuid.UUID              `json:"-"`
+	TargetUserID    *uuid.UUID              `json:"-"`
 }
 
 // CreateComment creates a new comment
@@ -62,13 +64,14 @@ func (s *CommentService) CreateComment(ctx context.Context, userID uuid.UUID, in
 	}
 
 	// Publish comment.created event
-	if s.publisher != nil {
+	if s.publisher != nil && input.TargetUserID != nil && input.PostID != nil && *input.TargetUserID != userID {
 		go func() {
 			_ = s.publisher.Publish(context.Background(), streams.EventCommentCreated, streams.CommentCreatedPayload{
 				CommentID:     c.ID.String(),
-				PostID:        "",
+				PostID:        input.PostID.String(),
 				CommentableID: c.CommentableID.String(),
 				AuthorID:      c.UserID.String(),
+				TargetUserID:  input.TargetUserID.String(),
 			})
 		}()
 	}

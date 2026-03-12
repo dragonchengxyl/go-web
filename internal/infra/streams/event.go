@@ -6,6 +6,7 @@ import "encoding/json"
 const (
 	EventPostCreated    = "post.created"
 	EventPostModerated  = "post.moderated"
+	EventPostLiked      = "post.liked"
 	EventUserFollowed   = "user.followed"
 	EventTipSent        = "tip.sent"
 	EventCommentCreated = "comment.created"
@@ -41,6 +42,13 @@ type PostModeratedPayload struct {
 	Status   string `json:"status"` // "approved" | "blocked"
 }
 
+// PostLikedPayload is published when a post is liked.
+type PostLikedPayload struct {
+	PostID   string `json:"post_id"`
+	ActorID  string `json:"actor_id"`
+	AuthorID string `json:"author_id"`
+}
+
 // UserFollowedPayload is published when a user follows another.
 type UserFollowedPayload struct {
 	FollowerID string `json:"follower_id"`
@@ -61,4 +69,5 @@ type CommentCreatedPayload struct {
 	PostID        string `json:"post_id"`
 	CommentableID string `json:"commentable_id"`
 	AuthorID      string `json:"author_id"`
+	TargetUserID  string `json:"target_user_id"`
 }
