@@ -46,7 +46,6 @@ temp/
 
 # Backups
 backups/
-*.sql
 *.sql.gz
 
 # Frontend / Node.js

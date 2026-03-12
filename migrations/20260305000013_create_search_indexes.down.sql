@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS search_history;
+DROP TRIGGER IF EXISTS update_tracks_search_vector ON tracks;
+DROP TRIGGER IF EXISTS update_albums_search_vector ON albums;
+DROP TRIGGER IF EXISTS update_games_search_vector ON games;
+DROP FUNCTION IF EXISTS tracks_search_vector_update();
+DROP FUNCTION IF EXISTS albums_search_vector_update();
+DROP FUNCTION IF EXISTS games_search_vector_update();
+ALTER TABLE tracks DROP COLUMN IF EXISTS search_vector;
+ALTER TABLE albums DROP COLUMN IF EXISTS search_vector;
+ALTER TABLE games DROP COLUMN IF EXISTS search_vector;

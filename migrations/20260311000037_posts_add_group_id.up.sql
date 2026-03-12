@@ -1,0 +1,3 @@
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES groups(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_posts_group_id ON posts(group_id) WHERE group_id IS NOT NULL;

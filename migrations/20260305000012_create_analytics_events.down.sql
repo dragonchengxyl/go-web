@@ -1,0 +1,2 @@
+DROP MATERIALIZED VIEW IF EXISTS daily_metrics;
+DROP TABLE IF EXISTS analytics_events;
