@@ -93,25 +93,6 @@ func main() {
 		_ = consumer.Start(ctx, streams.GroupNotification, func(ctx context.Context, ev streams.StreamEvent) error {
 			switch ev.Type {
 			case streams.EventUserFollowed:
-				var p streams.UserFollowedPayload
-				if err := json.Unmarshal(ev.Payload, &p); err != nil {
-					return fmt.Errorf("notification-svc: unmarshal user.followed: %w", err)
-				}
-				followeeID, err := uuid.Parse(p.FolloweeID)
-				if err != nil {
-					return fmt.Errorf("notification-svc: invalid followee_id: %w", err)
-				}
-				followerID, err := uuid.Parse(p.FollowerID)
-				if err != nil {
-					return fmt.Errorf("notification-svc: invalid follower_id: %w", err)
-				}
-				return notificationService.Notify(ctx, &notification.Notification{
-					UserID:    followeeID,
-					Type:      notification.TypeFollow,
-					ActorID:   &followerID,
-					CreatedAt: time.Now(),
-				})
-
 			case streams.EventTipSent:
 				var p streams.TipSentPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
@@ -132,15 +113,10 @@ func main() {
 					CreatedAt: time.Now(),
 				})
 
-			case streams.EventCommentCreated:
-				var p streams.CommentCreatedPayload
+			case streams.EventPostModerated:
+				var p streams.PostModeratedPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
-					return fmt.Errorf("notification-svc: unmarshal comment.created: %w", err)
-				}
-				// Notify the post owner (commentable_id is the post/content owner).
-				commentableID, err := uuid.Parse(p.CommentableID)
-				if err != nil {
-					return fmt.Errorf("notification-svc: invalid commentable_id: %w", err)
+					return fmt.Errorf("notification-svc: unmarshal post.moderated: %w", err)
 				}
 				authorID, err := uuid.Parse(p.AuthorID)
 				if err != nil {
@@ -150,12 +126,17 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("notification-svc: invalid post_id: %w", err)
 				}
+
+				targetType := "post_blocked"
+				if p.Status == "approved" {
+					targetType = "post_approved"
+				}
+
 				return notificationService.Notify(ctx, &notification.Notification{
-					UserID:     commentableID,
-					Type:       notification.TypeComment,
-					ActorID:    &authorID,
+					UserID:     authorID,
+					Type:       notification.TypeSystem,
 					TargetID:   &postID,
-					TargetType: "post",
+					TargetType: targetType,
 					CreatedAt:  time.Now(),
 				})
 			}

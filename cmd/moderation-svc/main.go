@@ -135,8 +135,9 @@ func main() {
 			}
 
 			return publisher.Publish(ctx, streams.EventPostModerated, streams.PostModeratedPayload{
-				PostID: payload.PostID,
-				Status: pubStatus,
+				PostID:   payload.PostID,
+				AuthorID: payload.AuthorID,
+				Status:   pubStatus,
 			})
 		})
 	}()

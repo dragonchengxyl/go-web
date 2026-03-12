@@ -31,10 +31,22 @@ var RolePermissions = map[user.Role][]Permission{
 		OSTView, OSTDownloadHiFi,
 		UserView,
 	},
+	user.RoleSupporter: {
+		GameView,
+		CommentCreate, CommentDeleteOwn,
+		OSTView, OSTDownloadHiFi,
+		UserView,
+	},
 	user.RolePremium: {
 		GameView,
 		CommentCreate, CommentDeleteOwn,
 		OSTView, OSTDownloadHiFi,
+		UserView,
+	},
+	user.RoleMember: {
+		GameView,
+		CommentCreate, CommentDeleteOwn,
+		OSTView,
 		UserView,
 	},
 	user.RolePlayer: {

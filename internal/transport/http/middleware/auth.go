@@ -134,7 +134,9 @@ func hasRoleOrHigher(userRole, requiredRole user.Role) bool {
 		user.RoleAdmin:      6,
 		user.RoleModerator:  5,
 		user.RoleCreator:    4,
+		user.RoleSupporter:  3,
 		user.RolePremium:    3,
+		user.RoleMember:     2,
 		user.RolePlayer:     2,
 		user.RoleGuest:      1,
 	}
@@ -157,4 +159,3 @@ func GetUserID(c *gin.Context) uuid.UUID {
 	}
 	return userID
 }
-

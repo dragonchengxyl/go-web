@@ -66,15 +66,22 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Username: req.Username,
 		Email:    req.Email,
 		Password: req.Password,
+		IP:       c.ClientIP(),
+		Device:   c.GetHeader("User-Agent"),
 	}
 
-	u, err := h.userService.Register(c.Request.Context(), input)
+	output, err := h.userService.Register(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 
-	response.Success(c, toUserResponse(u))
+	response.Success(c, dto.AuthResponse{
+		User:         toUserResponse(output.User),
+		AccessToken:  output.Tokens.AccessToken,
+		RefreshToken: output.Tokens.RefreshToken,
+		ExpiresIn:    output.Tokens.ExpiresIn,
+	})
 }
 
 // Login handles user login

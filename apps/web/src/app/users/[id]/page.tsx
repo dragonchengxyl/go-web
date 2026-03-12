@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { UserPlus, UserMinus, MessageCircle, MapPin, Globe, ShieldX, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,7 @@ const ROLE_BADGE: Record<string, { label: string; color: string }> = {
 
 export default function UserProfilePage() {
   const params = useParams();
+  const router = useRouter();
   const userId = params.id as string;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -50,6 +51,7 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -133,6 +135,19 @@ export default function UserProfilePage() {
     }
   }
 
+  async function handleMessage() {
+    if (!apiClient.getToken() || !userId) return;
+    setMessageLoading(true);
+    try {
+      const conversation = await apiClient.createDirectConversation(userId);
+      router.push(`/messages/${conversation.id}`);
+    } catch {
+      router.push('/messages');
+    } finally {
+      setMessageLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto pt-20 px-4">
@@ -195,11 +210,9 @@ export default function UserProfilePage() {
                       <><UserPlus className="h-4 w-4 mr-1" />关注 TA</>
                     )}
                   </Button>
-                  <Link href="/messages">
-                    <Button variant="outline" size="sm">
-                      <MessageCircle className="h-4 w-4" />
-                    </Button>
-                  </Link>
+                  <Button variant="outline" size="sm" onClick={handleMessage} disabled={messageLoading}>
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

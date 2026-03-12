@@ -27,6 +27,8 @@ type RegisterInput struct {
 	Username string
 	Email    string
 	Password string
+	IP       string
+	Device   string
 }
 
 // LoginInput represents login input

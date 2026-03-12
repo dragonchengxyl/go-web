@@ -278,7 +278,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.POST("/reports", reportHandler.CreateReport)
 
 			// Block
-			blockHandler := handler.NewBlockHandler(cfg.BlockRepo)
+			blockHandler := handler.NewBlockHandler(cfg.BlockRepo, cfg.UserService)
 			protected.POST("/users/:id/block", blockHandler.Block)
 			protected.DELETE("/users/:id/block", blockHandler.Unblock)
 			protected.GET("/users/me/blocked", blockHandler.ListBlocked)

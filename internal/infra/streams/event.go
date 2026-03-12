@@ -36,8 +36,9 @@ type PostCreatedPayload struct {
 
 // PostModeratedPayload is published after moderation completes.
 type PostModeratedPayload struct {
-	PostID string `json:"post_id"`
-	Status string `json:"status"` // "approved" | "blocked"
+	PostID   string `json:"post_id"`
+	AuthorID string `json:"author_id"`
+	Status   string `json:"status"` // "approved" | "blocked"
 }
 
 // UserFollowedPayload is published when a user follows another.

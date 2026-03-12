@@ -6,14 +6,19 @@ import (
 	"github.com/studio/platform/internal/domain/block"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
+	"github.com/studio/platform/internal/usecase"
 )
 
 type BlockHandler struct {
-	repo block.Repository
+	repo        block.Repository
+	userService *usecase.UserService
 }
 
-func NewBlockHandler(repo block.Repository) *BlockHandler {
-	return &BlockHandler{repo: repo}
+func NewBlockHandler(repo block.Repository, userService *usecase.UserService) *BlockHandler {
+	return &BlockHandler{
+		repo:        repo,
+		userService: userService,
+	}
 }
 
 // Block POST /api/v1/users/:id/block
@@ -70,5 +75,24 @@ func (h *BlockHandler) ListBlocked(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, ids)
+
+	users := make([]gin.H, 0, len(ids))
+	for _, id := range ids {
+		u, err := h.userService.GetUserByID(c.Request.Context(), id)
+		if err != nil {
+			continue
+		}
+		users = append(users, gin.H{
+			"id":         u.ID.String(),
+			"username":   u.Username,
+			"furry_name": u.FurryName,
+			"species":    u.Species,
+			"avatar_key": u.AvatarKey,
+		})
+	}
+
+	response.Success(c, gin.H{
+		"users": users,
+		"total": len(users),
+	})
 }

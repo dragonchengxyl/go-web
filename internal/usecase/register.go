@@ -10,8 +10,8 @@ import (
 	"github.com/studio/platform/internal/pkg/crypto"
 )
 
-// Register registers a new user
-func (s *UserService) Register(ctx context.Context, input RegisterInput) (*user.User, error) {
+// Register creates a user and returns an authenticated session.
+func (s *UserService) Register(ctx context.Context, input RegisterInput) (*AuthOutput, error) {
 	// Validate email format
 	if err := crypto.ValidateEmail(input.Email); err != nil {
 		return nil, apperr.New(apperr.CodeInvalidParam, err.Error())
@@ -63,7 +63,7 @@ func (s *UserService) Register(ctx context.Context, input RegisterInput) (*user.
 		Username:     input.Username,
 		Email:        input.Email,
 		PasswordHash: passwordHash,
-		Role:         user.RolePlayer,
+		Role:         user.RoleMember,
 		Status:       user.StatusActive,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -73,5 +73,13 @@ func (s *UserService) Register(ctx context.Context, input RegisterInput) (*user.
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建用户失败", err)
 	}
 
-	return u, nil
+	tokens, err := s.generateTokens(ctx, u, input.Device, input.IP)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthOutput{
+		User:   u,
+		Tokens: tokens,
+	}, nil
 }

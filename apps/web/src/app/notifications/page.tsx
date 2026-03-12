@@ -44,6 +44,10 @@ function notificationText(n: Notification): string {
       return `${actor} 关注了你`;
     case 'tip':
       return `${actor} 给你打赏了`;
+    case 'system':
+      if (n.target_type === 'post_approved') return '你的帖子已通过审核';
+      if (n.target_type === 'post_blocked') return '你的帖子未通过审核';
+      return '你有一条系统通知';
     default:
       return '你有一条新通知';
   }
@@ -56,6 +60,9 @@ function notificationLink(n: Notification): string {
       return n.target_id ? `/posts/${n.target_id}` : '/feed';
     case 'follow':
       return n.target_id ? `/users/${n.target_id}` : '/feed';
+    case 'system':
+      if (n.target_type === 'post_approved' && n.target_id) return `/posts/${n.target_id}`;
+      return '/creator';
     default:
       return '/feed';
   }

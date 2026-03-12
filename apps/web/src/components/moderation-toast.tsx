@@ -16,13 +16,21 @@ export function ModerationToast() {
   useEffect(() => {
     return subscribe('notification', (payload: unknown) => {
       const p = payload as any;
-      if (p?.type === 'system' && p?.post_id && p?.status === 'approved') {
-        const id = ++nextIdRef.current;
-        setToasts(prev => [...prev, { id, message: '✓ 您的帖子已通过审核' }]);
-        setTimeout(() => {
-          setToasts(prev => prev.filter(t => t.id !== id));
-        }, 4000);
+      if (p?.type !== 'system' || !p?.target_id) return;
+
+      let message = '';
+      if (p.target_type === 'post_approved') {
+        message = '✓ 您的帖子已通过审核';
+      } else if (p.target_type === 'post_blocked') {
+        message = '帖子未通过审核，请修改后重试';
       }
+      if (!message) return;
+
+      const id = ++nextIdRef.current;
+      setToasts(prev => [...prev, { id, message }]);
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, 4000);
     });
   }, [subscribe]);
 
