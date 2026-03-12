@@ -9,6 +9,7 @@ server:
   mode: debug
   allow_origins:
     - http://localhost:3000
+  frontend_url: http://localhost:3000
 
 database:
   dsn: postgres://studio:password@localhost:5432/studio_db?sslmode=disable

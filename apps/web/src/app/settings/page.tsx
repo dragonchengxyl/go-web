@@ -12,6 +12,7 @@ interface UserProfile {
   id: string
   username: string
   email?: string
+  email_verified_at?: string
   bio?: string
   furry_name?: string
   species?: string
@@ -125,6 +126,8 @@ export default function SettingsPage() {
   const [blocked, setBlocked] = useState<BlockedUser[]>([]);
   const [loadingBlocked, setLoadingBlocked] = useState(false);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState('');
 
   useEffect(() => {
     apiClient.getMe().then(setProfile).catch(() => {});
@@ -155,6 +158,19 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleResendVerification() {
+    setResendingVerification(true);
+    setVerificationMessage('');
+    try {
+      const data = await apiClient.resendVerification();
+      setVerificationMessage(data.message || '验证邮件已发送');
+    } catch (err: any) {
+      setVerificationMessage(err.message || '发送失败，请稍后重试');
+    } finally {
+      setResendingVerification(false);
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
       <h1 className="text-2xl font-bold mb-6">设置</h1>
@@ -180,6 +196,21 @@ export default function SettingsPage() {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">邮箱</label>
                 <p className="mt-1 text-base">{profile?.email ?? '—'}</p>
+                {profile?.email && (
+                  <div className="mt-2 flex items-center gap-3 text-sm">
+                    <span className={profile.email_verified_at ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}>
+                      {profile.email_verified_at ? '已验证' : '未验证'}
+                    </span>
+                    {!profile.email_verified_at && (
+                      <Button variant="outline" size="sm" disabled={resendingVerification} onClick={handleResendVerification}>
+                        {resendingVerification ? '发送中...' : '重新发送验证邮件'}
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {verificationMessage && (
+                  <p className="mt-2 text-sm text-muted-foreground">{verificationMessage}</p>
+                )}
               </div>
               {profile?.furry_name && (
                 <div>

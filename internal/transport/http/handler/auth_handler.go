@@ -161,6 +161,34 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	response.Success(c, gin.H{"message": "密码重置成功，请重新登录"})
 }
 
+// VerifyEmail verifies a user's email using a valid token.
+func (h *AuthHandler) VerifyEmail(c *gin.Context) {
+	var req dto.VerifyEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.ErrValidationFailed.WithDetail(err.Error()))
+		return
+	}
+	if err := h.userService.VerifyEmail(c.Request.Context(), req.Token); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "邮箱验证成功"})
+}
+
+// ResendVerification sends a new verification email for the current user.
+func (h *AuthHandler) ResendVerification(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	if err := h.userService.ResendVerificationEmail(c.Request.Context(), uid); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "验证邮件已重新发送"})
+}
+
 // ChangePassword handles password change for authenticated users
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	uid, ok := getUserID(c)
@@ -206,14 +234,20 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 // toUserResponse converts user entity to response DTO
 func toUserResponse(u *user.User) *dto.UserResponse {
+	var emailVerifiedAt *string
+	if u.EmailVerifiedAt != nil {
+		value := u.EmailVerifiedAt.Format(time.RFC3339)
+		emailVerifiedAt = &value
+	}
 	return &dto.UserResponse{
-		ID:       u.ID.String(),
-		Username: u.Username,
-		Email:    u.Email,
-		Avatar:   u.AvatarKey,
-		Bio:      u.Bio,
-		Location: u.Location,
-		Role:     string(u.Role),
-		Status:   string(u.Status),
+		ID:              u.ID.String(),
+		Username:        u.Username,
+		Email:           u.Email,
+		Avatar:          u.AvatarKey,
+		Bio:             u.Bio,
+		Location:        u.Location,
+		Role:            string(u.Role),
+		Status:          string(u.Status),
+		EmailVerifiedAt: emailVerifiedAt,
 	}
 }

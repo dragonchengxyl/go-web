@@ -22,6 +22,7 @@ type ServerConfig struct {
 	Port         int      `mapstructure:"port"`
 	Mode         string   `mapstructure:"mode"`
 	AllowOrigins []string `mapstructure:"allow_origins"`
+	FrontendURL  string   `mapstructure:"frontend_url"`
 }
 
 type DatabaseConfig struct {
@@ -43,13 +44,13 @@ type JWTConfig struct {
 }
 
 type OSSConfig struct {
-	Provider        string   `mapstructure:"provider"`          // "aliyun" or "r2"
+	Provider        string   `mapstructure:"provider"` // "aliyun" or "r2"
 	AccessKeyID     string   `mapstructure:"access_key_id"`
 	AccessKeySecret string   `mapstructure:"access_key_secret"`
 	Bucket          string   `mapstructure:"bucket"`
 	Endpoint        string   `mapstructure:"endpoint"`
-	Region          string   `mapstructure:"region"`            // "auto" for R2
-	AllowedHosts    []string `mapstructure:"allowed_hosts"`     // validated media URL hosts
+	Region          string   `mapstructure:"region"`        // "auto" for R2
+	AllowedHosts    []string `mapstructure:"allowed_hosts"` // validated media URL hosts
 }
 
 type RateLimitConfig struct {
@@ -96,11 +97,11 @@ type ModerationConfig struct {
 
 // SponsorConfig holds sponsor dashboard display data.
 type SponsorConfig struct {
-	MonthlyGoal    float64 `mapstructure:"monthly_goal"`
-	CurrentRaised  float64 `mapstructure:"current_raised"`
-	AlipayQRURL    string  `mapstructure:"alipay_qr_url"`
-	WechatQRURL    string  `mapstructure:"wechat_qr_url"`
-	Message        string  `mapstructure:"message"`
+	MonthlyGoal   float64 `mapstructure:"monthly_goal"`
+	CurrentRaised float64 `mapstructure:"current_raised"`
+	AlipayQRURL   string  `mapstructure:"alipay_qr_url"`
+	WechatQRURL   string  `mapstructure:"wechat_qr_url"`
+	Message       string  `mapstructure:"message"`
 }
 
 // GRPCConfig holds gRPC service addresses and ports.
@@ -114,4 +115,3 @@ type GRPCConfig struct {
 	NotificationPort int `mapstructure:"notification_port"`
 	ModerationPort   int `mapstructure:"moderation_port"`
 }
-

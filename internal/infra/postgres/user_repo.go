@@ -105,15 +105,15 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*u
 
 const updateUserSQL = `
 	UPDATE users
-	SET username = $2, email = $3, avatar_key = $4, bio = $5, website = $6, location = $7,
-	    furry_name = $8, species = $9, role = $10, status = $11, updated_at = $12
+	SET username = $2, email = $3, password_hash = $4, avatar_key = $5, bio = $6, website = $7, location = $8,
+	    furry_name = $9, species = $10, role = $11, status = $12, email_verified_at = $13, updated_at = $14
 	WHERE id = $1
 `
 
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 	_, err := r.pool.Exec(ctx, updateUserSQL,
-		u.ID, u.Username, u.Email, u.AvatarKey, u.Bio, u.Website, u.Location,
-		u.FurryName, u.Species, u.Role, u.Status, u.UpdatedAt,
+		u.ID, u.Username, u.Email, u.PasswordHash, u.AvatarKey, u.Bio, u.Website, u.Location,
+		u.FurryName, u.Species, u.Role, u.Status, u.EmailVerifiedAt, u.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)

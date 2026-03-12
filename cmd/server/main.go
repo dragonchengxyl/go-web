@@ -23,6 +23,7 @@ import (
 	"github.com/studio/platform/internal/infra/postgres"
 	"github.com/studio/platform/internal/infra/redis"
 	"github.com/studio/platform/internal/infra/streams"
+	pkgemail "github.com/studio/platform/internal/pkg/email"
 	transporthttp "github.com/studio/platform/internal/transport/http"
 	"github.com/studio/platform/internal/transport/ws"
 	"github.com/studio/platform/internal/usecase"
@@ -114,14 +115,31 @@ func main() {
 		wechatGW = paymentwechat.New(cfg.Payment.Wechat)
 	}
 
+	frontendURL := cfg.Server.FrontendURL
+	if frontendURL == "" {
+		for _, origin := range cfg.Server.AllowOrigins {
+			if origin != "" && origin != "*" {
+				frontendURL = origin
+				break
+			}
+		}
+	}
+	emailSender := pkgemail.NewSender(cfg.Email)
+
+	userOpts := make([]usecase.UserServiceOption, 0, 1)
+	if emailSender.Enabled() && frontendURL != "" {
+		userOpts = append(userOpts, usecase.WithEmailSender(emailSender, frontendURL))
+		logger.Info("Account email delivery enabled", zap.String("frontend_url", frontendURL))
+	}
+
 	// Initialize services
-	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT)
+	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT, userOpts...)
 	musicService := usecase.NewMusicService(albumRepo, trackRepo, storageService)
 
 	// Redis Streams publisher (event bus)
 	publisher := streams.NewPublisher(redisClient)
 
-	commentService := usecase.NewCommentService(commentRepo, usecase.WithCommentPublisher(publisher))
+	commentService := usecase.NewCommentService(commentRepo)
 	paymentService := usecase.NewPaymentService(orderRepo, alipayGW, wechatGW)
 	searchService := usecase.NewSearchService(pool)
 
@@ -157,7 +175,7 @@ func main() {
 		logger.Info("Aliyun Green content moderation enabled")
 	}
 	postService := usecase.NewPostService(postRepo, postOpts...)
-	followService := usecase.NewFollowService(followRepo, usecase.WithFollowPublisher(publisher))
+	followService := usecase.NewFollowService(followRepo)
 	chatService := usecase.NewChatService(chatRepo)
 	tipService := usecase.NewTipService(orderRepo, usecase.WithTipPublisher(publisher))
 	ossService := usecase.NewOSSService(storageService)

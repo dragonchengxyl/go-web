@@ -73,6 +73,8 @@ func (s *UserService) Register(ctx context.Context, input RegisterInput) (*AuthO
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建用户失败", err)
 	}
 
+	_ = s.sendVerificationEmail(ctx, u)
+
 	tokens, err := s.generateTokens(ctx, u, input.Device, input.IP)
 	if err != nil {
 		return nil, err

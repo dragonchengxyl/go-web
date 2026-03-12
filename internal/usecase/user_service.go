@@ -6,20 +6,40 @@ import (
 	"github.com/studio/platform/internal/infra/redis"
 )
 
-// UserService handles user-related business logic
-type UserService struct {
-	userRepo   user.Repository
-	tokenStore *redis.TokenStore
-	jwtConfig  configs.JWTConfig
+type EmailSender interface {
+	SendPasswordReset(to, username, resetURL string) error
+	SendEmailVerification(to, username, verifyURL string) error
 }
 
-// NewUserService creates a new UserService
-func NewUserService(userRepo user.Repository, tokenStore *redis.TokenStore, jwtConfig configs.JWTConfig) *UserService {
-	return &UserService{
+// UserService handles user-related business logic
+type UserService struct {
+	userRepo    user.Repository
+	tokenStore  *redis.TokenStore
+	jwtConfig   configs.JWTConfig
+	emailSender EmailSender
+	frontendURL string
+}
+
+type UserServiceOption func(*UserService)
+
+func WithEmailSender(sender EmailSender, frontendURL string) UserServiceOption {
+	return func(s *UserService) {
+		s.emailSender = sender
+		s.frontendURL = frontendURL
+	}
+}
+
+// NewUserService creates a new UserService.
+func NewUserService(userRepo user.Repository, tokenStore *redis.TokenStore, jwtConfig configs.JWTConfig, opts ...UserServiceOption) *UserService {
+	svc := &UserService{
 		userRepo:   userRepo,
 		tokenStore: tokenStore,
 		jwtConfig:  jwtConfig,
 	}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // RegisterInput represents registration input

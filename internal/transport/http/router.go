@@ -98,6 +98,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			auth.POST("/refresh", authHandler.RefreshToken)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
+			auth.POST("/verify-email", authHandler.VerifyEmail)
 		}
 
 		// Search
@@ -181,6 +182,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		{
 			protected.POST("/auth/logout", authHandler.Logout)
 			protected.PUT("/auth/password", authHandler.ChangePassword)
+			protected.POST("/auth/resend-verification", authHandler.ResendVerification)
 
 			// Profile
 			protected.GET("/users/me", userHandler.GetProfile)

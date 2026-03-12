@@ -12,6 +12,7 @@ server:
   mode: release
   allow_origins:
     - https://your-domain.com        # 改为你的生产域名
+  frontend_url: https://your-domain.com
 
 database:
   dsn: postgres://user:password@host:5432/dbname?sslmode=require

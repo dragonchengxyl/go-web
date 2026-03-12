@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/user"
@@ -40,6 +41,7 @@ func (s *UserService) ChangePassword(ctx context.Context, userID uuid.UUID, inpu
 	}
 
 	u.PasswordHash = newHash
+	u.UpdatedAt = time.Now()
 	if err := s.userRepo.Update(ctx, u); err != nil {
 		return apperr.Wrap(apperr.CodeInternalError, "更新密码失败", err)
 	}

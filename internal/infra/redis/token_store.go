@@ -120,3 +120,28 @@ func (s *TokenStore) DeleteResetToken(ctx context.Context, token string) error {
 	key := fmt.Sprintf("auth:reset:%s", token)
 	return s.client.Del(ctx, key).Err()
 }
+
+// SaveVerifyEmailToken stores an email-verification token mapped to a user ID (24-hour TTL)
+func (s *TokenStore) SaveVerifyEmailToken(ctx context.Context, token, userID string) error {
+	key := fmt.Sprintf("auth:verify:%s", token)
+	return s.client.Set(ctx, key, userID, 24*time.Hour).Err()
+}
+
+// GetVerifyEmailToken returns the user ID associated with the verification token.
+func (s *TokenStore) GetVerifyEmailToken(ctx context.Context, token string) (string, error) {
+	key := fmt.Sprintf("auth:verify:%s", token)
+	val, err := s.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return "", fmt.Errorf("verify token not found or expired")
+		}
+		return "", fmt.Errorf("failed to get verify token: %w", err)
+	}
+	return val, nil
+}
+
+// DeleteVerifyEmailToken removes a used email-verification token.
+func (s *TokenStore) DeleteVerifyEmailToken(ctx context.Context, token string) error {
+	key := fmt.Sprintf("auth:verify:%s", token)
+	return s.client.Del(ctx, key).Err()
+}

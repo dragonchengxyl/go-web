@@ -267,6 +267,14 @@ class ApiClient {
     return this.post<void>('/auth/logout')
   }
 
+  async verifyEmail(token: string) {
+    return this.post<{ message: string }>('/auth/verify-email', { token })
+  }
+
+  async resendVerification() {
+    return this.post<{ message: string }>('/auth/resend-verification')
+  }
+
   // ── Posts ─────────────────────────────────────────────────────────────
 
   async getFeed(page?: number, pageSize?: number) {

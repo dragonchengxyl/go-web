@@ -92,7 +92,6 @@ func main() {
 		logger.Info("Starting notification stream consumer")
 		_ = consumer.Start(ctx, streams.GroupNotification, func(ctx context.Context, ev streams.StreamEvent) error {
 			switch ev.Type {
-			case streams.EventUserFollowed:
 			case streams.EventTipSent:
 				var p streams.TipSentPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {

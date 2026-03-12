@@ -14,6 +14,7 @@ server:
   port: 8080
   mode: release
   allow_origins: []  # Set via STUDIO_SERVER_ALLOW_ORIGINS or config.local.yaml
+  frontend_url: ""   # Optional: password-reset links will use this URL when set
 
 database:
   dsn: ""            # Required: set via STUDIO_DATABASE_DSN or config.local.yaml

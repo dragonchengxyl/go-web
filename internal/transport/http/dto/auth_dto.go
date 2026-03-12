@@ -35,16 +35,22 @@ type ResetPasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required,min=8,max=72"`
 }
 
+// VerifyEmailRequest represents an email verification request.
+type VerifyEmailRequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
 // UserResponse represents user response
 type UserResponse struct {
-	ID       string  `json:"id"`
-	Username string  `json:"username"`
-	Email    string  `json:"email"`
-	Avatar   *string `json:"avatar,omitempty"`
-	Bio      *string `json:"bio,omitempty"`
-	Location *string `json:"location,omitempty"`
-	Role     string  `json:"role"`
-	Status   string  `json:"status"`
+	ID              string  `json:"id"`
+	Username        string  `json:"username"`
+	Email           string  `json:"email"`
+	Avatar          *string `json:"avatar,omitempty"`
+	Bio             *string `json:"bio,omitempty"`
+	Location        *string `json:"location,omitempty"`
+	Role            string  `json:"role"`
+	Status          string  `json:"status"`
+	EmailVerifiedAt *string `json:"email_verified_at,omitempty"`
 }
 
 // AuthResponse represents authentication response
