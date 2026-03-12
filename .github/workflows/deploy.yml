@@ -1,122 +1,38 @@
-name: Deploy to Kubernetes
+name: Deploy to Server
 
 on:
-  # Only trigger manually - requires Kubernetes cluster configured
-  # Automatic deploy will be enabled once KUBE_CONFIG secret is set
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        type: choice
-        options:
-          - dev
-          - staging
-          - production
   push:
-    tags: ['v*']
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Determine environment
-        id: env
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "env=${{ inputs.environment }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "env=production" >> $GITHUB_OUTPUT
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "env=staging" >> $GITHUB_OUTPUT
-            echo "tag=staging-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          else
-            echo "env=dev" >> $GITHUB_OUTPUT
-            echo "tag=dev-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          version: 'v1.28.0'
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 600s
+          script: |
+            set -e
+            cd /opt/furry-app
 
-      - name: Configure kubectl
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+            echo "📦 拉取最新代码..."
+            git pull origin main
 
-      - name: Update image tags
-        if: steps.env.outputs.tag != ''
-        run: |
-          cd k8s/overlays/${{ steps.env.outputs.env }}
-          kustomize edit set image \
-            ghcr.io/studio/backend=ghcr.io/studio/backend:${{ steps.env.outputs.tag }} \
-            ghcr.io/studio/frontend=ghcr.io/studio/frontend:${{ steps.env.outputs.tag }}
+            echo "🔨 编译后端..."
+            export PATH=$PATH:/usr/local/go/bin
+            go build -o bin/server ./cmd/server
+            systemctl restart furry-backend
+            sleep 2
+            curl -sf http://localhost:8080/health > /dev/null && echo "✓ 后端运行正常"
 
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -k k8s/overlays/${{ steps.env.outputs.env }}
+            echo "🎨 编译前端..."
+            cd apps/web
+            pnpm install --frozen-lockfile
+            pnpm build
+            pm2 restart furry-web
 
-      - name: Wait for rollout
-        run: |
-          kubectl rollout status deployment/studio-backend -n studio-${{ steps.env.outputs.env }} --timeout=5m
-          kubectl rollout status deployment/studio-frontend -n studio-${{ steps.env.outputs.env }} --timeout=5m
-
-      - name: Health check
-        id: health
-        run: |
-          sleep 30
-          NAMESPACE="studio-${{ steps.env.outputs.env }}"
-          if [[ "${{ steps.env.outputs.env }}" == "production" ]]; then
-            NAMESPACE="studio"
-          fi
-
-          # Get backend pod
-          POD=$(kubectl get pod -n $NAMESPACE -l app=studio-backend -o jsonpath='{.items[0].metadata.name}')
-
-          # Check health endpoint
-          for i in {1..10}; do
-            if kubectl exec -n $NAMESPACE $POD -- wget -q -O- http://localhost:8080/health | grep -q "ok"; then
-              echo "Health check passed"
-              exit 0
-            fi
-            echo "Attempt $i failed, retrying..."
-            sleep 10
-          done
-
-          echo "Health check failed"
-          exit 1
-
-      - name: Rollback on failure
-        if: failure() && steps.health.outcome == 'failure'
-        run: |
-          NAMESPACE="studio-${{ steps.env.outputs.env }}"
-          if [[ "${{ steps.env.outputs.env }}" == "production" ]]; then
-            NAMESPACE="studio"
-          fi
-
-          echo "Rolling back deployment..."
-          kubectl rollout undo deployment/studio-backend -n $NAMESPACE
-          kubectl rollout undo deployment/studio-frontend -n $NAMESPACE
-
-          echo "Waiting for rollback to complete..."
-          kubectl rollout status deployment/studio-backend -n $NAMESPACE --timeout=3m
-          kubectl rollout status deployment/studio-frontend -n $NAMESPACE --timeout=3m
-
-      - name: Notify deployment status
-        if: always()
-        run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            echo "✅ Deployment to ${{ steps.env.outputs.env }} succeeded"
-          else
-            echo "❌ Deployment to ${{ steps.env.outputs.env }} failed"
-          fi
+            echo "✅ 部署完成！"
