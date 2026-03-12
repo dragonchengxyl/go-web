@@ -51,32 +51,10 @@ func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
 	response.Success(c, stats)
 }
 
-// GetRevenueChart returns daily revenue chart data
-func (h *AdminHandler) GetRevenueChart(c *gin.Context) {
-	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))
-	data, err := h.statsService.GetRevenueChart(c.Request.Context(), days)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, data)
-}
-
 // GetUserGrowthChart returns daily user registration chart data
 func (h *AdminHandler) GetUserGrowthChart(c *gin.Context) {
 	days, _ := strconv.Atoi(c.DefaultQuery("days", "30"))
 	data, err := h.statsService.GetUserGrowthChart(c.Request.Context(), days)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, data)
-}
-
-// GetPopularGames returns top games by download count
-func (h *AdminHandler) GetPopularGames(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
-	data, err := h.statsService.GetPopularGames(c.Request.Context(), limit)
 	if err != nil {
 		response.Error(c, err)
 		return

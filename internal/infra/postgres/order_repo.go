@@ -79,83 +79,31 @@ func (r *orderRepo) GetByID(ctx context.Context, id uuid.UUID) (*order.Order, er
 	return &o, nil
 }
 
-const getOrderByOrderNoSQL = `
+const listTipsReceivedByUserSQL = `
 	SELECT id, order_no, user_id, status, total_cents, currency, discount_cents, coupon_code, payment_method, paid_at, idempotency_key, metadata, created_at, expires_at, updated_at
-	FROM orders WHERE order_no = $1
-`
-
-func (r *orderRepo) GetByOrderNo(ctx context.Context, orderNo string) (*order.Order, error) {
-	var o order.Order
-	var metadataJSON []byte
-	err := r.db.QueryRow(ctx, getOrderByOrderNoSQL, orderNo).Scan(
-		&o.ID, &o.OrderNo, &o.UserID, &o.Status, &o.TotalCents, &o.Currency,
-		&o.DiscountCents, &o.CouponCode, &o.PaymentMethod, &o.PaidAt,
-		&o.IdempotencyKey, &metadataJSON, &o.CreatedAt, &o.ExpiresAt, &o.UpdatedAt,
-	)
-	if err == pgx.ErrNoRows {
-		return nil, apperr.NotFound("order", "order_no", orderNo)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get order by order_no: %w", err)
-	}
-
-	if len(metadataJSON) > 0 {
-		if err := json.Unmarshal(metadataJSON, &o.Metadata); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
-		}
-	}
-
-	return &o, nil
-}
-
-const getOrderByIdempotencyKeySQL = `
-	SELECT id, order_no, user_id, status, total_cents, currency, discount_cents, coupon_code, payment_method, paid_at, idempotency_key, metadata, created_at, expires_at, updated_at
-	FROM orders WHERE idempotency_key = $1
-`
-
-func (r *orderRepo) GetByIdempotencyKey(ctx context.Context, key string) (*order.Order, error) {
-	var o order.Order
-	var metadataJSON []byte
-	err := r.db.QueryRow(ctx, getOrderByIdempotencyKeySQL, key).Scan(
-		&o.ID, &o.OrderNo, &o.UserID, &o.Status, &o.TotalCents, &o.Currency,
-		&o.DiscountCents, &o.CouponCode, &o.PaymentMethod, &o.PaidAt,
-		&o.IdempotencyKey, &metadataJSON, &o.CreatedAt, &o.ExpiresAt, &o.UpdatedAt,
-	)
-	if err == pgx.ErrNoRows {
-		return nil, nil // 幂等性键不存在时返回nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get order by idempotency_key: %w", err)
-	}
-
-	if len(metadataJSON) > 0 {
-		if err := json.Unmarshal(metadataJSON, &o.Metadata); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
-		}
-	}
-
-	return &o, nil
-}
-
-const listOrdersByUserIDSQL = `
-	SELECT id, order_no, user_id, status, total_cents, currency, discount_cents, coupon_code, payment_method, paid_at, idempotency_key, metadata, created_at, expires_at, updated_at
-	FROM orders WHERE user_id = $1
+	FROM orders
+	WHERE metadata->>'type' = 'tip' AND metadata->>'to_user_id' = $1
 	ORDER BY created_at DESC
 	LIMIT $2 OFFSET $3
 `
 
-const countOrdersByUserIDSQL = `SELECT COUNT(*) FROM orders WHERE user_id = $1`
+const countTipsReceivedByUserSQL = `
+	SELECT COUNT(*)
+	FROM orders
+	WHERE metadata->>'type' = 'tip' AND metadata->>'to_user_id' = $1
+`
 
-func (r *orderRepo) ListByUserID(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*order.Order, int, error) {
+func (r *orderRepo) ListTipsReceivedByUser(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*order.Order, int, error) {
 	var total int
-	if err := r.db.QueryRow(ctx, countOrdersByUserIDSQL, userID).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("failed to count orders: %w", err)
+	userIDStr := userID.String()
+	if err := r.db.QueryRow(ctx, countTipsReceivedByUserSQL, userIDStr).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count received tips: %w", err)
 	}
 
 	offset := (page - 1) * pageSize
-	rows, err := r.db.Query(ctx, listOrdersByUserIDSQL, userID, pageSize, offset)
+	rows, err := r.db.Query(ctx, listTipsReceivedByUserSQL, userIDStr, pageSize, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list orders: %w", err)
+		return nil, 0, fmt.Errorf("failed to list received tips: %w", err)
 	}
 	defer rows.Close()
 
@@ -166,7 +114,7 @@ func (r *orderRepo) ListByUserID(ctx context.Context, userID uuid.UUID, page, pa
 		if err := rows.Scan(&o.ID, &o.OrderNo, &o.UserID, &o.Status, &o.TotalCents, &o.Currency,
 			&o.DiscountCents, &o.CouponCode, &o.PaymentMethod, &o.PaidAt,
 			&o.IdempotencyKey, &metadataJSON, &o.CreatedAt, &o.ExpiresAt, &o.UpdatedAt); err != nil {
-			return nil, 0, fmt.Errorf("failed to scan order: %w", err)
+			return nil, 0, fmt.Errorf("failed to scan received tip: %w", err)
 		}
 
 		if len(metadataJSON) > 0 {
@@ -179,6 +127,23 @@ func (r *orderRepo) ListByUserID(ctx context.Context, userID uuid.UUID, page, pa
 	}
 
 	return orders, total, nil
+}
+
+const getTipStatsByUserSQL = `
+	SELECT COUNT(*), COALESCE(SUM(total_cents), 0)
+	FROM orders
+	WHERE metadata->>'type' = 'tip'
+	  AND metadata->>'to_user_id' = $1
+	  AND status = 'paid'
+`
+
+func (r *orderRepo) GetTipStatsByUser(ctx context.Context, userID uuid.UUID) (int64, int64, error) {
+	var tipCount int64
+	var totalCents int64
+	if err := r.db.QueryRow(ctx, getTipStatsByUserSQL, userID.String()).Scan(&tipCount, &totalCents); err != nil {
+		return 0, 0, fmt.Errorf("failed to get tip stats: %w", err)
+	}
+	return totalCents, tipCount, nil
 }
 
 const updateOrderSQL = `
@@ -214,47 +179,6 @@ func (r *orderRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status order
 		return fmt.Errorf("failed to update order status: %w", err)
 	}
 	return nil
-}
-
-const createOrderItemSQL = `
-	INSERT INTO order_items (id, order_id, product_id, price_cents, quantity)
-	VALUES ($1, $2, $3, $4, $5)
-	RETURNING created_at
-`
-
-func (r *orderRepo) CreateItem(ctx context.Context, item *order.OrderItem) error {
-	item.ID = uuid.New()
-	err := r.db.QueryRow(ctx, createOrderItemSQL,
-		item.ID, item.OrderID, item.ProductID, item.PriceCents, item.Quantity,
-	).Scan(&item.CreatedAt)
-	if err != nil {
-		return fmt.Errorf("failed to create order item: %w", err)
-	}
-	return nil
-}
-
-const getOrderItemsByOrderIDSQL = `
-	SELECT id, order_id, product_id, price_cents, quantity, created_at
-	FROM order_items WHERE order_id = $1
-`
-
-func (r *orderRepo) GetItemsByOrderID(ctx context.Context, orderID uuid.UUID) ([]*order.OrderItem, error) {
-	rows, err := r.db.Query(ctx, getOrderItemsByOrderIDSQL, orderID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get order items: %w", err)
-	}
-	defer rows.Close()
-
-	items := []*order.OrderItem{}
-	for rows.Next() {
-		var item order.OrderItem
-		if err := rows.Scan(&item.ID, &item.OrderID, &item.ProductID, &item.PriceCents, &item.Quantity, &item.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan order item: %w", err)
-		}
-		items = append(items, &item)
-	}
-
-	return items, nil
 }
 
 const cancelExpiredOrdersSQL = `

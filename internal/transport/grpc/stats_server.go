@@ -3,9 +3,9 @@ package grpc
 import (
 	"context"
 
+	"github.com/studio/platform/internal/usecase"
 	commonv1 "github.com/studio/platform/proto/common/v1"
 	statsv1 "github.com/studio/platform/proto/stats/v1"
-	"github.com/studio/platform/internal/usecase"
 )
 
 // StatsServer implements statsv1.StatsServiceServer using the local StatsService.
@@ -20,36 +20,17 @@ func NewStatsServer(svc *usecase.StatsService) *StatsServer {
 }
 
 // GetDashboardStats returns dashboard metrics.
-func (s *StatsServer) GetDashboardStats(ctx context.Context, _ *commonv1.Empty) (*statsv1.DashboardStatsProto, error) {
+func (s *StatsServer) GetDashboardStats(ctx context.Context, _ *commonv1.Empty) (*statsv1.DashboardStats, error) {
 	stats, err := s.svc.GetDashboardStats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &statsv1.DashboardStatsProto{
-		TotalUsers:     stats.TotalUsers,
-		NewUsersToday:  stats.NewUsersToday,
-		TotalDownloads: stats.TotalDownloads,
-		DownloadsToday: stats.DownloadsToday,
-		TotalRevenue:   stats.TotalRevenue,
-		RevenueToday:   stats.RevenueToday,
-		TotalGames:     stats.TotalGames,
-		TotalOrders:    stats.TotalOrders,
-		TotalPosts:     stats.TotalPosts,
-		TotalReports:   stats.TotalReports,
+	return &statsv1.DashboardStats{
+		TotalUsers:    stats.TotalUsers,
+		NewUsersToday: stats.NewUsersToday,
+		TotalPosts:    stats.TotalPosts,
+		TotalReports:  stats.TotalReports,
 	}, nil
-}
-
-// GetRevenueChart returns revenue chart data.
-func (s *StatsServer) GetRevenueChart(ctx context.Context, req *statsv1.ChartRequest) (*statsv1.ChartResponse, error) {
-	points, err := s.svc.GetRevenueChart(ctx, int(req.Days))
-	if err != nil {
-		return nil, err
-	}
-	resp := &statsv1.ChartResponse{Points: make([]*statsv1.ChartPointProto, len(points))}
-	for i, p := range points {
-		resp.Points[i] = &statsv1.ChartPointProto{Date: p.Date, Value: p.Value}
-	}
-	return resp, nil
 }
 
 // StreamUserGrowth streams user growth data points.
@@ -59,7 +40,7 @@ func (s *StatsServer) StreamUserGrowth(req *statsv1.ChartRequest, stream statsv1
 		return err
 	}
 	for _, p := range points {
-		if err := stream.Send(&statsv1.ChartPointProto{Date: p.Date, Value: p.Value}); err != nil {
+		if err := stream.Send(&statsv1.ChartPoint{Date: p.Date, Value: p.Value}); err != nil {
 			return err
 		}
 	}

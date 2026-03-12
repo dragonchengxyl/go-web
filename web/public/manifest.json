@@ -1,7 +1,7 @@
 {
-  "name": "Studio Platform",
-  "short_name": "Studio",
-  "description": "独立游戏工作室全矩阵中台与社区平台",
+  "name": "Furry 同好社区",
+  "short_name": "Furry",
+  "description": "面向 Furry 爱好者的社区平台",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -71,28 +71,28 @@
       "form_factor": "narrow"
     }
   ],
-  "categories": ["games", "entertainment", "music"],
+  "categories": ["social", "entertainment", "music"],
   "shortcuts": [
     {
-      "name": "Games",
-      "short_name": "Games",
-      "description": "Browse all games",
-      "url": "/games",
+      "name": "动态",
+      "short_name": "动态",
+      "description": "浏览社区内容",
+      "url": "/feed",
       "icons": [
         {
-          "src": "/icons/games-96x96.png",
+          "src": "/icons/icon-96x96.png",
           "sizes": "96x96"
         }
       ]
     },
     {
-      "name": "Music",
-      "short_name": "Music",
-      "description": "Browse music albums",
-      "url": "/music",
+      "name": "圈子",
+      "short_name": "圈子",
+      "description": "发现兴趣圈子",
+      "url": "/groups",
       "icons": [
         {
-          "src": "/icons/music-96x96.png",
+          "src": "/icons/icon-96x96.png",
           "sizes": "96x96"
         }
       ]

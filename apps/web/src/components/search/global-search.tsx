@@ -7,27 +7,11 @@ import { Search, X } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 import { Input } from '@/components/ui/input'
 
-interface SearchSuggestion {
-  type: 'game' | 'album'
-  title: string
-  url: string
-}
-
 export function GlobalSearch() {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
-
-  const { data: suggestions } = useQuery<SearchSuggestion[]>({
-    queryKey: ['search-suggestions', query],
-    queryFn: async () => {
-      if (query.length < 2) return []
-      const response = await apiClient.get(`/search/suggestions?q=${encodeURIComponent(query)}`)
-      return response
-    },
-    enabled: query.length >= 2,
-  })
 
   const { data: popularSearches } = useQuery<string[]>({
     queryKey: ['popular-searches'],
@@ -62,19 +46,13 @@ export function GlobalSearch() {
     }
   }
 
-  const handleSuggestionClick = (url: string) => {
-    router.push(url)
-    setIsOpen(false)
-    setQuery('')
-  }
-
   return (
     <div ref={searchRef} className="relative w-full max-w-xl">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input
           type="text"
-          placeholder="搜索游戏、音乐..."
+          placeholder="搜索动态、用户、圈子、音乐..."
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
@@ -99,26 +77,7 @@ export function GlobalSearch() {
 
       {isOpen && (
         <div className="absolute top-full mt-2 w-full bg-white border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
-          {query.length >= 2 && suggestions && suggestions.length > 0 ? (
-            <div className="py-2">
-              <p className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">搜索建议</p>
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleSuggestionClick(suggestion.url)}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
-                >
-                  <Search className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="font-medium">{suggestion.title}</p>
-                    <p className="text-xs text-gray-500">
-                      {suggestion.type === 'game' ? '游戏' : '音乐'}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : query.length < 2 && popularSearches && popularSearches.length > 0 ? (
+          {query.length < 2 && popularSearches && popularSearches.length > 0 ? (
             <div className="py-2">
               <p className="px-4 py-2 text-xs font-medium text-gray-500 uppercase">热门搜索</p>
               {popularSearches.map((search, index) => (
@@ -133,8 +92,13 @@ export function GlobalSearch() {
               ))}
             </div>
           ) : query.length >= 2 ? (
-            <div className="py-8 text-center text-gray-500">
-              <p>未找到相关结果</p>
+            <div className="py-3 px-4 text-sm text-gray-500">
+              <button
+                onClick={() => handleSearch(query)}
+                className="w-full text-left hover:text-gray-900 transition-colors"
+              >
+                搜索 “{query}”
+              </button>
             </div>
           ) : null}
         </div>

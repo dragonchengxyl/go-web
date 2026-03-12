@@ -10,9 +10,6 @@ setup: ## Initialize project dependencies
 build: ## Build the application
 	go build -o bin/server ./cmd/server
 
-build-cli: ## Build the CLI tool
-	go build -o bin/studio-cli ./cmd/studio-cli
-
 proto-gen: ## Generate Go code from proto files
 	protoc --go_out=. --go_opt=paths=source_relative \
 	       --go-grpc_out=. --go-grpc_opt=paths=source_relative \
@@ -32,7 +29,6 @@ build-notification-svc: ## Build the notification microservice
 
 build-all: ## Build all binaries
 	@make build
-	@make build-cli
 	@make build-stats-svc
 	@make build-moderation-svc
 	@make build-notification-svc

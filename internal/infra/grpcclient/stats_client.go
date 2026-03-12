@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/studio/platform/internal/usecase"
 	commonv1 "github.com/studio/platform/proto/common/v1"
 	statsv1 "github.com/studio/platform/proto/stats/v1"
-	"github.com/studio/platform/internal/usecase"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
@@ -52,33 +52,11 @@ func (c *StatsGRPCClient) GetDashboardStats(ctx context.Context) (*usecase.Dashb
 		return nil, err
 	}
 	return &usecase.DashboardStats{
-		TotalUsers:     resp.TotalUsers,
-		NewUsersToday:  resp.NewUsersToday,
-		TotalDownloads: resp.TotalDownloads,
-		DownloadsToday: resp.DownloadsToday,
-		TotalRevenue:   resp.TotalRevenue,
-		RevenueToday:   resp.RevenueToday,
-		TotalGames:     resp.TotalGames,
-		TotalOrders:    resp.TotalOrders,
-		TotalPosts:     resp.TotalPosts,
-		TotalReports:   resp.TotalReports,
+		TotalUsers:    resp.TotalUsers,
+		NewUsersToday: resp.NewUsersToday,
+		TotalPosts:    resp.TotalPosts,
+		TotalReports:  resp.TotalReports,
 	}, nil
-}
-
-// GetRevenueChart implements usecase.StatsProvider.
-func (c *StatsGRPCClient) GetRevenueChart(ctx context.Context, days int) ([]usecase.ChartPoint, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	resp, err := c.client.GetRevenueChart(ctx, &statsv1.ChartRequest{Days: int32(days)})
-	if err != nil {
-		return nil, err
-	}
-	points := make([]usecase.ChartPoint, len(resp.Points))
-	for i, p := range resp.Points {
-		points[i] = usecase.ChartPoint{Date: p.Date, Value: p.Value}
-	}
-	return points, nil
 }
 
 // GetUserGrowthChart implements usecase.StatsProvider, consuming the server stream.
@@ -100,10 +78,4 @@ func (c *StatsGRPCClient) GetUserGrowthChart(ctx context.Context, days int) ([]u
 		points = append(points, usecase.ChartPoint{Date: p.Date, Value: p.Value})
 	}
 	return points, nil
-}
-
-// GetPopularGames implements usecase.StatsProvider.
-// Games feature has been removed; returns an empty slice for backward compatibility.
-func (c *StatsGRPCClient) GetPopularGames(_ context.Context, _ int) ([]usecase.PopularGame, error) {
-	return []usecase.PopularGame{}, nil
 }

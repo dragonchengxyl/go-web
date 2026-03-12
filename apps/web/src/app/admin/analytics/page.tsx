@@ -16,9 +16,9 @@ interface ChartPoint {
 
 interface DashboardStats {
   total_users: number
+  new_users_today: number
   total_posts: number
-  total_revenue: number
-  total_orders: number
+  total_reports: number
 }
 
 const RANGES = [
@@ -35,11 +35,6 @@ export default function AdminAnalyticsPage() {
     queryFn: () => apiClient.get(`/admin/stats/user-growth?days=${days}`),
   })
 
-  const { data: revenueData = [] } = useQuery<ChartPoint[]>({
-    queryKey: ['admin-revenue', days],
-    queryFn: () => apiClient.get(`/admin/stats/revenue?days=${days}`),
-  })
-
   const { data: stats } = useQuery<DashboardStats>({
     queryKey: ['admin-stats'],
     queryFn: () => apiClient.get('/admin/stats/dashboard'),
@@ -47,9 +42,9 @@ export default function AdminAnalyticsPage() {
 
   const summary = [
     { label: '总用户', value: stats?.total_users?.toLocaleString() ?? '—' },
+    { label: '今日新增', value: stats?.new_users_today?.toLocaleString() ?? '—' },
     { label: '总帖子', value: stats?.total_posts?.toLocaleString() ?? '—' },
-    { label: '总收入 (¥)', value: stats?.total_revenue != null ? `¥${stats.total_revenue.toFixed(2)}` : '—' },
-    { label: '总订单', value: stats?.total_orders?.toLocaleString() ?? '—' },
+    { label: '待处理举报', value: stats?.total_reports?.toLocaleString() ?? '—' },
   ]
 
   return (
@@ -73,7 +68,7 @@ export default function AdminAnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">用户增长趋势</CardTitle>
@@ -92,29 +87,6 @@ export default function AdminAnalyticsPage() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v) => [v, '新用户']} />
                 <Area type="monotone" dataKey="value" stroke="#8b5cf6" fill="url(#userGrad)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">收入趋势 (¥)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={revenueData}>
-                <defs>
-                  <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(v) => v.slice(5)} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => [`¥${Number(v).toFixed(2)}`, '收入']} />
-                <Area type="monotone" dataKey="value" stroke="#14b8a6" fill="url(#revenueGrad)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>

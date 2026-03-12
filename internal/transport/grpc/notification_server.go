@@ -69,9 +69,9 @@ func (s *NotificationServer) List(ctx context.Context, req *notificationv1.ListR
 		return nil, err
 	}
 
-	protos := make([]*notificationv1.NotificationProto, len(notifications))
+	protos := make([]*notificationv1.Notification, len(notifications))
 	for i, n := range notifications {
-		p := &notificationv1.NotificationProto{
+		p := &notificationv1.Notification{
 			Id:         n.ID.String(),
 			UserId:     n.UserID.String(),
 			Type:       string(n.Type),
@@ -152,7 +152,7 @@ func (s *NotificationServer) StreamUserNotifications(req *notificationv1.UserReq
 		if n.IsRead {
 			continue
 		}
-		p := &notificationv1.NotificationProto{
+		p := &notificationv1.Notification{
 			Id:         n.ID.String(),
 			UserId:     n.UserID.String(),
 			Type:       string(n.Type),

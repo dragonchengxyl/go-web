@@ -451,7 +451,7 @@ class ApiClient {
   // ── Search ────────────────────────────────────────────────────────────
 
   async searchAll(query: string) {
-    return this.get<{ albums: any[]; games?: any[]; users?: any[]; posts?: any[]; query: string }>(`/search?q=${encodeURIComponent(query)}`)
+    return this.get<{ albums: any[]; users?: any[]; posts?: any[]; query: string }>(`/search?q=${encodeURIComponent(query)}`)
   }
 
   async getPopularSearches(): Promise<string[]> {
@@ -700,4 +700,3 @@ export interface LeaderboardEntry {
   username: string
   score: number
 }
-

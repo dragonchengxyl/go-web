@@ -55,15 +55,15 @@ func (s *TipService) CreateTip(ctx context.Context, input CreateTipInput) (*orde
 	expiresAt := now.Add(30 * time.Minute)
 
 	o := &order.Order{
-		ID:       uuid.New(),
-		OrderNo:  generateOrderNo(),
-		UserID:   input.FromUserID,
-		Status:   order.OrderStatusPendingPayment,
+		ID:         uuid.New(),
+		OrderNo:    generateOrderNo(),
+		UserID:     input.FromUserID,
+		Status:     order.OrderStatusPendingPayment,
 		TotalCents: amountCents,
-		Currency: "CNY",
-		ExpiresAt: &expiresAt,
+		Currency:   "CNY",
+		ExpiresAt:  &expiresAt,
 		Metadata: map[string]any{
-			"type":        "tip",
+			"type":       "tip",
 			"to_user_id": input.ToUserID.String(),
 			"message":    input.Message,
 		},
@@ -97,9 +97,7 @@ func (s *TipService) ListReceivedTips(ctx context.Context, creatorID uuid.UUID, 
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
-	// We query orders where metadata->>'to_user_id' = creatorID
-	// This is done via the order repo
-	return s.orderRepo.ListByUserID(ctx, creatorID, page, pageSize)
+	return s.orderRepo.ListTipsReceivedByUser(ctx, creatorID, page, pageSize)
 }
 
 // FormatAmount formats cents to yuan string
@@ -109,15 +107,9 @@ func FormatAmount(cents int) string {
 
 // GetTipStats returns summary stats for received tips
 func (s *TipService) GetMyTipStats(ctx context.Context, userID uuid.UUID) (int64, int, error) {
-	orders, total, err := s.orderRepo.ListByUserID(ctx, userID, 1, 1000)
+	totalAmountCents, tipCount, err := s.orderRepo.GetTipStatsByUser(ctx, userID)
 	if err != nil {
 		return 0, 0, err
 	}
-	var totalAmount int
-	for _, o := range orders {
-		if o.Status == order.OrderStatusPaid {
-			totalAmount += o.TotalCents
-		}
-	}
-	return int64(total), totalAmount, nil
+	return totalAmountCents, int(tipCount), nil
 }

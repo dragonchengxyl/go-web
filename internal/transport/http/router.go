@@ -1,10 +1,10 @@
 package http
 
 import (
-	redisClient "github.com/redis/go-redis/v9"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	redisClient "github.com/redis/go-redis/v9"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/block"
 	"github.com/studio/platform/internal/domain/report"
@@ -19,31 +19,30 @@ import (
 
 // RouterConfig holds router dependencies
 type RouterConfig struct {
-	Config              *configs.Config
-	Logger              *zap.Logger
-	Pool                *pgxpool.Pool
-	RedisClient         *redisClient.Client
-	UserService         *usecase.UserService
-	MusicService        *usecase.MusicService
-	CommentService      *usecase.CommentService
-	OrderService        *usecase.OrderService
-	PaymentService      *usecase.PaymentService
-	SearchService       *usecase.SearchService
-	StatsService        usecase.StatsProvider
-	AchievementService  *usecase.AchievementService
-	PostService         *usecase.PostService
-	FollowService       *usecase.FollowService
-	ChatService         *usecase.ChatService
-	TipService          *usecase.TipService
-	NotificationService    *usecase.NotificationService
-	OSSService             *usecase.OSSService
-	EventService           *usecase.EventService
-	GroupService           *usecase.GroupService
-	RecommendationService  *usecase.RecommendationService
-	Hub                    ws.HubInterface
-	TokenStore          *redis.TokenStore
-	ReportRepo          report.Repository
-	BlockRepo           block.Repository
+	Config                *configs.Config
+	Logger                *zap.Logger
+	Pool                  *pgxpool.Pool
+	RedisClient           *redisClient.Client
+	UserService           *usecase.UserService
+	MusicService          *usecase.MusicService
+	CommentService        *usecase.CommentService
+	PaymentService        *usecase.PaymentService
+	SearchService         *usecase.SearchService
+	StatsService          usecase.StatsProvider
+	AchievementService    *usecase.AchievementService
+	PostService           *usecase.PostService
+	FollowService         *usecase.FollowService
+	ChatService           *usecase.ChatService
+	TipService            *usecase.TipService
+	NotificationService   *usecase.NotificationService
+	OSSService            *usecase.OSSService
+	EventService          *usecase.EventService
+	GroupService          *usecase.GroupService
+	RecommendationService *usecase.RecommendationService
+	Hub                   ws.HubInterface
+	TokenStore            *redis.TokenStore
+	ReportRepo            report.Repository
+	BlockRepo             block.Repository
 }
 
 // NewRouter creates a new HTTP router
@@ -298,9 +297,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				adminHandler := handler.NewAdminHandler(cfg.StatsService, cfg.UserService, nil, cfg.CommentService, cfg.PostService, cfg.ReportRepo)
 
 				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
-				admin.GET("/stats/revenue", adminHandler.GetRevenueChart)
 				admin.GET("/stats/user-growth", adminHandler.GetUserGrowthChart)
-				admin.GET("/stats/popular-games", adminHandler.GetPopularGames)
 
 				admin.GET("/users", adminHandler.ListUsers)
 				admin.PUT("/users/:id/role", adminHandler.UpdateUserRole)

@@ -122,7 +122,6 @@ func main() {
 	publisher := streams.NewPublisher(redisClient)
 
 	commentService := usecase.NewCommentService(commentRepo, usecase.WithCommentPublisher(publisher))
-	orderService := usecase.NewOrderService(orderRepo, nil, nil)
 	paymentService := usecase.NewPaymentService(orderRepo, alipayGW, wechatGW)
 	searchService := usecase.NewSearchService(pool)
 
@@ -188,7 +187,6 @@ func main() {
 		UserService:           userService,
 		MusicService:          musicService,
 		CommentService:        commentService,
-		OrderService:          orderService,
 		PaymentService:        paymentService,
 		SearchService:         searchService,
 		StatsService:          statsService,
@@ -234,7 +232,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				n, err := orderService.CancelExpiredOrders(bgCtx)
+				n, err := orderRepo.CancelExpiredOrders(bgCtx)
 				if err != nil {
 					logger.Error("cancel expired orders failed", zap.Error(err))
 				} else if n > 0 {
