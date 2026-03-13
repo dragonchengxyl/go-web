@@ -17,6 +17,7 @@ const (
 
 // Card is a structured recommendation attached to an assistant reply.
 type Card struct {
+	Ref     string `json:"ref,omitempty"`
 	Kind    string `json:"kind"`
 	Title   string `json:"title"`
 	Summary string `json:"summary"`

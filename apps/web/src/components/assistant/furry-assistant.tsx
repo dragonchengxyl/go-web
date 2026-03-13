@@ -97,6 +97,11 @@ function CardList({ cards }: { cards?: AssistantCard[] }) {
           className="rounded-2xl border border-amber-200/70 bg-white/80 p-3 transition-colors hover:border-orange-300 hover:bg-orange-50 dark:border-orange-900/70 dark:bg-slate-900/70 dark:hover:bg-slate-900"
         >
           <div className="mb-1 flex items-center gap-2">
+            {card.ref && (
+              <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white dark:bg-orange-500 dark:text-slate-950">
+                {card.ref}
+              </span>
+            )}
             <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700 dark:bg-orange-950/70 dark:text-orange-300">
               {card.kind}
             </span>
@@ -128,17 +133,57 @@ function CardList({ cards }: { cards?: AssistantCard[] }) {
   );
 }
 
+function ReferenceList({ cards }: { cards?: AssistantCard[] }) {
+  if (!cards || cards.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-2xl border border-orange-200/70 bg-orange-50/70 p-3 dark:border-orange-900/50 dark:bg-orange-950/20">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-700 dark:text-orange-300">
+        参考来源
+      </p>
+      <div className="mt-2 space-y-2">
+        {cards.map((card, index) => (
+          <Link
+            key={`ref-${card.kind}-${card.href}-${index}`}
+            id={card.ref ? `ref-${card.ref}` : undefined}
+            href={card.href}
+            className="block rounded-xl px-2 py-2 transition-colors hover:bg-white/80 dark:hover:bg-slate-900/50"
+          >
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-200/80 px-1.5 font-semibold text-orange-900 dark:bg-orange-900/60 dark:text-orange-100">
+                {card.ref || index + 1}
+              </span>
+              <span className="font-medium text-slate-900 dark:text-slate-100">
+                {card.title}
+              </span>
+              <span className="text-muted-foreground">{card.meta}</span>
+            </div>
+            {(card.reason || card.source) && (
+              <p className="mt-1 pl-7 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+                {card.reason ? `推荐理由：${card.reason}` : ""}
+                {card.reason && card.source ? " · " : ""}
+                {card.source ? `来源：${card.source}` : ""}
+              </p>
+            )}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function renderInlineMarkdown(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let remaining = text;
   let key = 0;
 
   while (remaining.length > 0) {
+    const citationMatch = remaining.match(/\[(R\d+)\]/);
     const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
     const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
     const codeMatch = remaining.match(/`([^`]+)`/);
 
-    const matches = [linkMatch, boldMatch, codeMatch]
+    const matches = [citationMatch, linkMatch, boldMatch, codeMatch]
       .filter((item): item is RegExpMatchArray => !!item)
       .map((item) => ({
         match: item,
@@ -158,7 +203,18 @@ function renderInlineMarkdown(text: string): ReactNode[] {
       );
     }
 
-    if (match[0] === linkMatch?.[0]) {
+    if (match[0] === citationMatch?.[0]) {
+      const ref = citationMatch?.[1] ?? "";
+      nodes.push(
+        <a
+          key={`cite-${key++}`}
+          href={`#ref-${ref}`}
+          className="mx-0.5 inline-flex rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-800 no-underline dark:bg-orange-950/60 dark:text-orange-200"
+        >
+          {ref}
+        </a>,
+      );
+    } else if (match[0] === linkMatch?.[0]) {
       const href = linkMatch?.[2] ?? "#";
       nodes.push(
         <a
@@ -605,6 +661,9 @@ export function FurryAssistant() {
                     <p className="whitespace-pre-wrap break-words">
                       {message.content}
                     </p>
+                  )}
+                  {message.role === "assistant" && (
+                    <ReferenceList cards={message.cards} />
                   )}
                   {message.role === "assistant" && (
                     <CardList cards={message.cards} />

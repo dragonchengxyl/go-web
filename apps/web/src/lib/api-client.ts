@@ -121,6 +121,7 @@ export interface Notification {
 }
 
 export interface AssistantCard {
+  ref?: string;
   kind: "page" | "post" | "group" | "event" | "user" | "tag";
   title: string;
   summary: string;

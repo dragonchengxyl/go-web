@@ -318,8 +318,12 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, query string,
 	contextParts = append(contextParts, siteOverviewContext())
 	if len(cards) > 0 {
 		var itemLines []string
-		for i, card := range cards {
-			line := fmt.Sprintf("%d. [%s] %s - %s (链接: %s)", i+1, card.Kind, card.Title, card.Summary, card.Href)
+		for _, card := range cards {
+			ref := card.Ref
+			if ref == "" {
+				ref = "R?"
+			}
+			line := fmt.Sprintf("[%s] [%s] %s - %s (链接: %s)", ref, card.Kind, card.Title, card.Summary, card.Href)
 			if card.Meta != "" {
 				line += " | " + card.Meta
 			}
@@ -378,6 +382,10 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, setti
 	}
 	if settings.IncludeEvents {
 		appendUnique(s.collectEventCards(ctx, query)...)
+	}
+
+	for i := range cards {
+		cards[i].Ref = fmt.Sprintf("R%d", i+1)
 	}
 
 	return cards
@@ -607,6 +615,8 @@ func (s *AssistantService) buildSystemPrompt(contextText string, settings *assis
 5. 回答尽量简洁，通常 2 到 5 段即可；必要时优先用短 Markdown 列表。
 6. 如果用户的问题超出站内信息范围，要明确说明你主要负责本网站导览与推荐。
 7. 当你推荐具体内容时，尽量说明推荐理由，并写清楚用户该从哪个入口进入。
+8. 只要使用了给定来源中的具体内容或做出具体推荐，就在对应句末附上来源引用，例如 [R1]、[R2]。
+9. 不要伪造引用编号；只能使用给定上下文里出现的引用编号。
 
 以下是你可用的站内信息：
 %s
@@ -651,7 +661,11 @@ func buildFallbackAnswer(personaName, query string, cards []AssistantCard) strin
 
 	b.WriteString("我先根据站内信息帮你整理了几个值得直接点开的入口：\n")
 	for i, card := range cards {
-		fmt.Fprintf(&b, "%d. %s：%s", i+1, card.Title, card.Summary)
+		ref := card.Ref
+		if ref == "" {
+			ref = fmt.Sprintf("R%d", i+1)
+		}
+		fmt.Fprintf(&b, "%d. [%s] %s：%s", i+1, ref, card.Title, card.Summary)
 		if card.Meta != "" {
 			fmt.Fprintf(&b, "（%s）", card.Meta)
 		}
