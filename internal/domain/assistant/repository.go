@@ -15,4 +15,7 @@ type Repository interface {
 	CreateMessage(ctx context.Context, m *Message) error
 	ListMessages(ctx context.Context, conversationID uuid.UUID, page, pageSize int) ([]*Message, int64, error)
 	ListRecentMessages(ctx context.Context, conversationID uuid.UUID, limit int) ([]*Message, error)
+
+	GetSettings(ctx context.Context) (*Settings, error)
+	UpsertSettings(ctx context.Context, settings *Settings) error
 }

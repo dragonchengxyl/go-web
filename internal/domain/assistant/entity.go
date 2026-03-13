@@ -45,6 +45,22 @@ type Message struct {
 	CreatedAt      time.Time   `json:"created_at"`
 }
 
+// Settings controls runtime behaviour of the assistant.
+type Settings struct {
+	Enabled         bool       `json:"enabled"`
+	PersonaName     string     `json:"persona_name"`
+	SystemPrompt    string     `json:"system_prompt"`
+	MaxContextItems int        `json:"max_context_items"`
+	IncludePages    bool       `json:"include_pages"`
+	IncludePosts    bool       `json:"include_posts"`
+	IncludeUsers    bool       `json:"include_users"`
+	IncludeTags     bool       `json:"include_tags"`
+	IncludeGroups   bool       `json:"include_groups"`
+	IncludeEvents   bool       `json:"include_events"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+	UpdatedBy       *uuid.UUID `json:"updated_by,omitempty"`
+}
+
 var (
 	ErrConversationNotFound = errors.New("assistant conversation not found")
 	ErrForbidden            = errors.New("assistant conversation access denied")

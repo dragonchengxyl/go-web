@@ -93,13 +93,21 @@ func (s *AssistantService) StreamReply(
 	onMeta func(AssistantMeta) error,
 	onToken func(string) error,
 ) error {
+	settings, err := s.resolveRuntimeSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if !settings.Enabled {
+		return apperr.New(apperr.CodeForbidden, "AI 助手当前已关闭")
+	}
+
 	normalized := sanitizeAssistantMessages(messages)
 	latestUser := latestUserMessage(normalized)
 	if latestUser == "" {
 		return apperr.BadRequest("请输入你想咨询的问题")
 	}
 
-	meta, contextText, fallbackAnswer := s.buildPromptContext(ctx, latestUser)
+	meta, contextText, fallbackAnswer := s.buildPromptContext(ctx, latestUser, settings)
 	if onMeta != nil {
 		if err := onMeta(meta); err != nil {
 			return err
@@ -113,7 +121,7 @@ func (s *AssistantService) StreamReply(
 	llmMessages := make([]llm.ChatMessage, 0, len(normalized)+1)
 	llmMessages = append(llmMessages, llm.ChatMessage{
 		Role:    "system",
-		Content: s.buildSystemPrompt(contextText),
+		Content: s.buildSystemPrompt(contextText, settings),
 	})
 	for _, msg := range normalized {
 		llmMessages = append(llmMessages, llm.ChatMessage{
@@ -123,7 +131,7 @@ func (s *AssistantService) StreamReply(
 	}
 
 	streamedAny := false
-	err := s.llmClient.StreamChat(ctx, llmMessages, func(token string) error {
+	err = s.llmClient.StreamChat(ctx, llmMessages, func(token string) error {
 		streamedAny = true
 		return onToken(token)
 	})
@@ -141,6 +149,51 @@ func (s *AssistantService) StreamReply(
 		}
 	}
 	return streamText(fallbackAnswer+"\n\n（模型暂时未响应，我先把站内检索到的信息整理给你。）", onToken)
+}
+
+// GetSettings returns the effective assistant settings.
+func (s *AssistantService) GetSettings(ctx context.Context) (*assistantdomain.Settings, error) {
+	return s.resolveRuntimeSettings(ctx)
+}
+
+// UpdateSettings persists assistant settings.
+func (s *AssistantService) UpdateSettings(ctx context.Context, updatedBy uuid.UUID, input assistantdomain.Settings) (*assistantdomain.Settings, error) {
+	if !s.HistoryEnabled() {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "AI 设置存储未启用", nil)
+	}
+
+	settings := s.defaultSettings()
+	settings.Enabled = input.Enabled
+	if name := strings.TrimSpace(input.PersonaName); name != "" {
+		settings.PersonaName = truncateText(name, 32)
+	}
+	settings.SystemPrompt = strings.TrimSpace(input.SystemPrompt)
+	if input.MaxContextItems > 0 {
+		settings.MaxContextItems = input.MaxContextItems
+	}
+	if settings.MaxContextItems < 2 {
+		settings.MaxContextItems = 2
+	}
+	if settings.MaxContextItems > 12 {
+		settings.MaxContextItems = 12
+	}
+	settings.IncludePages = input.IncludePages
+	settings.IncludePosts = input.IncludePosts
+	settings.IncludeUsers = input.IncludeUsers
+	settings.IncludeTags = input.IncludeTags
+	settings.IncludeGroups = input.IncludeGroups
+	settings.IncludeEvents = input.IncludeEvents
+	settings.UpdatedAt = time.Now()
+	settings.UpdatedBy = &updatedBy
+
+	if !settings.IncludePages && !settings.IncludePosts && !settings.IncludeUsers && !settings.IncludeTags && !settings.IncludeGroups && !settings.IncludeEvents {
+		return nil, apperr.BadRequest("至少保留一种检索来源")
+	}
+
+	if err := s.historyRepo.UpsertSettings(ctx, settings); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "保存 AI 设置失败", err)
+	}
+	return settings, nil
 }
 
 // PrepareConversation resolves or creates a persisted conversation and appends the latest user message.
@@ -251,8 +304,8 @@ func (s *AssistantService) GetConversation(ctx context.Context, userID, conversa
 	return conv, items, total, nil
 }
 
-func (s *AssistantService) buildPromptContext(ctx context.Context, query string) (AssistantMeta, string, string) {
-	cards := s.collectCards(ctx, query)
+func (s *AssistantService) buildPromptContext(ctx context.Context, query string, settings *assistantdomain.Settings) (AssistantMeta, string, string) {
+	cards := s.collectCards(ctx, query, settings)
 	meta := AssistantMeta{
 		Query:    query,
 		Provider: s.cfg.Provider,
@@ -275,11 +328,11 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, query string)
 		contextParts = append(contextParts, "可引用的站内信息:\n"+strings.Join(itemLines, "\n"))
 	}
 
-	return meta, strings.Join(contextParts, "\n\n"), buildFallbackAnswer(s.cfg.PersonaName, query, cards)
+	return meta, strings.Join(contextParts, "\n\n"), buildFallbackAnswer(settings.PersonaName, query, cards)
 }
 
-func (s *AssistantService) collectCards(ctx context.Context, query string) []AssistantCard {
-	maxItems := s.cfg.MaxContextItems
+func (s *AssistantService) collectCards(ctx context.Context, query string, settings *assistantdomain.Settings) []AssistantCard {
+	maxItems := settings.MaxContextItems
 	if maxItems <= 0 {
 		maxItems = 6
 	}
@@ -302,12 +355,24 @@ func (s *AssistantService) collectCards(ctx context.Context, query string) []Ass
 		}
 	}
 
-	appendUnique(recommendPageCards(query)...)
-	appendUnique(s.collectPostCards(ctx, query)...)
-	appendUnique(s.collectUserCards(ctx, query)...)
-	appendUnique(s.collectTagCards(ctx, query)...)
-	appendUnique(s.collectGroupCards(ctx, query)...)
-	appendUnique(s.collectEventCards(ctx, query)...)
+	if settings.IncludePages {
+		appendUnique(recommendPageCards(query)...)
+	}
+	if settings.IncludePosts {
+		appendUnique(s.collectPostCards(ctx, query)...)
+	}
+	if settings.IncludeUsers {
+		appendUnique(s.collectUserCards(ctx, query)...)
+	}
+	if settings.IncludeTags {
+		appendUnique(s.collectTagCards(ctx, query)...)
+	}
+	if settings.IncludeGroups {
+		appendUnique(s.collectGroupCards(ctx, query)...)
+	}
+	if settings.IncludeEvents {
+		appendUnique(s.collectEventCards(ctx, query)...)
+	}
 
 	return cards
 }
@@ -505,9 +570,9 @@ func (s *AssistantService) collectEventCards(ctx context.Context, query string) 
 	return cards
 }
 
-func (s *AssistantService) buildSystemPrompt(contextText string) string {
-	persona := s.cfg.PersonaName
-	return strings.TrimSpace(fmt.Sprintf(`
+func (s *AssistantService) buildSystemPrompt(contextText string, settings *assistantdomain.Settings) string {
+	persona := settings.PersonaName
+	base := strings.TrimSpace(fmt.Sprintf(`
 你是 %s，一位帅气、可靠、语气自然的 Furry 社区 AI 导览助手。
 
 你的职责：
@@ -521,6 +586,11 @@ func (s *AssistantService) buildSystemPrompt(contextText string) string {
 以下是你可用的站内信息：
 %s
 `, persona, contextText))
+
+	if strings.TrimSpace(settings.SystemPrompt) == "" {
+		return base
+	}
+	return base + "\n\n额外规则：\n" + strings.TrimSpace(settings.SystemPrompt)
 }
 
 func siteOverviewContext() string {
@@ -742,6 +812,53 @@ func recommendPageCards(query string) []AssistantCard {
 		appendPage(3)
 	}
 	return selected
+}
+
+func (s *AssistantService) defaultSettings() *assistantdomain.Settings {
+	persona := strings.TrimSpace(s.cfg.PersonaName)
+	if persona == "" {
+		persona = "霜牙"
+	}
+	maxItems := s.cfg.MaxContextItems
+	if maxItems <= 0 {
+		maxItems = 6
+	}
+
+	return &assistantdomain.Settings{
+		Enabled:         true,
+		PersonaName:     persona,
+		SystemPrompt:    "",
+		MaxContextItems: maxItems,
+		IncludePages:    true,
+		IncludePosts:    true,
+		IncludeUsers:    true,
+		IncludeTags:     true,
+		IncludeGroups:   true,
+		IncludeEvents:   true,
+	}
+}
+
+func (s *AssistantService) resolveRuntimeSettings(ctx context.Context) (*assistantdomain.Settings, error) {
+	settings := s.defaultSettings()
+	if !s.HistoryEnabled() {
+		return settings, nil
+	}
+
+	stored, err := s.historyRepo.GetSettings(ctx)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "读取 AI 设置失败", err)
+	}
+	if stored == nil {
+		return settings, nil
+	}
+
+	if strings.TrimSpace(stored.PersonaName) == "" {
+		stored.PersonaName = settings.PersonaName
+	}
+	if stored.MaxContextItems <= 0 {
+		stored.MaxContextItems = settings.MaxContextItems
+	}
+	return stored, nil
 }
 
 func (s *AssistantService) resolveConversation(

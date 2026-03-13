@@ -154,6 +154,21 @@ export interface AssistantConversation {
   last_role?: string;
 }
 
+export interface AssistantSettings {
+  enabled: boolean;
+  persona_name: string;
+  system_prompt: string;
+  max_context_items: number;
+  include_pages: boolean;
+  include_posts: boolean;
+  include_users: boolean;
+  include_tags: boolean;
+  include_groups: boolean;
+  include_events: boolean;
+  updated_at?: string;
+  updated_by?: string;
+}
+
 interface AssistantStreamHandlers {
   signal?: AbortSignal;
   onMeta?: (meta: AssistantMeta) => void;
@@ -947,6 +962,14 @@ class ApiClient {
       page: number;
       size: number;
     }>(`/assistant/conversations/${id}?page=${page}&page_size=${pageSize}`);
+  }
+
+  async getAssistantSettings() {
+    return this.get<AssistantSettings>("/admin/assistant/settings");
+  }
+
+  async updateAssistantSettings(data: AssistantSettings) {
+    return this.put<AssistantSettings>("/admin/assistant/settings", data);
   }
 }
 

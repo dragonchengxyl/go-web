@@ -209,6 +209,79 @@ func (r *AssistantRepository) ListRecentMessages(ctx context.Context, conversati
 	return items, rows.Err()
 }
 
+func (r *AssistantRepository) GetSettings(ctx context.Context) (*assistantdomain.Settings, error) {
+	var settings assistantdomain.Settings
+	err := r.pool.QueryRow(ctx, `
+		SELECT enabled, persona_name, system_prompt, max_context_items,
+		       include_pages, include_posts, include_users, include_tags, include_groups, include_events,
+		       updated_at, updated_by
+		FROM assistant_settings
+		WHERE id = 1
+	`).Scan(
+		&settings.Enabled,
+		&settings.PersonaName,
+		&settings.SystemPrompt,
+		&settings.MaxContextItems,
+		&settings.IncludePages,
+		&settings.IncludePosts,
+		&settings.IncludeUsers,
+		&settings.IncludeTags,
+		&settings.IncludeGroups,
+		&settings.IncludeEvents,
+		&settings.UpdatedAt,
+		&settings.UpdatedBy,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &settings, nil
+}
+
+func (r *AssistantRepository) UpsertSettings(ctx context.Context, settings *assistantdomain.Settings) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO assistant_settings (
+			id, enabled, persona_name, system_prompt, max_context_items,
+			include_pages, include_posts, include_users, include_tags, include_groups, include_events,
+			updated_at, updated_by
+		)
+		VALUES (
+			1, $1, $2, $3, $4,
+			$5, $6, $7, $8, $9, $10,
+			$11, $12
+		)
+		ON CONFLICT (id) DO UPDATE SET
+			enabled = EXCLUDED.enabled,
+			persona_name = EXCLUDED.persona_name,
+			system_prompt = EXCLUDED.system_prompt,
+			max_context_items = EXCLUDED.max_context_items,
+			include_pages = EXCLUDED.include_pages,
+			include_posts = EXCLUDED.include_posts,
+			include_users = EXCLUDED.include_users,
+			include_tags = EXCLUDED.include_tags,
+			include_groups = EXCLUDED.include_groups,
+			include_events = EXCLUDED.include_events,
+			updated_at = EXCLUDED.updated_at,
+			updated_by = EXCLUDED.updated_by
+	`,
+		settings.Enabled,
+		settings.PersonaName,
+		settings.SystemPrompt,
+		settings.MaxContextItems,
+		settings.IncludePages,
+		settings.IncludePosts,
+		settings.IncludeUsers,
+		settings.IncludeTags,
+		settings.IncludeGroups,
+		settings.IncludeEvents,
+		settings.UpdatedAt,
+		settings.UpdatedBy,
+	)
+	return err
+}
+
 func scanAssistantMessage(row pgx.Row) (*assistantdomain.Message, error) {
 	var msg assistantdomain.Message
 	var role string

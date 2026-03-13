@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	assistantdomain "github.com/studio/platform/internal/domain/assistant"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -180,6 +181,60 @@ func (h *AssistantHandler) GetConversation(c *gin.Context) {
 		"page":         page,
 		"size":         pageSize,
 	})
+}
+
+// GetSettings handles GET /api/v1/admin/assistant/settings.
+func (h *AssistantHandler) GetSettings(c *gin.Context) {
+	settings, err := h.service.GetSettings(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, settings)
+}
+
+// UpdateSettings handles PUT /api/v1/admin/assistant/settings.
+func (h *AssistantHandler) UpdateSettings(c *gin.Context) {
+	adminID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+
+	var req struct {
+		Enabled         bool   `json:"enabled"`
+		PersonaName     string `json:"persona_name"`
+		SystemPrompt    string `json:"system_prompt"`
+		MaxContextItems int    `json:"max_context_items"`
+		IncludePages    bool   `json:"include_pages"`
+		IncludePosts    bool   `json:"include_posts"`
+		IncludeUsers    bool   `json:"include_users"`
+		IncludeTags     bool   `json:"include_tags"`
+		IncludeGroups   bool   `json:"include_groups"`
+		IncludeEvents   bool   `json:"include_events"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	settings, err := h.service.UpdateSettings(c.Request.Context(), adminID, assistantdomain.Settings{
+		Enabled:         req.Enabled,
+		PersonaName:     req.PersonaName,
+		SystemPrompt:    req.SystemPrompt,
+		MaxContextItems: req.MaxContextItems,
+		IncludePages:    req.IncludePages,
+		IncludePosts:    req.IncludePosts,
+		IncludeUsers:    req.IncludeUsers,
+		IncludeTags:     req.IncludeTags,
+		IncludeGroups:   req.IncludeGroups,
+		IncludeEvents:   req.IncludeEvents,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, settings)
 }
 
 func latestAssistantUserMessage(messages []usecase.AssistantChatMessage) string {

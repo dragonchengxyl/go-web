@@ -341,6 +341,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				admin.GET("/reports", adminHandler.ListReports)
 				admin.PUT("/reports/:id", adminHandler.UpdateReport)
 
+				if assistantHandler != nil {
+					admin.GET("/assistant/settings", assistantHandler.GetSettings)
+					admin.PUT("/assistant/settings", assistantHandler.UpdateSettings)
+				}
+
 				// Admin achievements
 				admin.POST("/users/:id/achievements", achievementHandler.AdminUnlockAchievement)
 				admin.POST("/users/:id/points", achievementHandler.AdminAwardPoints)
