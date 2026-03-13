@@ -145,6 +145,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 		// Posts (public read)
 		posts := v1.Group("/posts")
+		posts.Use(authMiddleware.OptionalAuthenticate())
 		{
 			posts.GET("/:id", postHandler.GetPost)
 		}

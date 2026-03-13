@@ -389,6 +389,13 @@ function PostDetailContent() {
         </div>
       )}
 
+      {post.moderation_status === 'blocked' && currentUserId === post.author_id && (
+        <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-sm">
+          <span className="mt-0.5 text-base leading-none">🚫</span>
+          <p>这条帖子未通过社区审核，目前仅自己可见。你可以修改后重新发布。</p>
+        </div>
+      )}
+
       {/* Post */}
       <PostCard post={post} showFull />
 

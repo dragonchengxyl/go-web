@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/post"
@@ -92,7 +94,51 @@ func (h *PostHandler) GetPost(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+
+	viewerID, authed := getUserID(c)
+	var role user.Role
+	if roleVal, ok := c.Get("role"); ok {
+		role, _ = roleVal.(user.Role)
+		if role == "" {
+			if roleStr, ok := roleVal.(string); ok {
+				role = user.Role(roleStr)
+			}
+		}
+	}
+
+	if !h.canViewPost(c.Request.Context(), p, viewerID, authed, role) {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
 	response.Success(c, p)
+}
+
+func (h *PostHandler) canViewPost(ctx context.Context, p *post.Post, viewerID uuid.UUID, authed bool, role user.Role) bool {
+	isAdmin := role == user.RoleAdmin || role == user.RoleSuperAdmin || role == user.RoleModerator
+	if isAdmin {
+		return true
+	}
+	if authed && p.AuthorID == viewerID {
+		return true
+	}
+	if p.ModerationStatus != post.ModerationApproved {
+		return false
+	}
+
+	switch p.Visibility {
+	case post.VisibilityPublic:
+		return true
+	case post.VisibilityFollowersOnly:
+		if !authed || h.followService == nil {
+			return false
+		}
+		ok, err := h.followService.IsFollowing(ctx, viewerID, p.AuthorID)
+		return err == nil && ok
+	case post.VisibilityPrivate:
+		return false
+	default:
+		return false
+	}
 }
 
 // UpdatePost PUT /api/v1/posts/:id

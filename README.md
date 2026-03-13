@@ -34,6 +34,7 @@
 | 前端 | http://localhost:3000 |
 | 后端 API | http://localhost:8080/api/v1 |
 | WebSocket | ws://localhost:8080/ws/chat |
+| MailHog | http://localhost:8025 |
 
 **可选参数：**
 

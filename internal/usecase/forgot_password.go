@@ -39,10 +39,11 @@ func (s *UserService) ForgotPassword(ctx context.Context, email string) error {
 	if s.emailSender != nil && s.frontendURL != "" {
 		if err := s.emailSender.SendPasswordReset(u.Email, u.Username, resetURL); err != nil {
 			fmt.Printf("[ForgotPassword] failed to send reset email to %s: %v\n", email, err)
+			fmt.Printf("[ForgotPassword] fallback reset url for %s: %s\n", email, resetURL)
 		}
 	} else {
 		// Local/dev fallback when SMTP or frontend URL is not configured.
-		fmt.Printf("[ForgotPassword] reset token for %s: %s\n", email, token)
+		fmt.Printf("[ForgotPassword] reset url for %s: %s\n", email, resetURL)
 	}
 
 	return nil
@@ -105,9 +106,10 @@ func (s *UserService) sendVerificationEmail(ctx context.Context, u *user.User) e
 	if s.emailSender != nil && s.frontendURL != "" {
 		if err := s.emailSender.SendEmailVerification(u.Email, u.Username, verifyURL); err != nil {
 			fmt.Printf("[VerifyEmail] failed to send verification email to %s: %v\n", u.Email, err)
+			fmt.Printf("[VerifyEmail] fallback verification url for %s: %s\n", u.Email, verifyURL)
 		}
 	} else {
-		fmt.Printf("[VerifyEmail] verification token for %s: %s\n", u.Email, token)
+		fmt.Printf("[VerifyEmail] verification url for %s: %s\n", u.Email, verifyURL)
 	}
 
 	return nil

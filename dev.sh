@@ -124,22 +124,23 @@ set -o allexport
 source "$ROOT/.env"
 set +o allexport
 
-# ── 3. Docker 基础设施（PG + Redis）──────────────────
+# ── 3. Docker 基础设施（PG + Redis + MailHog）───────
 if [[ "$NO_DOCKER" == false && "$FRONTEND_ONLY" == false ]]; then
-  step "启动 Docker 基础设施（PostgreSQL + Redis）"
+  step "启动 Docker 基础设施（PostgreSQL + Redis + MailHog）"
   cd "$ROOT"
 
   # 检查端口是否已可连接（不管是容器还是本地服务）
-  PG_OK=false; RD_OK=false
+  PG_OK=false; RD_OK=false; MH_OK=false
   pg_isready -h localhost -p 5432 -U studio &>/dev/null && PG_OK=true
   redis-cli -h localhost ping &>/dev/null                && RD_OK=true
+  (echo > /dev/tcp/127.0.0.1/1025) &>/dev/null           && MH_OK=true
 
-  if [[ "$PG_OK" == true && "$RD_OK" == true ]]; then
-    info "PostgreSQL 和 Redis 已可连接，跳过 Docker 启动"
+  if [[ "$PG_OK" == true && "$RD_OK" == true && "$MH_OK" == true ]]; then
+    info "PostgreSQL、Redis 和 MailHog 已可连接，跳过 Docker 启动"
   else
     # 先清理已停止的同名容器
-    $DC rm -f postgres redis 2>/dev/null || true
-    $DC up -d postgres redis 2>&1 || { error "Docker 启动失败"; exit 1; }
+    $DC rm -f postgres redis mailhog 2>/dev/null || true
+    $DC up -d postgres redis mailhog 2>&1 || { error "Docker 启动失败"; exit 1; }
 
     info "等待 PostgreSQL 就绪..."
     for i in $(seq 1 30); do
@@ -152,6 +153,13 @@ if [[ "$NO_DOCKER" == false && "$FRONTEND_ONLY" == false ]]; then
     for i in $(seq 1 15); do
       redis-cli -h localhost ping &>/dev/null && { success "Redis 已就绪"; break; }
       [[ $i -eq 15 ]] && { error "Redis 启动超时"; exit 1; }
+      sleep 1
+    done
+
+    info "等待 MailHog 就绪..."
+    for i in $(seq 1 15); do
+      (echo > /dev/tcp/127.0.0.1/1025) &>/dev/null && { success "MailHog 已就绪"; break; }
+      [[ $i -eq 15 ]] && { error "MailHog 启动超时"; exit 1; }
       sleep 1
     done
   fi
@@ -245,6 +253,8 @@ echo -e "${GREEN}╠════════════════════
 echo -e "${GREEN}║  后端 API  →  http://localhost:8080           ║${NC}"
 [[ "$BACKEND_ONLY" == false ]] && \
 echo -e "${GREEN}║  前端页面  →  http://localhost:3000           ║${NC}"
+[[ "$FRONTEND_ONLY" == false ]] && \
+echo -e "${GREEN}║  MailHog   →  http://localhost:8025           ║${NC}"
 echo -e "${GREEN}╠═══════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║  日志目录  →  .dev-logs/                      ║${NC}"
 echo -e "${GREEN}║  按 Ctrl+C 停止所有服务                       ║${NC}"

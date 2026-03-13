@@ -79,6 +79,41 @@ func (a *Auth) Authenticate() gin.HandlerFunc {
 	}
 }
 
+// OptionalAuthenticate populates auth context when a valid bearer token is present,
+// but never blocks the request if the token is missing or invalid.
+func (a *Auth) OptionalAuthenticate() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.Next()
+			return
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.Next()
+			return
+		}
+
+		claims, err := crypto.VerifyToken(parts[1], a.jwtConfig.Secret)
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		blacklisted, err := a.tokenStore.IsTokenBlacklisted(c.Request.Context(), claims.JTI)
+		if err != nil || blacklisted {
+			c.Next()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("role", claims.Role)
+		c.Set("permissions", claims.Permissions)
+		c.Next()
+	}
+}
+
 // RequirePermission checks if user has required permission
 func (a *Auth) RequirePermission(perm permission.Permission) gin.HandlerFunc {
 	return func(c *gin.Context) {

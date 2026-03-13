@@ -15,6 +15,7 @@ interface UserProfile {
   id: string
   username: string
   email: string
+  status: string
   avatar_key?: string
   bio?: string
   website?: string
@@ -39,6 +40,12 @@ const ROLE_BADGE: Record<string, { label: string; color: string }> = {
   supporter: { label: '支持者', color: 'bg-brand-teal/10 text-brand-teal' },
   member: { label: '成员', color: 'bg-muted text-muted-foreground' },
 }
+
+const STATUS_NOTICE: Record<string, string> = {
+  inactive: '你的账号尚未激活，部分功能可能不可用。',
+  suspended: '你的账号当前处于暂停状态，请联系管理员了解详情。',
+  banned: '你的账号已被封禁，如有疑问请联系管理员。',
+};
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -137,6 +144,7 @@ export default function ProfilePage() {
   const displayName = profile.furry_name || profile.username
   const roleBadge = ROLE_BADGE[profile.role]
   const totalLikes = posts.reduce((sum, p) => sum + p.like_count, 0)
+  const statusNotice = STATUS_NOTICE[profile.status]
 
   return (
     <div className="max-w-4xl mx-auto pt-20 px-4 pb-12">
@@ -146,6 +154,12 @@ export default function ProfilePage() {
         <div className="h-32 bg-gradient-to-br from-brand-purple/40 via-brand-teal/30 to-brand-coral/20" />
 
         <div className="px-6 pb-6">
+          {statusNotice && (
+            <div className="mt-4 mb-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+              {statusNotice}
+            </div>
+          )}
+
           {/* Avatar row */}
           <div className="flex items-end justify-between -mt-12 mb-4">
             <div className="relative flex-shrink-0">

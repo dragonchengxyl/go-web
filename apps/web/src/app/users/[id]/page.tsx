@@ -12,6 +12,7 @@ interface UserProfile {
   id: string
   username: string
   email?: string
+  status: string
   bio?: string
   website?: string
   location?: string
@@ -36,6 +37,13 @@ const ROLE_BADGE: Record<string, { label: string; color: string }> = {
   supporter: { label: '支持者', color: 'bg-brand-teal/10 text-brand-teal' },
   member: { label: '成员', color: 'bg-muted text-muted-foreground' },
 }
+
+const STATUS_BADGE: Record<string, { label: string; color: string }> = {
+  active: { label: '正常', color: 'bg-green-500/10 text-green-600' },
+  inactive: { label: '未激活', color: 'bg-gray-500/10 text-gray-500' },
+  suspended: { label: '已暂停', color: 'bg-amber-500/10 text-amber-600' },
+  banned: { label: '已封禁', color: 'bg-red-500/10 text-red-600' },
+};
 
 export default function UserProfilePage() {
   const params = useParams();
@@ -172,7 +180,9 @@ export default function UserProfilePage() {
   const displayName = profile.furry_name || profile.username;
   const av = avatarUrl(profile.avatar_key);
   const roleBadge = ROLE_BADGE[profile.role];
+  const statusBadge = STATUS_BADGE[profile.status];
   const totalLikes = posts.reduce((sum, p) => sum + p.like_count, 0);
+  const unavailable = profile.status === 'banned' || profile.status === 'suspended';
 
   return (
     <div className="max-w-4xl mx-auto pt-20 px-4 pb-12">
@@ -182,6 +192,14 @@ export default function UserProfilePage() {
         <div className="h-32 bg-gradient-to-br from-brand-purple/40 via-brand-teal/30 to-brand-coral/20" />
 
         <div className="px-6 pb-6">
+          {unavailable && (
+            <div className="mt-4 mb-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+              {profile.status === 'banned'
+                ? '该账号已被封禁，部分互动能力已禁用。'
+                : '该账号当前处于暂停状态，部分互动能力已禁用。'}
+            </div>
+          )}
+
           {/* Avatar row */}
           <div className="flex items-end justify-between -mt-12 mb-4">
             <div className="w-24 h-24 rounded-full bg-background border-4 border-background overflow-hidden shadow-lg flex-shrink-0">
@@ -201,7 +219,7 @@ export default function UserProfilePage() {
                     variant={isFollowing ? 'outline' : 'default'}
                     size="sm"
                     onClick={handleFollow}
-                    disabled={followLoading || isBlocked}
+                    disabled={followLoading || isBlocked || unavailable}
                     className={isFollowing ? '' : 'bg-gradient-to-r from-brand-purple to-brand-teal text-white border-0 hover:brightness-110'}
                   >
                     {isFollowing ? (
@@ -210,7 +228,7 @@ export default function UserProfilePage() {
                       <><UserPlus className="h-4 w-4 mr-1" />关注 TA</>
                     )}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleMessage} disabled={messageLoading}>
+                  <Button variant="outline" size="sm" onClick={handleMessage} disabled={messageLoading || unavailable}>
                     <MessageCircle className="h-4 w-4" />
                   </Button>
                   <Button
@@ -240,6 +258,11 @@ export default function UserProfilePage() {
               {roleBadge && (
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${roleBadge.color}`}>
                   {roleBadge.label}
+                </span>
+              )}
+              {statusBadge && profile.status !== 'active' && (
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusBadge.color}`}>
+                  {statusBadge.label}
                 </span>
               )}
             </div>
