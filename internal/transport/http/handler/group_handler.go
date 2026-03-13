@@ -121,6 +121,22 @@ func (h *GroupHandler) GetPostTags(c *gin.Context) {
 	response.Success(c, tags)
 }
 
+// ListAnnouncements handles GET /api/v1/groups/:id/announcements
+func (h *GroupHandler) ListAnnouncements(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的圈子ID"))
+		return
+	}
+	page, pageSize := getPageParams(c)
+	items, total, err := h.groupSvc.ListAnnouncements(c.Request.Context(), groupID, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"announcements": items, "total": total, "page": page, "size": len(items)})
+}
+
 // GetHighlights handles GET /api/v1/groups/:id/highlights
 func (h *GroupHandler) GetHighlights(c *gin.Context) {
 	groupID, err := uuid.Parse(c.Param("id"))

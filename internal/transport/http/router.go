@@ -189,6 +189,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			groups.GET("/:id/posts", groupHandler.ListPosts)
 			groups.GET("/:id/highlights", groupHandler.GetHighlights)
 			groups.GET("/:id/tags", groupHandler.GetPostTags)
+			groups.GET("/:id/announcements", groupHandler.ListAnnouncements)
 		}
 
 		// Users public profile

@@ -507,6 +507,15 @@ class ApiClient {
     return this.get<string[]>(`/groups/${groupId}/tags`);
   }
 
+  async getGroupAnnouncements(groupId: string, page = 1, pageSize = 20) {
+    return this.get<{
+      announcements: GroupAnnouncement[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/groups/${groupId}/announcements?page=${page}&page_size=${pageSize}`);
+  }
+
   async pinGroupPost(groupId: string, postId: string) {
     return this.post<{ message: string }>(
       `/groups/${groupId}/posts/${postId}/pin`,
@@ -1189,6 +1198,20 @@ export interface GroupMember {
   user_id: string;
   role: "owner" | "moderator" | "member";
   joined_at: string;
+  username?: string;
+  furry_name?: string;
+  avatar_key?: string;
+}
+
+export interface GroupAnnouncement {
+  id: string;
+  group_id: string;
+  author_id: string;
+  content: string;
+  created_at: string;
+  author_name?: string;
+  furry_name?: string;
+  avatar_key?: string;
 }
 
 export interface LeaderboardEntry {

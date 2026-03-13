@@ -48,6 +48,22 @@ type GroupMember struct {
 	UserID   uuid.UUID `json:"user_id"`
 	Role     GroupRole `json:"role"`
 	JoinedAt time.Time `json:"joined_at"`
+
+	Username  string  `json:"username,omitempty"`
+	FurryName *string `json:"furry_name,omitempty"`
+	AvatarKey *string `json:"avatar_key,omitempty"`
+}
+
+// GroupAnnouncement stores an announcement history entry.
+type GroupAnnouncement struct {
+	ID         uuid.UUID `json:"id"`
+	GroupID    uuid.UUID `json:"group_id"`
+	AuthorID   uuid.UUID `json:"author_id"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"created_at"`
+	AuthorName string    `json:"author_name,omitempty"`
+	FurryName  *string   `json:"furry_name,omitempty"`
+	AvatarKey  *string   `json:"avatar_key,omitempty"`
 }
 
 // ListFilter holds filtering options for listing groups.

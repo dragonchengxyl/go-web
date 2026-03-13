@@ -18,7 +18,13 @@ import {
   Bookmark,
   Pin,
 } from "lucide-react";
-import { apiClient, Group, GroupMember, Post } from "@/lib/api-client";
+import {
+  apiClient,
+  Group,
+  GroupAnnouncement,
+  GroupMember,
+  Post,
+} from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { PostCard } from "@/components/post/post-card";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,6 +59,7 @@ export default function GroupDetailPage() {
   const [activeTag, setActiveTag] = useState("");
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [announcements, setAnnouncements] = useState<GroupAnnouncement[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [postsLoading, setPostsLoading] = useState(true);
@@ -94,14 +101,16 @@ export default function GroupDetailPage() {
     Promise.all([
       apiClient.getGroup(id),
       apiClient.listGroupMembers(id),
+      apiClient.getGroupAnnouncements(id).catch(() => ({ announcements: [] })),
       token ? apiClient.getMe().catch(() => null) : Promise.resolve(null),
     ])
-      .then(([g, mRes, me]) => {
+      .then(([g, mRes, annRes, me]) => {
         const list = mRes.members ?? [];
         setGroup(g);
         setAnnouncementDraft(g.announcement || "");
         setRulesDraft(g.rules || "");
         setMembers(list);
+        setAnnouncements(annRes.announcements ?? []);
         setIsMember(!!me && list.some((m) => m.user_id === me?.id));
       })
       .catch(console.error)
@@ -261,6 +270,10 @@ export default function GroupDetailPage() {
         privacy: group.privacy,
       });
       setGroup(updated);
+      const history = await apiClient
+        .getGroupAnnouncements(id)
+        .catch(() => ({ announcements: [] }));
+      setAnnouncements(history.announcements ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "保存圈子信息失败");
     } finally {
@@ -484,6 +497,24 @@ export default function GroupDetailPage() {
                   </p>
                 </div>
               )}
+              {announcements.length > 0 && (
+                <div>
+                  <h3 className="font-medium mb-2">公告历史</h3>
+                  <div className="space-y-2">
+                    {announcements.slice(0, 5).map((item) => (
+                      <div key={item.id} className="rounded-xl border p-3">
+                        <div className="text-xs text-muted-foreground mb-1">
+                          {item.furry_name || item.author_name || "圈子管理员"}{" "}
+                          · {new Date(item.created_at).toLocaleString("zh-CN")}
+                        </div>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                          {item.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -684,11 +715,22 @@ export default function GroupDetailPage() {
                     <div
                       className={`w-9 h-9 rounded-full bg-gradient-to-br ${mGradient} flex items-center justify-center text-xs text-white font-bold flex-shrink-0`}
                     >
-                      {m.user_id.slice(0, 2).toUpperCase()}
+                      {(m.furry_name ||
+                        m.username ||
+                        m.user_id.slice(0, 2))[0]?.toUpperCase()}
                     </div>
-                    <span className="text-sm font-medium">
-                      {m.user_id.slice(0, 8)}…
-                    </span>
+                    <div>
+                      <span className="text-sm font-medium">
+                        {m.furry_name ||
+                          m.username ||
+                          `${m.user_id.slice(0, 8)}…`}
+                      </span>
+                      {m.furry_name && m.username && (
+                        <p className="text-xs text-muted-foreground">
+                          @{m.username}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <span
                     className={`flex items-center gap-1 text-xs ${roleConf.color}`}

@@ -20,6 +20,8 @@ type Repository interface {
 	GetMember(ctx context.Context, groupID, userID uuid.UUID) (*GroupMember, error)
 	UpdateMemberRole(ctx context.Context, groupID, userID uuid.UUID, role GroupRole) error
 	ListMembers(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*GroupMember, int64, error)
+	CreateAnnouncement(ctx context.Context, item *GroupAnnouncement) error
+	ListAnnouncements(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*GroupAnnouncement, int64, error)
 
 	// Counts
 	IncrementMemberCount(ctx context.Context, groupID uuid.UUID) error

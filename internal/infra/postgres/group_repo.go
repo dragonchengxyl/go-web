@@ -127,9 +127,12 @@ func (r *GroupRepository) RemoveMember(ctx context.Context, groupID, userID uuid
 func (r *GroupRepository) GetMember(ctx context.Context, groupID, userID uuid.UUID) (*group.GroupMember, error) {
 	var m group.GroupMember
 	err := r.pool.QueryRow(ctx, `
-		SELECT group_id, user_id, role, joined_at FROM group_members
-		WHERE group_id=$1 AND user_id=$2
-	`, groupID, userID).Scan(&m.GroupID, &m.UserID, &m.Role, &m.JoinedAt)
+		SELECT gm.group_id, gm.user_id, gm.role, gm.joined_at,
+		       u.username, u.furry_name, u.avatar_key
+		FROM group_members gm
+		JOIN users u ON u.id = gm.user_id
+		WHERE gm.group_id=$1 AND gm.user_id=$2
+	`, groupID, userID).Scan(&m.GroupID, &m.UserID, &m.Role, &m.JoinedAt, &m.Username, &m.FurryName, &m.AvatarKey)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -156,8 +159,11 @@ func (r *GroupRepository) ListMembers(ctx context.Context, groupID uuid.UUID, pa
 	offset := (page - 1) * pageSize
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT group_id, user_id, role, joined_at FROM group_members
-		WHERE group_id=$1 ORDER BY joined_at ASC LIMIT $2 OFFSET $3
+		SELECT gm.group_id, gm.user_id, gm.role, gm.joined_at,
+		       u.username, u.furry_name, u.avatar_key
+		FROM group_members gm
+		JOIN users u ON u.id = gm.user_id
+		WHERE gm.group_id=$1 ORDER BY gm.joined_at ASC LIMIT $2 OFFSET $3
 	`, groupID, pageSize, offset)
 	if err != nil {
 		return nil, 0, err
@@ -167,7 +173,7 @@ func (r *GroupRepository) ListMembers(ctx context.Context, groupID uuid.UUID, pa
 	var members []*group.GroupMember
 	for rows.Next() {
 		var m group.GroupMember
-		if err := rows.Scan(&m.GroupID, &m.UserID, &m.Role, &m.JoinedAt); err != nil {
+		if err := rows.Scan(&m.GroupID, &m.UserID, &m.Role, &m.JoinedAt, &m.Username, &m.FurryName, &m.AvatarKey); err != nil {
 			continue
 		}
 		members = append(members, &m)
@@ -176,6 +182,51 @@ func (r *GroupRepository) ListMembers(ctx context.Context, groupID uuid.UUID, pa
 	var total int64
 	_ = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM group_members WHERE group_id=$1`, groupID).Scan(&total)
 	return members, total, nil
+}
+
+func (r *GroupRepository) CreateAnnouncement(ctx context.Context, item *group.GroupAnnouncement) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO group_announcements (id, group_id, author_id, content, created_at)
+		VALUES ($1, $2, $3, $4, $5)
+	`, item.ID, item.GroupID, item.AuthorID, item.Content, item.CreatedAt)
+	return err
+}
+
+func (r *GroupRepository) ListAnnouncements(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*group.GroupAnnouncement, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var total int64
+	_ = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM group_announcements WHERE group_id=$1`, groupID).Scan(&total)
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT ga.id, ga.group_id, ga.author_id, ga.content, ga.created_at,
+		       u.username, u.furry_name, u.avatar_key
+		FROM group_announcements ga
+		JOIN users u ON u.id = ga.author_id
+		WHERE ga.group_id = $1
+		ORDER BY ga.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, groupID, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]*group.GroupAnnouncement, 0, pageSize)
+	for rows.Next() {
+		var item group.GroupAnnouncement
+		if err := rows.Scan(&item.ID, &item.GroupID, &item.AuthorID, &item.Content, &item.CreatedAt, &item.AuthorName, &item.FurryName, &item.AvatarKey); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, &item)
+	}
+	return items, total, rows.Err()
 }
 
 func (r *GroupRepository) IncrementMemberCount(ctx context.Context, groupID uuid.UUID) error {

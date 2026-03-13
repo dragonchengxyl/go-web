@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,6 +111,7 @@ func (s *GroupService) UpdateGroup(ctx context.Context, callerID, groupID uuid.U
 	if input.Description != "" {
 		g.Description = input.Description
 	}
+	announcementChanged := input.Announcement != g.Announcement
 	if input.Announcement != "" || g.Announcement != "" {
 		g.Announcement = input.Announcement
 	}
@@ -126,6 +128,15 @@ func (s *GroupService) UpdateGroup(ctx context.Context, callerID, groupID uuid.U
 
 	if err := s.groupRepo.Update(ctx, g); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "更新圈子失败", err)
+	}
+	if announcementChanged && strings.TrimSpace(input.Announcement) != "" {
+		_ = s.groupRepo.CreateAnnouncement(ctx, &group.GroupAnnouncement{
+			ID:        uuid.New(),
+			GroupID:   groupID,
+			AuthorID:  callerID,
+			Content:   input.Announcement,
+			CreatedAt: time.Now(),
+		})
 	}
 	return g, nil
 }
@@ -181,6 +192,15 @@ func (s *GroupService) SetFeaturedPost(ctx context.Context, callerID, groupID uu
 		return nil, apperr.Wrap(apperr.CodeInternalError, "更新圈子精选失败", err)
 	}
 	return g, nil
+}
+
+// ListAnnouncements returns paginated announcement history entries for a group.
+func (s *GroupService) ListAnnouncements(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*group.GroupAnnouncement, int64, error) {
+	items, total, err := s.groupRepo.ListAnnouncements(ctx, groupID, page, pageSize)
+	if err != nil {
+		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "查询圈子公告历史失败", err)
+	}
+	return items, total, nil
 }
 
 // JoinGroup adds a user to a group.
