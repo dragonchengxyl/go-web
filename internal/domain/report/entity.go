@@ -24,6 +24,15 @@ const (
 	StatusDismissed Status = "dismissed"
 )
 
+type Action string
+
+const (
+	ActionNone          Action = ""
+	ActionBlockPost     Action = "block_post"
+	ActionDeleteComment Action = "delete_comment"
+	ActionBanUser       Action = "ban_user"
+)
+
 type Report struct {
 	ID               uuid.UUID  `json:"id"`
 	ReporterID       uuid.UUID  `json:"reporter_id"`
@@ -33,6 +42,7 @@ type Report struct {
 	Reason           string     `json:"reason"`
 	Description      string     `json:"description,omitempty"`
 	Status           Status     `json:"status"`
+	ActionTaken      *Action    `json:"action_taken,omitempty"`
 	ReviewedBy       *uuid.UUID `json:"reviewed_by,omitempty"`
 	ReviewedAt       *time.Time `json:"reviewed_at,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -41,7 +51,8 @@ type Report struct {
 type Repository interface {
 	Create(ctx context.Context, r *Report) error
 	List(ctx context.Context, status string, page, size int) ([]*Report, int64, error)
-	UpdateStatus(ctx context.Context, id uuid.UUID, status Status, reviewedBy uuid.UUID) error
+	GetByID(ctx context.Context, id uuid.UUID) (*Report, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status Status, reviewedBy uuid.UUID, actionTaken *Action) error
 }
 
 var ErrAlreadyReported = errors.New("already reported")

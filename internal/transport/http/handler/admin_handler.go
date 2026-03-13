@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/notification"
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
@@ -21,6 +22,7 @@ type AdminHandler struct {
 	commentService *usecase.CommentService
 	postService    *usecase.PostService
 	reportRepo     report.Repository
+	notifyService  *usecase.NotificationService
 }
 
 // NewAdminHandler creates a new AdminHandler
@@ -31,6 +33,7 @@ func NewAdminHandler(
 	commentService *usecase.CommentService,
 	postService *usecase.PostService,
 	reportRepo report.Repository,
+	notifyService *usecase.NotificationService,
 ) *AdminHandler {
 	return &AdminHandler{
 		statsService:   statsService,
@@ -38,6 +41,7 @@ func NewAdminHandler(
 		commentService: commentService,
 		postService:    postService,
 		reportRepo:     reportRepo,
+		notifyService:  notifyService,
 	}
 }
 
@@ -263,6 +267,7 @@ func (h *AdminHandler) UpdateReport(c *gin.Context) {
 
 	var input struct {
 		Status string `json:"status" binding:"required"`
+		Action string `json:"action"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
@@ -280,9 +285,84 @@ func (h *AdminHandler) UpdateReport(c *gin.Context) {
 		response.Error(c, apperr.ErrUnauthorized)
 		return
 	}
-	if err := h.reportRepo.UpdateStatus(c.Request.Context(), reportID, rs, reviewerID); err != nil {
+	rep, err := h.reportRepo.GetByID(c.Request.Context(), reportID)
+	if err != nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	var actionTaken *report.Action
+	if rs == report.StatusReviewed {
+		action, err := h.applyReportAction(c, rep, input.Action)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		actionTaken = action
+	}
+
+	if err := h.reportRepo.UpdateStatus(c.Request.Context(), reportID, rs, reviewerID, actionTaken); err != nil {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"status": input.Status})
+
+	if h.notifyService != nil {
+		targetType := "report_dismissed"
+		if rs == report.StatusReviewed {
+			targetType = "report_reviewed"
+			if actionTaken != nil {
+				switch *actionTaken {
+				case report.ActionBlockPost:
+					targetType = "report_post_blocked"
+				case report.ActionDeleteComment:
+					targetType = "report_comment_deleted"
+				case report.ActionBanUser:
+					targetType = "report_user_banned"
+				}
+			}
+		}
+		_ = h.notifyService.Notify(c.Request.Context(), &notification.Notification{
+			UserID:     rep.ReporterID,
+			Type:       notification.TypeSystem,
+			TargetID:   &rep.TargetID,
+			TargetType: targetType,
+		})
+	}
+
+	response.Success(c, gin.H{"status": input.Status, "action": input.Action})
+}
+
+func (h *AdminHandler) applyReportAction(c *gin.Context, rep *report.Report, rawAction string) (*report.Action, error) {
+	if rawAction == "" {
+		return nil, nil
+	}
+
+	action := report.Action(rawAction)
+	switch rep.TargetType {
+	case report.TargetTypePost:
+		if action != report.ActionBlockPost {
+			return nil, apperr.New(apperr.CodeInvalidParam, "该举报类型不支持此动作")
+		}
+		if err := h.postService.AdminUpdateModerationStatus(c.Request.Context(), rep.TargetID, post.ModerationBlocked); err != nil {
+			return nil, err
+		}
+	case report.TargetTypeComment:
+		if action != report.ActionDeleteComment {
+			return nil, apperr.New(apperr.CodeInvalidParam, "该举报类型不支持此动作")
+		}
+		if err := h.commentService.AdminDeleteComment(c.Request.Context(), rep.TargetID); err != nil {
+			return nil, err
+		}
+	case report.TargetTypeUser:
+		if action != report.ActionBanUser {
+			return nil, apperr.New(apperr.CodeInvalidParam, "该举报类型不支持此动作")
+		}
+		if _, err := h.userService.UpdateUserStatus(c.Request.Context(), rep.TargetID, user.StatusBanned); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, apperr.New(apperr.CodeInvalidParam, "未知举报目标类型")
+	}
+
+	return &action, nil
 }

@@ -47,6 +47,11 @@ function notificationText(n: Notification): string {
     case 'system':
       if (n.target_type === 'post_approved') return '你的帖子已通过审核';
       if (n.target_type === 'post_blocked') return '你的帖子未通过审核';
+      if (n.target_type === 'report_reviewed') return '你提交的举报已处理';
+      if (n.target_type === 'report_dismissed') return '你提交的举报已被忽略';
+      if (n.target_type === 'report_post_blocked') return '你举报的帖子已被处理';
+      if (n.target_type === 'report_comment_deleted') return '你举报的评论已被删除';
+      if (n.target_type === 'report_user_banned') return '你举报的用户已被封禁';
       return '你有一条系统通知';
     default:
       return '你有一条新通知';
@@ -62,6 +67,7 @@ function notificationLink(n: Notification): string {
       return n.target_id ? `/users/${n.target_id}` : '/feed';
     case 'system':
       if (n.target_type === 'post_approved' && n.target_id) return `/posts/${n.target_id}`;
+      if (n.target_type === 'report_post_blocked' && n.target_id) return `/posts/${n.target_id}`;
       return '/creator';
     default:
       return '/feed';

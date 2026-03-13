@@ -296,7 +296,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			admin := protected.Group("/admin")
 			admin.Use(authMiddleware.RequireRole(user.RoleAdmin))
 			{
-				adminHandler := handler.NewAdminHandler(cfg.StatsService, cfg.UserService, nil, cfg.CommentService, cfg.PostService, cfg.ReportRepo)
+				adminHandler := handler.NewAdminHandler(cfg.StatsService, cfg.UserService, nil, cfg.CommentService, cfg.PostService, cfg.ReportRepo, cfg.NotificationService)
 
 				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
 				admin.GET("/stats/user-growth", adminHandler.GetUserGrowthChart)

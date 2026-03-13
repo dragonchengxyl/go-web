@@ -16,6 +16,7 @@ interface Report {
   description: string
   reporter_username: string
   status: string
+  action_taken?: string
   created_at: string
 }
 
@@ -37,6 +38,12 @@ const TARGET_LABEL: Record<string, string> = {
   user: '用户',
 }
 
+const ACTION_LABEL: Record<string, string> = {
+  block_post: '已封禁帖子',
+  delete_comment: '已删除评论',
+  ban_user: '已封禁用户',
+}
+
 function toast(msg: string) {
   const el = document.createElement('div')
   el.className = 'fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50'
@@ -49,7 +56,7 @@ export default function AdminReportsPage() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('pending')
   const [page, setPage] = useState(1)
-  const [confirming, setConfirming] = useState<{ id: string; action: 'reviewed' | 'dismissed' } | null>(null)
+  const [confirming, setConfirming] = useState<{ id: string; status: 'reviewed' | 'dismissed'; action?: string } | null>(null)
   const pageSize = 20
 
   const { data, isLoading } = useQuery<ListReportsOutput>({
@@ -59,11 +66,17 @@ export default function AdminReportsPage() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      apiClient.put(`/admin/reports/${id}`, { status }),
-    onSuccess: (_, { status }) => {
+    mutationFn: ({ id, status, action }: { id: string; status: string; action?: string }) =>
+      apiClient.put(`/admin/reports/${id}`, { status, action }),
+    onSuccess: (_, { status, action }) => {
       setConfirming(null)
-      toast(status === 'reviewed' ? '举报已处理' : '举报已忽略')
+      if (status === 'dismissed') {
+        toast('举报已忽略')
+      } else if (action && ACTION_LABEL[action]) {
+        toast(`举报已处理，${ACTION_LABEL[action]}`)
+      } else {
+        toast('举报已处理')
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-reports'] })
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] })
     },
@@ -76,11 +89,11 @@ export default function AdminReportsPage() {
   const reports = data?.reports ?? []
   const totalPages = data ? Math.ceil(data.total / pageSize) : 1
 
-  const handleAction = (id: string, action: 'reviewed' | 'dismissed') => {
-    if (confirming?.id === id && confirming.action === action) {
-      updateMutation.mutate({ id, status: action })
+  const handleAction = (id: string, status: 'reviewed' | 'dismissed', action?: string) => {
+    if (confirming?.id === id && confirming.status === status && confirming.action === action) {
+      updateMutation.mutate({ id, status, action })
     } else {
-      setConfirming({ id, action })
+      setConfirming({ id, status, action })
     }
   }
 
@@ -115,6 +128,13 @@ export default function AdminReportsPage() {
           {reports.map((r) => {
             const isActing = updateMutation.isPending && confirming?.id === r.id
             const isConfirmingThis = confirming?.id === r.id
+            const actionButton = r.target_type === 'post'
+              ? { label: '处理并封禁帖子', action: 'block_post' }
+              : r.target_type === 'comment'
+                ? { label: '处理并删除评论', action: 'delete_comment' }
+                : r.target_type === 'user'
+                  ? { label: '处理并封禁用户', action: 'ban_user' }
+                  : null
             return (
               <Card key={r.id}>
                 <CardContent className="pt-4 pb-3">
@@ -134,6 +154,11 @@ export default function AdminReportsPage() {
                         <span className="text-xs text-gray-400">
                           {new Date(r.created_at).toLocaleString('zh-CN')}
                         </span>
+                        {r.action_taken && (
+                          <Badge variant="outline" className="text-xs">
+                            {ACTION_LABEL[r.action_taken] ?? r.action_taken}
+                          </Badge>
+                        )}
                         {r.target_type === 'post' && (
                           <a
                             href={`/posts/${r.target_id}`}
@@ -154,26 +179,41 @@ export default function AdminReportsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className={isConfirmingThis && confirming.action === 'reviewed'
+                          className={isConfirmingThis && confirming.status === 'reviewed' && !confirming.action
                             ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
                             : 'text-blue-600 hover:text-blue-700'}
                           disabled={isActing}
                           onClick={() => handleAction(r.id, 'reviewed')}
                         >
-                          {isActing && confirming?.action === 'reviewed'
+                          {isActing && confirming?.status === 'reviewed' && !confirming?.action
                             ? <Loader2 size={12} className="animate-spin" />
                             : '处理'}
                         </Button>
+                        {actionButton && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={isConfirmingThis && confirming.status === 'reviewed' && confirming.action === actionButton.action
+                              ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+                              : 'text-red-600 hover:text-red-700'}
+                            disabled={isActing}
+                            onClick={() => handleAction(r.id, 'reviewed', actionButton.action)}
+                          >
+                            {isActing && confirming?.status === 'reviewed' && confirming?.action === actionButton.action
+                              ? <Loader2 size={12} className="animate-spin" />
+                              : actionButton.label}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          className={isConfirmingThis && confirming.action === 'dismissed'
+                          className={isConfirmingThis && confirming.status === 'dismissed'
                             ? 'bg-gray-600 text-white border-gray-600 hover:bg-gray-700'
                             : 'text-gray-500 hover:text-gray-700'}
                           disabled={isActing}
                           onClick={() => handleAction(r.id, 'dismissed')}
                         >
-                          {isActing && confirming?.action === 'dismissed'
+                          {isActing && confirming?.status === 'dismissed'
                             ? <Loader2 size={12} className="animate-spin" />
                             : '忽略'}
                         </Button>

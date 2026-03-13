@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/studio/platform/internal/domain/report"
 )
@@ -62,7 +64,7 @@ func (r *ReportRepository) List(ctx context.Context, status string, page, size i
 	args = append(args, size, offset)
 	dataQuery := fmt.Sprintf(`
 		SELECT rp.id, rp.reporter_id, COALESCE(u.username, ''), rp.target_type, rp.target_id,
-		       rp.reason, COALESCE(rp.description, ''), rp.status,
+		       rp.reason, COALESCE(rp.description, ''), rp.status, rp.action_taken,
 		       rp.reviewed_by, rp.reviewed_at, rp.created_at
 		FROM reports rp
 		LEFT JOIN users u ON u.id = rp.reporter_id
@@ -80,27 +82,65 @@ func (r *ReportRepository) List(ctx context.Context, status string, page, size i
 	reports := make([]*report.Report, 0)
 	for rows.Next() {
 		rep := &report.Report{}
+		var actionTaken *string
 		if err := rows.Scan(
 			&rep.ID, &rep.ReporterID, &rep.ReporterUsername,
 			&rep.TargetType, &rep.TargetID,
-			&rep.Reason, &rep.Description, &rep.Status,
+			&rep.Reason, &rep.Description, &rep.Status, &actionTaken,
 			&rep.ReviewedBy, &rep.ReviewedAt, &rep.CreatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan report: %w", err)
+		}
+		if actionTaken != nil && *actionTaken != "" {
+			action := report.Action(*actionTaken)
+			rep.ActionTaken = &action
 		}
 		reports = append(reports, rep)
 	}
 	return reports, total, nil
 }
 
-func (r *ReportRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status report.Status, reviewedBy uuid.UUID) error {
+func (r *ReportRepository) GetByID(ctx context.Context, id uuid.UUID) (*report.Report, error) {
+	rep := &report.Report{}
+	var actionTaken *string
+	err := r.pool.QueryRow(ctx, `
+		SELECT rp.id, rp.reporter_id, COALESCE(u.username, ''), rp.target_type, rp.target_id,
+		       rp.reason, COALESCE(rp.description, ''), rp.status, rp.action_taken,
+		       rp.reviewed_by, rp.reviewed_at, rp.created_at
+		FROM reports rp
+		LEFT JOIN users u ON u.id = rp.reporter_id
+		WHERE rp.id = $1
+	`, id).Scan(
+		&rep.ID, &rep.ReporterID, &rep.ReporterUsername,
+		&rep.TargetType, &rep.TargetID,
+		&rep.Reason, &rep.Description, &rep.Status, &actionTaken,
+		&rep.ReviewedBy, &rep.ReviewedAt, &rep.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("report not found")
+		}
+		return nil, fmt.Errorf("failed to get report: %w", err)
+	}
+	if actionTaken != nil && *actionTaken != "" {
+		action := report.Action(*actionTaken)
+		rep.ActionTaken = &action
+	}
+	return rep, nil
+}
+
+func (r *ReportRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status report.Status, reviewedBy uuid.UUID, actionTaken *report.Action) error {
+	var actionValue *string
+	if actionTaken != nil {
+		value := string(*actionTaken)
+		actionValue = &value
+	}
 	_, err := r.pool.Exec(ctx,
-		`UPDATE reports SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3`,
-		string(status), reviewedBy, id,
+		`UPDATE reports SET status = $1, reviewed_by = $2, reviewed_at = NOW(), action_taken = $3 WHERE id = $4`,
+		string(status), reviewedBy, actionValue, id,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update report status: %w", err)
 	}
 	return nil
 }
-
