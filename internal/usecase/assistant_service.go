@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -12,6 +13,7 @@ import (
 	assistantdomain "github.com/studio/platform/internal/domain/assistant"
 	"github.com/studio/platform/internal/domain/event"
 	"github.com/studio/platform/internal/domain/group"
+	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/llm"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
@@ -45,6 +47,7 @@ type AssistantService struct {
 	postService  *PostService
 	groupService *GroupService
 	eventService *EventService
+	userService  *UserService
 }
 
 // NewAssistantService creates a lightweight assistant service.
@@ -55,6 +58,7 @@ func NewAssistantService(
 	postService *PostService,
 	groupService *GroupService,
 	eventService *EventService,
+	userService *UserService,
 ) *AssistantService {
 	if cfg.MaxContextItems <= 0 {
 		cfg.MaxContextItems = 6
@@ -73,6 +77,7 @@ func NewAssistantService(
 		postService:  postService,
 		groupService: groupService,
 		eventService: eventService,
+		userService:  userService,
 	}
 }
 
@@ -299,9 +304,102 @@ func (s *AssistantService) collectCards(ctx context.Context, query string) []Ass
 
 	appendUnique(recommendPageCards(query)...)
 	appendUnique(s.collectPostCards(ctx, query)...)
+	appendUnique(s.collectUserCards(ctx, query)...)
+	appendUnique(s.collectTagCards(ctx, query)...)
 	appendUnique(s.collectGroupCards(ctx, query)...)
 	appendUnique(s.collectEventCards(ctx, query)...)
 
+	return cards
+}
+
+func (s *AssistantService) collectUserCards(ctx context.Context, query string) []AssistantCard {
+	if s.userService == nil {
+		return nil
+	}
+
+	users, err := s.userService.SearchUsers(ctx, query, 2)
+	if err != nil || len(users) == 0 {
+		return nil
+	}
+
+	cards := make([]AssistantCard, 0, len(users))
+	for _, item := range users {
+		if item.Status != user.StatusActive {
+			continue
+		}
+
+		displayName := item.Username
+		if item.FurryName != nil && strings.TrimSpace(*item.FurryName) != "" {
+			displayName = *item.FurryName
+		}
+
+		var summaryParts []string
+		if item.Species != nil && strings.TrimSpace(*item.Species) != "" {
+			summaryParts = append(summaryParts, "物种："+strings.TrimSpace(*item.Species))
+		}
+		if item.Bio != nil && strings.TrimSpace(*item.Bio) != "" {
+			summaryParts = append(summaryParts, truncateText(strings.TrimSpace(*item.Bio), 36))
+		}
+		summary := strings.Join(summaryParts, " · ")
+		if summary == "" {
+			summary = "查看这个用户的主页、动态和关注关系。"
+		}
+
+		meta := "@" + item.Username
+		if item.Role == user.RoleCreator {
+			meta += " · 创作者"
+		}
+
+		cards = append(cards, AssistantCard{
+			Kind:    "user",
+			Title:   displayName,
+			Summary: summary,
+			Href:    "/users/" + item.ID.String(),
+			Meta:    meta,
+		})
+	}
+	return cards
+}
+
+func (s *AssistantService) collectTagCards(ctx context.Context, query string) []AssistantCard {
+	if s.postService == nil {
+		return nil
+	}
+
+	tags, err := s.postService.GetHotTags(ctx, 12)
+	if err != nil || len(tags) == 0 {
+		return nil
+	}
+
+	query = strings.TrimSpace(strings.ToLower(query))
+	cards := make([]AssistantCard, 0, 2)
+	for _, tag := range tags {
+		if len(cards) >= 2 {
+			break
+		}
+		if query != "" && !strings.Contains(strings.ToLower(tag), query) && !strings.Contains(query, strings.ToLower(tag)) {
+			continue
+		}
+		cards = append(cards, AssistantCard{
+			Kind:    "tag",
+			Title:   "#" + tag,
+			Summary: "查看这个标签下的相关动态。",
+			Href:    "/tags/" + url.PathEscape(tag),
+			Meta:    "/tags/" + tag,
+		})
+	}
+
+	if len(cards) == 0 {
+		for _, tag := range tags[:min(2, len(tags))] {
+			cards = append(cards, AssistantCard{
+				Kind:    "tag",
+				Title:   "#" + tag,
+				Summary: "查看这个标签下的相关动态。",
+				Href:    "/tags/" + url.PathEscape(tag),
+				Meta:    "/tags/" + tag,
+			})
+		}
+	}
 	return cards
 }
 
@@ -417,7 +515,7 @@ func (s *AssistantService) buildSystemPrompt(contextText string) string {
 2. 只根据给定的站内上下文和通用产品常识回答，不要编造不存在的页面、功能、活动或数据。
 3. 如果上下文里已经有推荐内容，优先围绕这些内容给出建议。
 4. 语气友好、干练，不要油腻，不要过度卖萌，不要把自己说成真人。
-5. 回答尽量简洁，通常 2 到 5 段即可；必要时可用短列表。
+5. 回答尽量简洁，通常 2 到 5 段即可；必要时优先用短 Markdown 列表。
 6. 如果用户的问题超出站内信息范围，要明确说明你主要负责本网站导览与推荐。
 
 以下是你可用的站内信息：

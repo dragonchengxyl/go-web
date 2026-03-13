@@ -121,7 +121,7 @@ export interface Notification {
 }
 
 export interface AssistantCard {
-  kind: "page" | "post" | "group" | "event";
+  kind: "page" | "post" | "group" | "event" | "user" | "tag";
   title: string;
   summary: string;
   href: string;

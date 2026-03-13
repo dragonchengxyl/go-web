@@ -193,7 +193,7 @@ func main() {
 		cfg.Assistant.Temperature,
 		time.Duration(cfg.Assistant.TimeoutSec)*time.Second,
 	)
-	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantRepo, postService, groupService, eventService)
+	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantRepo, postService, groupService, eventService, userService)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)

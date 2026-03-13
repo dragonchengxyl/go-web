@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
 import {
   apiClient,
@@ -20,6 +20,7 @@ const QUICK_PROMPTS = [
   "推荐几个有意思的圈子",
   "最近有什么活动值得看？",
   "怎么发布我的第一条动态？",
+  "推荐几个值得关注的用户",
 ];
 
 const WELCOME_CARDS: AssistantCard[] = [
@@ -117,6 +118,120 @@ function CardList({ cards }: { cards?: AssistantCard[] }) {
   );
 }
 
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    const boldMatch = remaining.match(/\*\*([^*]+)\*\*/);
+    const codeMatch = remaining.match(/`([^`]+)`/);
+
+    const matches = [linkMatch, boldMatch, codeMatch]
+      .filter((item): item is RegExpMatchArray => !!item)
+      .map((item) => ({
+        match: item,
+        index: item.index ?? 0,
+      }))
+      .sort((a, b) => a.index - b.index);
+
+    if (matches.length === 0) {
+      nodes.push(<span key={`text-${key++}`}>{remaining}</span>);
+      break;
+    }
+
+    const { match, index } = matches[0];
+    if (index > 0) {
+      nodes.push(
+        <span key={`text-${key++}`}>{remaining.slice(0, index)}</span>,
+      );
+    }
+
+    if (match[0] === linkMatch?.[0]) {
+      const href = linkMatch?.[2] ?? "#";
+      nodes.push(
+        <a
+          key={`link-${key++}`}
+          href={href}
+          target={href.startsWith("http") ? "_blank" : undefined}
+          rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
+          className="font-medium text-orange-600 underline decoration-orange-300 underline-offset-4 dark:text-orange-300"
+        >
+          {linkMatch?.[1]}
+        </a>,
+      );
+    } else if (match[0] === boldMatch?.[0]) {
+      nodes.push(
+        <strong
+          key={`strong-${key++}`}
+          className="font-semibold text-foreground"
+        >
+          {boldMatch?.[1]}
+        </strong>,
+      );
+    } else if (match[0] === codeMatch?.[0]) {
+      nodes.push(
+        <code
+          key={`code-${key++}`}
+          className="rounded-md bg-slate-900/90 px-1.5 py-0.5 text-[12px] text-orange-100 dark:bg-slate-800"
+        >
+          {codeMatch?.[1]}
+        </code>,
+      );
+    }
+
+    remaining = remaining.slice(index + match[0].length);
+  }
+
+  return nodes;
+}
+
+function AssistantMarkdown({ text }: { text: string }) {
+  const blocks = text.split(/\n{2,}/).filter((item) => item.trim());
+
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, blockIndex) => {
+        const lines = block.split("\n").filter((item) => item.trim());
+        const isList = lines.every(
+          (line) =>
+            line.trim().startsWith("- ") || line.trim().startsWith("* "),
+        );
+
+        if (isList) {
+          return (
+            <ul
+              key={`list-${blockIndex}`}
+              className="space-y-1.5 pl-4 text-sm leading-6 text-inherit"
+            >
+              {lines.map((line, lineIndex) => (
+                <li
+                  key={`item-${blockIndex}-${lineIndex}`}
+                  className="list-disc"
+                >
+                  {renderInlineMarkdown(line.trim().slice(2))}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={`p-${blockIndex}`} className="text-sm leading-6 text-inherit">
+            {lines.map((line, lineIndex) => (
+              <span key={`line-${blockIndex}-${lineIndex}`}>
+                {renderInlineMarkdown(line)}
+                {lineIndex < lines.length - 1 && <br />}
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export function FurryAssistant() {
   const { isLoggedIn } = useAuth();
   const [open, setOpen] = useState(false);
@@ -131,6 +246,8 @@ export function FurryAssistant() {
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState("");
+  const [providerLabel, setProviderLabel] = useState("AI");
+  const [fallbackMode, setFallbackMode] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -262,6 +379,10 @@ export function FurryAssistant() {
         {
           signal: controller.signal,
           onMeta: (meta) => {
+            setProviderLabel(
+              meta.provider === "deepseek" ? "DeepSeek" : meta.provider || "AI",
+            );
+            setFallbackMode(meta.fallback);
             if (meta.conversation_id) {
               setConversationId(meta.conversation_id);
               localStorage.setItem(CONVERSATION_KEY, meta.conversation_id);
@@ -390,7 +511,9 @@ export function FurryAssistant() {
                 <div className="mt-3 flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    站内检索已开启
+                    {fallbackMode
+                      ? "站内检索模式"
+                      : `${providerLabel} + 站内检索`}
                   </span>
                   <button
                     type="button"
@@ -460,12 +583,19 @@ export function FurryAssistant() {
                       : "max-w-full rounded-[22px] rounded-bl-md border border-orange-200/80 bg-white/90 px-4 py-3 text-sm leading-6 text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100"
                   }
                 >
-                  <p className="whitespace-pre-wrap break-words">
-                    {message.content ||
-                      (loading && index === messages.length - 1
-                        ? "正在整理站内信息..."
-                        : "")}
-                  </p>
+                  {message.role === "assistant" ? (
+                    message.content ? (
+                      <AssistantMarkdown text={message.content} />
+                    ) : loading && index === messages.length - 1 ? (
+                      <p className="whitespace-pre-wrap break-words">
+                        正在整理站内信息...
+                      </p>
+                    ) : null
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">
+                      {message.content}
+                    </p>
+                  )}
                   {message.role === "assistant" && (
                     <CardList cards={message.cards} />
                   )}
