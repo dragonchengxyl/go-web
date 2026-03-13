@@ -323,6 +323,12 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, query string,
 			if card.Meta != "" {
 				line += " | " + card.Meta
 			}
+			if card.Reason != "" {
+				line += " | 推荐理由: " + card.Reason
+			}
+			if card.Source != "" {
+				line += " | 来源: " + card.Source
+			}
 			itemLines = append(itemLines, line)
 		}
 		contextParts = append(contextParts, "可引用的站内信息:\n"+strings.Join(itemLines, "\n"))
@@ -421,6 +427,8 @@ func (s *AssistantService) collectUserCards(ctx context.Context, query string) [
 			Summary: summary,
 			Href:    "/users/" + item.ID.String(),
 			Meta:    meta,
+			Reason:  userRecommendationReason(item, query),
+			Source:  "用户主页",
 		})
 	}
 	return cards
@@ -451,6 +459,8 @@ func (s *AssistantService) collectTagCards(ctx context.Context, query string) []
 			Summary: "查看这个标签下的相关动态。",
 			Href:    "/tags/" + url.PathEscape(tag),
 			Meta:    "/tags/" + tag,
+			Reason:  "热门标签，适合快速扩展相关内容",
+			Source:  "标签聚合页",
 		})
 	}
 
@@ -462,6 +472,8 @@ func (s *AssistantService) collectTagCards(ctx context.Context, query string) []
 				Summary: "查看这个标签下的相关动态。",
 				Href:    "/tags/" + url.PathEscape(tag),
 				Meta:    "/tags/" + tag,
+				Reason:  "站内热门标签",
+				Source:  "标签聚合页",
 			})
 		}
 	}
@@ -486,12 +498,20 @@ func (s *AssistantService) collectPostCards(ctx context.Context, query string) [
 		}
 		summary := truncateText(post.Content, 56)
 		meta := fmt.Sprintf("@%s · %d 赞 · %d 评论", post.AuthorUsername, post.LikeCount, post.CommentCount)
+		reason := "公开且已审核通过的动态"
+		if query != "" && strings.Contains(strings.ToLower(post.Content+" "+post.Title), strings.ToLower(query)) {
+			reason = "内容与你的问题关键词相关"
+		} else if post.LikeCount+post.CommentCount > 0 {
+			reason = "这条动态当前互动表现更高"
+		}
 		cards = append(cards, AssistantCard{
 			Kind:    "post",
 			Title:   title,
 			Summary: summary,
 			Href:    "/posts/" + post.ID.String(),
 			Meta:    meta,
+			Reason:  reason,
+			Source:  "帖子详情页",
 		})
 	}
 	return cards
@@ -525,6 +545,8 @@ func (s *AssistantService) collectGroupCards(ctx context.Context, query string) 
 			Summary: truncateText(item.Description, 52),
 			Href:    "/groups/" + item.ID.String(),
 			Meta:    fmt.Sprintf("%d 成员 · %d 帖子", item.MemberCount, item.PostCount),
+			Reason:  groupRecommendationReason(item, query),
+			Source:  "圈子详情页",
 		})
 	}
 	return cards
@@ -565,6 +587,8 @@ func (s *AssistantService) collectEventCards(ctx context.Context, query string) 
 			Summary: truncateText(item.Description, 52),
 			Href:    "/events/" + item.ID.String(),
 			Meta:    fmt.Sprintf("%s · %s", item.StartTime.Format("01-02 15:04"), location),
+			Reason:  eventRecommendationReason(item, query),
+			Source:  "活动详情页",
 		})
 	}
 	return cards
@@ -582,6 +606,7 @@ func (s *AssistantService) buildSystemPrompt(contextText string, settings *assis
 4. 语气友好、干练，不要油腻，不要过度卖萌，不要把自己说成真人。
 5. 回答尽量简洁，通常 2 到 5 段即可；必要时优先用短 Markdown 列表。
 6. 如果用户的问题超出站内信息范围，要明确说明你主要负责本网站导览与推荐。
+7. 当你推荐具体内容时，尽量说明推荐理由，并写清楚用户该从哪个入口进入。
 
 以下是你可用的站内信息：
 %s
@@ -629,6 +654,12 @@ func buildFallbackAnswer(personaName, query string, cards []AssistantCard) strin
 		fmt.Fprintf(&b, "%d. %s：%s", i+1, card.Title, card.Summary)
 		if card.Meta != "" {
 			fmt.Fprintf(&b, "（%s）", card.Meta)
+		}
+		if card.Reason != "" {
+			fmt.Fprintf(&b, "\n   推荐理由：%s", card.Reason)
+		}
+		if card.Source != "" {
+			fmt.Fprintf(&b, "\n   来源：%s", card.Source)
 		}
 		b.WriteString("\n")
 	}
@@ -727,6 +758,8 @@ func recommendPageCards(query string) []AssistantCard {
 			Summary: "看热门动态、标签和创作者，适合第一次来先逛。",
 			Href:    "/explore",
 			Meta:    "/explore",
+			Reason:  "适合第一次来快速熟悉社区内容结构",
+			Source:  "站内固定导航",
 		},
 		{
 			Kind:    "page",
@@ -734,6 +767,8 @@ func recommendPageCards(query string) []AssistantCard {
 			Summary: "查看你关注对象的最新内容和互动。",
 			Href:    "/feed",
 			Meta:    "/feed",
+			Reason:  "如果你已经关注了一些人，这里最能体现个性化内容",
+			Source:  "站内固定导航",
 		},
 		{
 			Kind:    "page",
@@ -741,6 +776,8 @@ func recommendPageCards(query string) []AssistantCard {
 			Summary: "支持图文发布、图片上传、AI 内容标记和可见性设置。",
 			Href:    "/posts/create",
 			Meta:    "/posts/create",
+			Reason:  "适合想马上开始发内容的用户",
+			Source:  "站内固定导航",
 		},
 		{
 			Kind:    "page",
@@ -748,6 +785,8 @@ func recommendPageCards(query string) []AssistantCard {
 			Summary: "按兴趣找同好、加入圈子、看成员和帖子数。",
 			Href:    "/groups",
 			Meta:    "/groups",
+			Reason:  "适合按兴趣主题找社区和同好",
+			Source:  "站内固定导航",
 		},
 		{
 			Kind:    "page",
@@ -755,6 +794,8 @@ func recommendPageCards(query string) []AssistantCard {
 			Summary: "查看近期线上线下活动，支持报名参加。",
 			Href:    "/events",
 			Meta:    "/events",
+			Reason:  "适合找近期活动或线下聚会信息",
+			Source:  "站内固定导航",
 		},
 		{
 			Kind:    "page",
@@ -762,6 +803,8 @@ func recommendPageCards(query string) []AssistantCard {
 			Summary: "查看帖子、粉丝、互动和打赏数据。",
 			Href:    "/creator",
 			Meta:    "/creator",
+			Reason:  "适合已经在创作或打算持续运营内容的用户",
+			Source:  "站内固定导航",
 		},
 	}
 
@@ -893,4 +936,51 @@ func (s *AssistantService) resolveConversation(
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建 AI 会话失败", err)
 	}
 	return conv, nil
+}
+
+func userRecommendationReason(u *user.User, query string) string {
+	query = strings.TrimSpace(strings.ToLower(query))
+	if query != "" {
+		if strings.Contains(strings.ToLower(u.Username), query) {
+			return "用户名与你的问题关键词匹配"
+		}
+		if u.FurryName != nil && strings.Contains(strings.ToLower(strings.TrimSpace(*u.FurryName)), query) {
+			return "兽名与你的问题关键词匹配"
+		}
+		if u.Species != nil && strings.Contains(strings.ToLower(strings.TrimSpace(*u.Species)), query) {
+			return "物种信息与你的问题关键词相关"
+		}
+	}
+	if u.Role == user.RoleCreator {
+		return "这是创作者账号，适合继续查看其内容和动态"
+	}
+	return "这个用户的主页信息和你的问题更相关"
+}
+
+func groupRecommendationReason(g *group.Group, query string) string {
+	query = strings.TrimSpace(strings.ToLower(query))
+	if query != "" {
+		haystack := strings.ToLower(g.Name + " " + g.Description + " " + strings.Join(g.Tags, " "))
+		if strings.Contains(haystack, query) {
+			return "圈子名称或简介与你的问题关键词相关"
+		}
+	}
+	if g.MemberCount > 0 {
+		return fmt.Sprintf("这个圈子已经有 %d 位成员，适合继续深入了解", g.MemberCount)
+	}
+	return "这是一个公开圈子，适合继续查看详情"
+}
+
+func eventRecommendationReason(e *event.Event, query string) string {
+	query = strings.TrimSpace(strings.ToLower(query))
+	if query != "" {
+		haystack := strings.ToLower(e.Title + " " + e.Description + " " + e.Location + " " + strings.Join(e.Tags, " "))
+		if strings.Contains(haystack, query) {
+			return "活动主题与你的问题关键词相关"
+		}
+	}
+	if e.IsOnline {
+		return "这是线上活动，参与门槛更低"
+	}
+	return "这是近期可参加的公开活动"
 }

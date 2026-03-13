@@ -22,6 +22,8 @@ type Card struct {
 	Summary string `json:"summary"`
 	Href    string `json:"href"`
 	Meta    string `json:"meta,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Source  string `json:"source,omitempty"`
 }
 
 // Conversation stores a user's AI assistant thread.

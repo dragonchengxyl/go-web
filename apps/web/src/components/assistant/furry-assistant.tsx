@@ -112,6 +112,16 @@ function CardList({ cards }: { cards?: AssistantCard[] }) {
           <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
             {card.summary}
           </p>
+          {card.reason && (
+            <p className="mt-2 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+              推荐理由：{card.reason}
+            </p>
+          )}
+          {card.source && (
+            <p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+              来源：{card.source}
+            </p>
+          )}
         </Link>
       ))}
     </div>

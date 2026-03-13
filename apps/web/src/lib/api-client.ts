@@ -126,6 +126,8 @@ export interface AssistantCard {
   summary: string;
   href: string;
   meta?: string;
+  reason?: string;
+  source?: string;
 }
 
 export interface AssistantChatMessage {

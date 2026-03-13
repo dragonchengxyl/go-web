@@ -1,4 +1,4 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all seed-dev
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -138,6 +138,9 @@ dev-all: ## Setup + start infra + print next steps
 	@echo ""
 
 dev: dev-all ## Alias for dev-all
+
+seed-dev: ## Seed local development data
+	go run ./cmd/seed-dev -config configs/config.local.yaml
 
 ci: ## Run CI checks locally
 	@echo "Running CI checks..."
