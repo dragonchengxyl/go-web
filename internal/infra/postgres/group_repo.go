@@ -193,6 +193,11 @@ func (r *GroupRepository) IncrementPostCount(ctx context.Context, groupID uuid.U
 	return err
 }
 
+func (r *GroupRepository) DecrementPostCount(ctx context.Context, groupID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `UPDATE groups SET post_count=GREATEST(0,post_count-1) WHERE id=$1`, groupID)
+	return err
+}
+
 func (r *GroupRepository) ListByMember(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*group.Group, int64, error) {
 	if page < 1 {
 		page = 1

@@ -25,4 +25,5 @@ type Repository interface {
 	IncrementMemberCount(ctx context.Context, groupID uuid.UUID) error
 	DecrementMemberCount(ctx context.Context, groupID uuid.UUID) error
 	IncrementPostCount(ctx context.Context, groupID uuid.UUID) error
+	DecrementPostCount(ctx context.Context, groupID uuid.UUID) error
 }

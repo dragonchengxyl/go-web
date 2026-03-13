@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { X, ImagePlus, Loader2 } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
-import { useAuth } from '@/contexts/auth-context';
-import { useOSSUpload } from '@/hooks/use-oss-upload';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { X, ImagePlus, Loader2, Users } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
+import { useAuth } from "@/contexts/auth-context";
+import { useOSSUpload } from "@/hooks/use-oss-upload";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-const DRAFT_KEY = 'post_draft';
+const DRAFT_KEY = "post_draft";
 
 interface ImageItem {
   url: string;
@@ -23,25 +23,40 @@ interface ImageItem {
 export default function CreatePostPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState('');
-  const [visibility, setVisibility] = useState('public');
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [tags, setTags] = useState("");
+  const [visibility, setVisibility] = useState("public");
   const [isAIGenerated, setIsAIGenerated] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [images, setImages] = useState<ImageItem[]>([]);
   const { upload } = useOSSUpload();
 
   // Draft restore on mount
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gid = params.get("group_id");
+    if (gid) {
+      setGroupId(gid);
+      apiClient
+        .getGroup(gid)
+        .then((group) => setGroupName(group.name))
+        .catch(() => {
+          setGroupId(null);
+          setGroupName("");
+        });
+    }
+
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     try {
       const draft = JSON.parse(raw);
       if (draft.title || draft.content) {
-        if (confirm('检测到未保存的草稿，是否恢复？')) {
+        if (confirm("检测到未保存的草稿，是否恢复？")) {
           if (draft.title) setTitle(draft.title);
           if (draft.content) setContent(draft.content);
           if (draft.tags) setTags(draft.tags);
@@ -62,77 +77,88 @@ export default function CreatePostPage() {
     return () => clearTimeout(timer);
   }, [title, content, tags]);
 
-  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const remaining = 9 - images.length;
-    const toUpload = files.slice(0, remaining);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const remaining = 9 - images.length;
+      const toUpload = files.slice(0, remaining);
+      if (fileInputRef.current) fileInputRef.current.value = "";
 
-    const placeholders: ImageItem[] = toUpload.map(file => ({
-      url: '',
-      preview: URL.createObjectURL(file),
-      progress: 0,
-      uploading: true,
-    }));
+      const placeholders: ImageItem[] = toUpload.map((file) => ({
+        url: "",
+        preview: URL.createObjectURL(file),
+        progress: 0,
+        uploading: true,
+      }));
 
-    setImages(prev => [...prev, ...placeholders]);
-    const startIdx = images.length;
+      setImages((prev) => [...prev, ...placeholders]);
+      const startIdx = images.length;
 
-    await Promise.all(
-      toUpload.map(async (file, i) => {
-        const idx = startIdx + i;
-        try {
-          const ossHook = { upload };
-          const url = await ossHook.upload(file, 'post');
-          setImages(prev =>
-            prev.map((item, j) =>
-              j === idx ? { ...item, url, progress: 100, uploading: false } : item
-            )
-          );
-        } catch (err: any) {
-          setError(err.message || '图片上传失败');
-          setImages(prev => prev.filter((_, j) => j !== idx));
-        }
-      })
-    );
-  }, [images.length, upload]);
+      await Promise.all(
+        toUpload.map(async (file, i) => {
+          const idx = startIdx + i;
+          try {
+            const ossHook = { upload };
+            const url = await ossHook.upload(file, "post");
+            setImages((prev) =>
+              prev.map((item, j) =>
+                j === idx
+                  ? { ...item, url, progress: 100, uploading: false }
+                  : item,
+              ),
+            );
+          } catch (err: any) {
+            setError(err.message || "图片上传失败");
+            setImages((prev) => prev.filter((_, j) => j !== idx));
+          }
+        }),
+      );
+    },
+    [images.length, upload],
+  );
 
   function removeImage(index: number) {
-    setImages(prev => prev.filter((_, i) => i !== index));
+    setImages((prev) => prev.filter((_, i) => i !== index));
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) {
-      setError('内容不能为空');
+      setError("内容不能为空");
       return;
     }
-    if (images.some(img => img.uploading)) {
-      setError('请等待图片上传完成');
+    if (images.some((img) => img.uploading)) {
+      setError("请等待图片上传完成");
       return;
     }
     setLoading(true);
-    setError('');
+    setError("");
     try {
       const post = await apiClient.createPost({
         title: title || undefined,
         content,
-        media_urls: images.filter(img => img.url).map(img => img.url),
-        tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-        visibility: visibility as 'public' | 'followers_only' | 'private',
+        media_urls: images.filter((img) => img.url).map((img) => img.url),
+        tags: tags
+          ? tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [],
+        visibility: visibility as "public" | "followers_only" | "private",
+        group_id: groupId || undefined,
         is_ai_generated: isAIGenerated || undefined,
       });
       localStorage.removeItem(DRAFT_KEY);
       router.push(`/posts/${post.id}?submitted=1`);
     } catch (err: any) {
-      setError(err.message || '发布失败');
+      setError(err.message || "发布失败");
     } finally {
       setLoading(false);
     }
   };
 
-  const anyUploading = images.some(img => img.uploading);
+  const anyUploading = images.some((img) => img.uploading);
   const emailVerified = !!user?.email_verified_at;
 
   if (!authLoading && user && !emailVerified) {
@@ -144,8 +170,10 @@ export default function CreatePostPage() {
             为了保护社区内容安全，发布动态前需要先完成邮箱验证。
           </p>
           <div className="flex justify-center gap-3">
-            <Button onClick={() => router.push('/settings')}>去设置验证</Button>
-            <Button variant="outline" onClick={() => router.push('/feed')}>返回动态</Button>
+            <Button onClick={() => router.push("/settings")}>去设置验证</Button>
+            <Button variant="outline" onClick={() => router.push("/feed")}>
+              返回动态
+            </Button>
           </div>
         </div>
       </div>
@@ -155,6 +183,19 @@ export default function CreatePostPage() {
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
       <h1 className="text-2xl font-bold mb-6">发布动态</h1>
+      {groupId && (
+        <div className="mb-4 rounded-2xl border bg-card p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Users className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">发布到圈子</p>
+            <p className="text-sm text-muted-foreground">
+              {groupName || "正在读取圈子信息..."}
+            </p>
+          </div>
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <Label htmlFor="title">标题（可选）</Label>
@@ -184,8 +225,15 @@ export default function CreatePostPage() {
           <Label>图片（最多 9 张）</Label>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {images.map((img, i) => (
-              <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-muted">
-                <img src={img.preview} alt="" className="w-full h-full object-cover" />
+              <div
+                key={i}
+                className="relative aspect-square rounded-lg overflow-hidden bg-muted"
+              >
+                <img
+                  src={img.preview}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
                 {img.uploading && (
                   <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-1">
                     <Loader2 className="h-5 w-5 text-white animate-spin" />
@@ -235,7 +283,7 @@ export default function CreatePostPage() {
           <input
             type="checkbox"
             checked={isAIGenerated}
-            onChange={e => setIsAIGenerated(e.target.checked)}
+            onChange={(e) => setIsAIGenerated(e.target.checked)}
             className="rounded"
           />
           <span>此内容包含 AI 生成内容（请如实标注）</span>
@@ -267,7 +315,7 @@ export default function CreatePostPage() {
         {error && <p className="text-destructive text-sm">{error}</p>}
         <div className="flex gap-3 pt-2">
           <Button type="submit" disabled={loading || anyUploading}>
-            {loading ? '发布中...' : '发布'}
+            {loading ? "发布中..." : "发布"}
           </Button>
           <Button type="button" variant="outline" onClick={() => router.back()}>
             取消

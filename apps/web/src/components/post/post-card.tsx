@@ -1,31 +1,52 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Post, apiClient } from '@/lib/api-client';
-import { Heart, MessageCircle, MoreHorizontal, Pin, Flag, Share2 } from 'lucide-react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { useState, useRef, useEffect } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Post, apiClient } from "@/lib/api-client";
+import {
+  Heart,
+  MessageCircle,
+  MoreHorizontal,
+  Pin,
+  Flag,
+  Share2,
+  Bookmark,
+} from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return '刚刚';
+  if (minutes < 1) return "刚刚";
   if (minutes < 60) return `${minutes}分钟前`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}小时前`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}天前`;
-  return new Date(dateStr).toLocaleDateString('zh-CN');
+  return new Date(dateStr).toLocaleDateString("zh-CN");
 }
 
-const REPORT_REASONS = ['垃圾信息', '色情低俗', '违法内容', '侮辱谩骂', '欺诈诈骗', '其他'];
+const REPORT_REASONS = [
+  "垃圾信息",
+  "色情低俗",
+  "违法内容",
+  "侮辱谩骂",
+  "欺诈诈骗",
+  "其他",
+];
 
-function ReportModal({ postId, onClose }: { postId: string; onClose: () => void }) {
-  const [reason, setReason] = useState('');
+function ReportModal({
+  postId,
+  onClose,
+}: {
+  postId: string;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -33,7 +54,7 @@ function ReportModal({ postId, onClose }: { postId: string; onClose: () => void 
     if (!reason) return;
     setLoading(true);
     try {
-      await apiClient.createReport('post', postId, reason);
+      await apiClient.createReport("post", postId, reason);
       setDone(true);
     } catch {
       // ignore
@@ -43,12 +64,20 @@ function ReportModal({ postId, onClose }: { postId: string; onClose: () => void 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-background rounded-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-background rounded-2xl p-6 w-full max-w-sm mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         {done ? (
           <div className="text-center py-4">
             <p className="text-lg font-bold mb-2">举报已提交</p>
-            <p className="text-sm text-muted-foreground mb-4">感谢你的反馈，我们会尽快处理</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              感谢你的反馈，我们会尽快处理
+            </p>
             <Button onClick={onClose}>关闭</Button>
           </div>
         ) : (
@@ -58,20 +87,26 @@ function ReportModal({ postId, onClose }: { postId: string; onClose: () => void 
               举报内容
             </h3>
             <div className="space-y-2 mb-4">
-              {REPORT_REASONS.map(r => (
+              {REPORT_REASONS.map((r) => (
                 <button
                   key={r}
                   onClick={() => setReason(r)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${reason === r ? 'bg-red-50 border-red-300 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-300' : 'hover:bg-muted'}`}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${reason === r ? "bg-red-50 border-red-300 text-red-700 dark:bg-red-950/30 dark:border-red-700 dark:text-red-300" : "hover:bg-muted"}`}
                 >
                   {r}
                 </button>
               ))}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={onClose}>取消</Button>
-              <Button className="flex-1 bg-red-500 hover:bg-red-600" onClick={submit} disabled={!reason || loading}>
-                {loading ? '提交中...' : '提交举报'}
+              <Button variant="outline" className="flex-1" onClick={onClose}>
+                取消
+              </Button>
+              <Button
+                className="flex-1 bg-red-500 hover:bg-red-600"
+                onClick={submit}
+                disabled={!reason || loading}
+              >
+                {loading ? "提交中..." : "提交举报"}
               </Button>
             </div>
           </>
@@ -93,10 +128,13 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
   const [showReport, setShowReport] = useState(false);
   const [liked, setLiked] = useState(post.is_liked_by_me ?? false);
   const [likeCount, setLikeCount] = useState(post.like_count);
+  const [bookmarked, setBookmarked] = useState(
+    post.is_bookmarked_by_me ?? false,
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const isPending = post.moderation_status === 'pending';
-  const isBlocked = post.moderation_status === 'blocked';
+  const isPending = post.moderation_status === "pending";
+  const isBlocked = post.moderation_status === "blocked";
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -104,21 +142,22 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
         setMenuOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   const likeMutation = useMutation({
-    mutationFn: () => liked ? apiClient.unlikePost(post.id) : apiClient.likePost(post.id),
+    mutationFn: () =>
+      liked ? apiClient.unlikePost(post.id) : apiClient.likePost(post.id),
     onMutate: () => {
       const prevLiked = liked;
       const prevCount = likeCount;
       if (!liked) {
         setLiked(true);
-        setLikeCount(c => c + 1);
+        setLikeCount((c) => c + 1);
       } else {
         setLiked(false);
-        setLikeCount(c => c - 1);
+        setLikeCount((c) => c - 1);
       }
       return { prevLiked, prevCount };
     },
@@ -129,7 +168,22 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['post', post.id] });
+      queryClient.invalidateQueries({ queryKey: ["post", post.id] });
+    },
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: () =>
+      bookmarked
+        ? apiClient.unbookmarkPost(post.id)
+        : apiClient.bookmarkPost(post.id),
+    onMutate: () => {
+      const prev = bookmarked;
+      setBookmarked(!prev);
+      return { prev };
+    },
+    onError: (_err, _vars, context) => {
+      if (context) setBookmarked(context.prev);
     },
   });
 
@@ -159,13 +213,16 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
           <Link href={`/users/${post.author_id}`}>
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-purple to-brand-teal flex items-center justify-center flex-shrink-0 hover:opacity-80 transition-opacity shadow-sm">
               <span className="text-sm font-semibold text-white">
-                {post.author_username?.[0]?.toUpperCase() || '?'}
+                {post.author_username?.[0]?.toUpperCase() || "?"}
               </span>
             </div>
           </Link>
           <div>
-            <Link href={`/users/${post.author_id}`} className="font-semibold text-sm hover:text-primary transition-colors">
-              {post.author_username || '未知用户'}
+            <Link
+              href={`/users/${post.author_id}`}
+              className="font-semibold text-sm hover:text-primary transition-colors"
+            >
+              {post.author_username || "未知用户"}
             </Link>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <span>{createdAgo}</span>
@@ -184,18 +241,37 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
                   <span className="text-brand-purple">AI 生成</span>
                 </>
               )}
+              {post.group_id && post.group_name && (
+                <>
+                  <span>·</span>
+                  <Link
+                    href={`/groups/${post.group_id}`}
+                    className="text-brand-teal hover:underline"
+                  >
+                    {post.group_name}
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
         {/* More menu */}
         <div className="relative" ref={menuRef}>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMenuOpen(v => !v)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
           {menuOpen && (
             <div className="absolute right-0 top-8 bg-background border rounded-lg shadow-lg py-1 z-10 w-32">
               <button
-                onClick={() => { setMenuOpen(false); setShowReport(true); }}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setShowReport(true);
+                }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-muted transition-colors"
               >
                 <Flag className="h-4 w-4" />
@@ -209,7 +285,10 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       {/* Title */}
       {post.title && (
         <h2 className="font-bold text-lg mb-2">
-          <Link href={`/posts/${post.id}`} className="hover:text-primary transition-colors">
+          <Link
+            href={`/posts/${post.id}`}
+            className="hover:text-primary transition-colors"
+          >
             {post.title}
           </Link>
         </h2>
@@ -218,7 +297,9 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       {/* Content */}
       <div className="mb-3">
         <Link href={`/posts/${post.id}`}>
-          <p className={`text-sm leading-relaxed whitespace-pre-wrap ${!showFull && 'line-clamp-5'}`}>
+          <p
+            className={`text-sm leading-relaxed whitespace-pre-wrap ${!showFull && "line-clamp-5"}`}
+          >
             {post.content}
           </p>
         </Link>
@@ -228,11 +309,11 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       {mediaUrls.length > 0 && (
         <div
           className={cn(
-            'gap-2 mb-3',
-            mediaUrls.length === 1 && 'grid grid-cols-1',
-            mediaUrls.length === 2 && 'grid grid-cols-2',
-            mediaUrls.length === 3 && 'grid grid-cols-[2fr_1fr]',
-            mediaUrls.length === 4 && 'grid grid-cols-2',
+            "gap-2 mb-3",
+            mediaUrls.length === 1 && "grid grid-cols-1",
+            mediaUrls.length === 2 && "grid grid-cols-2",
+            mediaUrls.length === 3 && "grid grid-cols-[2fr_1fr]",
+            mediaUrls.length === 4 && "grid grid-cols-2",
           )}
         >
           {mediaUrls.length === 3 ? (
@@ -269,7 +350,7 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
       {/* Tags */}
       {post.tags && post.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {post.tags.map(tag => (
+          {post.tags.map((tag) => (
             <Badge
               key={tag}
               variant="outline"
@@ -287,13 +368,15 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
           onClick={() => !isPending && !isBlocked && likeMutation.mutate()}
           disabled={isPending || isBlocked}
           whileTap={{ scale: 0.82 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+          transition={{ type: "spring", stiffness: 400, damping: 15 }}
           className={cn(
-            'flex items-center gap-1.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
-            liked ? 'text-red-500 hover:text-red-600' : 'text-muted-foreground hover:text-red-500'
+            "flex items-center gap-1.5 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+            liked
+              ? "text-red-500 hover:text-red-600"
+              : "text-muted-foreground hover:text-red-500",
           )}
         >
-          <Heart className={cn('h-4 w-4', liked && 'fill-current')} />
+          <Heart className={cn("h-4 w-4", liked && "fill-current")} />
           <motion.span
             key={likeCount}
             initial={{ y: liked ? -6 : 6, opacity: 0 }}
@@ -305,10 +388,12 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
         </motion.button>
 
         <Link
-          href={isPending || isBlocked ? '#' : `/posts/${post.id}`}
+          href={isPending || isBlocked ? "#" : `/posts/${post.id}`}
           className={cn(
-            'flex items-center gap-1.5 text-sm text-muted-foreground transition-colors',
-            isPending || isBlocked ? 'opacity-40 pointer-events-none' : 'hover:text-primary'
+            "flex items-center gap-1.5 text-sm text-muted-foreground transition-colors",
+            isPending || isBlocked
+              ? "opacity-40 pointer-events-none"
+              : "hover:text-primary",
           )}
         >
           <MessageCircle className="h-4 w-4" />
@@ -316,10 +401,26 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
         </Link>
 
         <button
+          className={cn(
+            "flex items-center gap-1.5 text-sm transition-colors",
+            bookmarked
+              ? "text-brand-purple hover:text-brand-purple/80"
+              : "text-muted-foreground hover:text-brand-purple",
+          )}
+          onClick={() => bookmarkMutation.mutate()}
+        >
+          <Bookmark className={cn("h-4 w-4", bookmarked && "fill-current")} />
+          <span>收藏</span>
+        </button>
+
+        <button
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors ml-auto"
           onClick={() => {
             if (navigator.share) {
-              navigator.share({ url: `/posts/${post.id}`, title: post.title || post.content.slice(0, 40) });
+              navigator.share({
+                url: `/posts/${post.id}`,
+                title: post.title || post.content.slice(0, 40),
+              });
             }
           }}
         >
@@ -327,7 +428,9 @@ export function PostCard({ post, showFull = false }: PostCardProps) {
         </button>
       </div>
 
-      {showReport && <ReportModal postId={post.id} onClose={() => setShowReport(false)} />}
+      {showReport && (
+        <ReportModal postId={post.id} onClose={() => setShowReport(false)} />
+      )}
     </div>
   );
 }

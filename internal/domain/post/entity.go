@@ -29,6 +29,7 @@ const (
 type Post struct {
 	ID               uuid.UUID        `json:"id"`
 	AuthorID         uuid.UUID        `json:"author_id"`
+	GroupID          *uuid.UUID       `json:"group_id,omitempty"`
 	Title            string           `json:"title,omitempty"` // optional, for long posts
 	Content          string           `json:"content"`
 	MediaURLs        []string         `json:"media_urls,omitempty"`
@@ -44,9 +45,11 @@ type Post struct {
 	DeletedAt        *time.Time       `json:"deleted_at,omitempty"`
 
 	// Joined fields
-	AuthorUsername  string  `json:"author_username,omitempty"`
-	AuthorAvatarKey *string `json:"author_avatar_key,omitempty"`
-	IsLikedByMe     bool    `json:"is_liked_by_me,omitempty"`
+	AuthorUsername   string  `json:"author_username,omitempty"`
+	AuthorAvatarKey  *string `json:"author_avatar_key,omitempty"`
+	GroupName        *string `json:"group_name,omitempty"`
+	IsBookmarkedByMe bool    `json:"is_bookmarked_by_me,omitempty"`
+	IsLikedByMe      bool    `json:"is_liked_by_me,omitempty"`
 }
 
 // PostLike represents a like on a post
@@ -59,6 +62,7 @@ type PostLike struct {
 // ListFilter holds filtering options for listing posts
 type ListFilter struct {
 	AuthorID         *uuid.UUID
+	GroupID          *uuid.UUID
 	Tags             []string
 	Search           string // full-text search on title+content
 	Visibility       *Visibility

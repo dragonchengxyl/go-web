@@ -1,24 +1,39 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
-import { Menu, X, Bell, MessageCircle, Compass, PenSquare, LogOut, Settings, Users, Calendar, Trophy, ChevronDown, Flag } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { GlobalSearch } from '@/components/search/global-search';
-import { apiClient } from '@/lib/api-client';
-import { useWS } from '@/contexts/ws-context';
-import { useAuth } from '@/contexts/auth-context';
-import { usePathname, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import Link from "next/link";
+import { useState, useEffect, useRef } from "react";
+import {
+  Menu,
+  X,
+  Bell,
+  MessageCircle,
+  Compass,
+  PenSquare,
+  LogOut,
+  Settings,
+  Users,
+  Calendar,
+  Trophy,
+  ChevronDown,
+  Flag,
+  Bookmark,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { GlobalSearch } from "@/components/search/global-search";
+import { apiClient } from "@/lib/api-client";
+import { useWS } from "@/contexts/ws-context";
+import { useAuth } from "@/contexts/auth-context";
+import { usePathname, useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 const NAV_LINKS = [
-  { href: '/feed', label: '动态' },
-  { href: '/explore', label: '发现', icon: Compass },
-  { href: '/groups', label: '圈子', icon: Users },
-  { href: '/events', label: '活动', icon: Calendar },
-  { href: '/leaderboard', label: '排行', icon: Trophy },
-  { href: '/sponsor', label: '赞助', className: 'text-orange-500' },
+  { href: "/feed", label: "动态" },
+  { href: "/explore", label: "发现", icon: Compass },
+  { href: "/groups", label: "圈子", icon: Users },
+  { href: "/events", label: "活动", icon: Calendar },
+  { href: "/leaderboard", label: "排行", icon: Trophy },
+  { href: "/sponsor", label: "赞助", className: "text-orange-500" },
 ];
 
 function UserAvatar() {
@@ -33,18 +48,18 @@ function UserAvatar() {
         setOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   if (!user) return null;
 
-  const initial = (user.username || 'U')[0].toUpperCase();
+  const initial = (user.username || "U")[0].toUpperCase();
 
   function handleLogout() {
     logout();
     setOpen(false);
-    router.push('/');
+    router.push("/");
   }
 
   return (
@@ -61,11 +76,16 @@ function UserAvatar() {
       {/* 展开更多选项 */}
       <div className="relative">
         <button
-          onClick={() => setOpen(v => !v)}
+          onClick={() => setOpen((v) => !v)}
           className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded focus:outline-none"
           title="更多选项"
         >
-          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', open && 'rotate-180')} />
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-150",
+              open && "rotate-180",
+            )}
+          />
         </button>
 
         <AnimatePresence>
@@ -87,8 +107,12 @@ function UserAvatar() {
                   {initial}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{user.username}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  <p className="text-sm font-semibold truncate">
+                    {user.username}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {user.email}
+                  </p>
                 </div>
               </Link>
               <div className="py-1">
@@ -99,6 +123,14 @@ function UserAvatar() {
                 >
                   <PenSquare className="h-4 w-4 text-muted-foreground" />
                   创作中心
+                </Link>
+                <Link
+                  href="/bookmarks"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <Bookmark className="h-4 w-4 text-muted-foreground" />
+                  我的收藏
                 </Link>
                 <Link
                   href="/reports"
@@ -143,29 +175,32 @@ export function Header() {
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    apiClient.getUnreadCount().then(data => setUnreadCount(data.count)).catch(() => {});
-    return subscribe('notification', () => setUnreadCount(c => c + 1));
+    apiClient
+      .getUnreadCount()
+      .then((data) => setUnreadCount(data.count))
+      .catch(() => {});
+    return subscribe("notification", () => setUnreadCount((c) => c + 1));
   }, [subscribe, isLoggedIn]);
 
   function handleMobileLogout() {
     logout();
     setIsMobileMenuOpen(false);
-    router.push('/');
+    router.push("/");
   }
 
   return (
     <header
       className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
         isScrolled
-          ? 'bg-background/75 backdrop-blur-xl border-b border-border/50 shadow-sm'
-          : 'bg-transparent'
+          ? "bg-background/75 backdrop-blur-xl border-b border-border/50 shadow-sm"
+          : "bg-transparent",
       )}
     >
       <div className="container mx-auto px-4">
@@ -192,11 +227,11 @@ export function Header() {
                 key={href}
                 href={href}
                 className={cn(
-                  'text-sm font-medium transition-colors flex items-center gap-1',
+                  "text-sm font-medium transition-colors flex items-center gap-1",
                   pathname === href
-                    ? 'text-primary font-semibold'
-                    : 'text-muted-foreground hover:text-foreground',
-                  className
+                    ? "text-primary font-semibold"
+                    : "text-muted-foreground hover:text-foreground",
+                  className,
                 )}
               >
                 {Icon && <Icon className="h-4 w-4" />}
@@ -221,11 +256,16 @@ export function Header() {
                   </Button>
                 </Link>
                 <Link href="/notifications">
-                  <Button variant="ghost" size="icon" title="通知" className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="通知"
+                    className="relative"
+                  >
                     <Bell className="h-5 w-5" />
                     {unreadCount > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-medium leading-none">
-                        {unreadCount > 9 ? '9+' : unreadCount}
+                        {unreadCount > 9 ? "9+" : unreadCount}
                       </span>
                     )}
                   </Button>
@@ -235,7 +275,9 @@ export function Header() {
             ) : (
               <div className="flex items-center gap-2">
                 <Link href="/login">
-                  <Button variant="ghost" size="sm">登录</Button>
+                  <Button variant="ghost" size="sm">
+                    登录
+                  </Button>
                 </Link>
                 <Link href="/register">
                   <Button
@@ -256,7 +298,11 @@ export function Header() {
             className="md:hidden"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
-            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {isMobileMenuOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
           </Button>
         </div>
 
@@ -265,9 +311,9 @@ export function Header() {
           {isMobileMenuOpen && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
+              animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
               className="md:hidden overflow-hidden border-t"
             >
               <div className="py-4">
@@ -280,11 +326,11 @@ export function Header() {
                       key={href}
                       href={href}
                       className={cn(
-                        'px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                        "px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                         pathname === href
-                          ? 'bg-primary/10 text-primary'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                        className
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        className,
                       )}
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
@@ -316,11 +362,20 @@ export function Header() {
                         通知{unreadCount > 0 && ` (${unreadCount})`}
                       </Link>
                       <Link
+                        href="/bookmarks"
+                        className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        我的收藏
+                      </Link>
+                      <Link
                         href="/profile"
                         className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
-                        {user?.username ? `我的主页 (@${user.username})` : '我的主页'}
+                        {user?.username
+                          ? `我的主页 (@${user.username})`
+                          : "我的主页"}
                       </Link>
                       <button
                         onClick={handleMobileLogout}

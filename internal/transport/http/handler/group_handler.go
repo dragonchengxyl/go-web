@@ -12,12 +12,14 @@ import (
 // GroupHandler handles group HTTP endpoints.
 type GroupHandler struct {
 	groupSvc    *usecase.GroupService
+	postSvc     *usecase.PostService
+	bookmarkSvc *usecase.BookmarkService
 	userService *usecase.UserService
 }
 
 // NewGroupHandler creates a new GroupHandler.
-func NewGroupHandler(groupSvc *usecase.GroupService, userService *usecase.UserService) *GroupHandler {
-	return &GroupHandler{groupSvc: groupSvc, userService: userService}
+func NewGroupHandler(groupSvc *usecase.GroupService, postSvc *usecase.PostService, bookmarkSvc *usecase.BookmarkService, userService *usecase.UserService) *GroupHandler {
+	return &GroupHandler{groupSvc: groupSvc, postSvc: postSvc, bookmarkSvc: bookmarkSvc, userService: userService}
 }
 
 // ListGroups handles GET /api/v1/groups
@@ -57,6 +59,64 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 		return
 	}
 	response.Success(c, g)
+}
+
+// ListPosts handles GET /api/v1/groups/:id/posts
+func (h *GroupHandler) ListPosts(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的圈子ID"))
+		return
+	}
+
+	viewerID, authed := getUserID(c)
+	canView, _, err := h.groupSvc.CanViewGroup(c.Request.Context(), groupID, viewerID, authed)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !canView {
+		response.Error(c, apperr.New(apperr.CodeForbidden, "该圈子内容仅成员可见"))
+		return
+	}
+
+	page, pageSize := getPageParams(c)
+	posts, total, err := h.postSvc.ListGroupPosts(c.Request.Context(), groupID, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if authed && h.bookmarkSvc != nil {
+		_ = h.bookmarkSvc.MarkPosts(c.Request.Context(), viewerID, posts)
+	}
+	response.Success(c, gin.H{"posts": posts, "total": total, "page": page, "size": len(posts)})
+}
+
+// GetHighlights handles GET /api/v1/groups/:id/highlights
+func (h *GroupHandler) GetHighlights(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的圈子ID"))
+		return
+	}
+
+	viewerID, authed := getUserID(c)
+	canView, _, err := h.groupSvc.CanViewGroup(c.Request.Context(), groupID, viewerID, authed)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !canView {
+		response.Error(c, apperr.New(apperr.CodeForbidden, "该圈子内容仅成员可见"))
+		return
+	}
+
+	posts, _, err := h.postSvc.ListGroupHighlights(c.Request.Context(), groupID, 3)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"posts": posts})
 }
 
 type createGroupRequest struct {

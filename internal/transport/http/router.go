@@ -37,6 +37,7 @@ type RouterConfig struct {
 	ChatService           *usecase.ChatService
 	TipService            *usecase.TipService
 	NotificationService   *usecase.NotificationService
+	BookmarkService       *usecase.BookmarkService
 	OSSService            *usecase.OSSService
 	EventService          *usecase.EventService
 	GroupService          *usecase.GroupService
@@ -82,12 +83,16 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		musicHandler := handler.NewMusicHandler(cfg.MusicService)
 		commentHandler := handler.NewCommentHandler(cfg.CommentService, cfg.PostService)
 		searchHandler := handler.NewSearchHandler(cfg.MusicService, cfg.SearchService, cfg.PostService, cfg.UserService)
-		postHandler := handler.NewPostHandler(cfg.PostService, cfg.FollowService, cfg.UserService)
+		postHandler := handler.NewPostHandler(cfg.PostService, cfg.FollowService, cfg.UserService, cfg.GroupService, cfg.BookmarkService)
 		followHandler := handler.NewFollowHandler(cfg.FollowService)
 		chatHandler := handler.NewChatHandler(cfg.ChatService, cfg.Hub, cfg.Logger)
 		tipHandler := handler.NewTipHandler(cfg.TipService, cfg.PaymentService)
 		achievementHandler := handler.NewAchievementHandler(cfg.AchievementService)
 		notificationHandler := handler.NewNotificationHandler(cfg.NotificationService)
+		var bookmarkHandler *handler.BookmarkHandler
+		if cfg.BookmarkService != nil {
+			bookmarkHandler = handler.NewBookmarkHandler(cfg.BookmarkService)
+		}
 		var assistantHandler *handler.AssistantHandler
 		if cfg.AssistantService != nil {
 			assistantHandler = handler.NewAssistantHandler(cfg.AssistantService, time.Duration(cfg.Config.Assistant.TimeoutSec)*time.Second)
@@ -175,11 +180,14 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 		// Groups (public read)
 		if cfg.GroupService != nil {
-			groupHandler := handler.NewGroupHandler(cfg.GroupService, cfg.UserService)
+			groupHandler := handler.NewGroupHandler(cfg.GroupService, cfg.PostService, cfg.BookmarkService, cfg.UserService)
 			groups := v1.Group("/groups")
+			groups.Use(authMiddleware.OptionalAuthenticate())
 			groups.GET("", groupHandler.ListGroups)
 			groups.GET("/:id", groupHandler.GetGroup)
 			groups.GET("/:id/members", groupHandler.ListMembers)
+			groups.GET("/:id/posts", groupHandler.ListPosts)
+			groups.GET("/:id/highlights", groupHandler.GetHighlights)
 		}
 
 		// Users public profile
@@ -237,7 +245,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 			// Groups (authenticated write)
 			if cfg.GroupService != nil {
-				groupHandler := handler.NewGroupHandler(cfg.GroupService, cfg.UserService)
+				groupHandler := handler.NewGroupHandler(cfg.GroupService, cfg.PostService, cfg.BookmarkService, cfg.UserService)
 				protected.POST("/groups", groupHandler.CreateGroup)
 				protected.PUT("/groups/:id", groupHandler.UpdateGroup)
 				protected.POST("/groups/:id/join", groupHandler.JoinGroup)
@@ -275,6 +283,20 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/notifications", notificationHandler.ListNotifications)
 			protected.POST("/notifications/read", notificationHandler.MarkRead)
 			protected.GET("/notifications/unread-count", notificationHandler.CountUnread)
+
+			// Bookmarks
+			if bookmarkHandler != nil {
+				protected.POST("/posts/:id/bookmark", bookmarkHandler.BookmarkPost)
+				protected.DELETE("/posts/:id/bookmark", bookmarkHandler.UnbookmarkPost)
+				protected.POST("/groups/:id/bookmark", bookmarkHandler.BookmarkGroup)
+				protected.DELETE("/groups/:id/bookmark", bookmarkHandler.UnbookmarkGroup)
+				protected.POST("/events/:id/bookmark", bookmarkHandler.BookmarkEvent)
+				protected.DELETE("/events/:id/bookmark", bookmarkHandler.UnbookmarkEvent)
+				protected.GET("/bookmarks/check", bookmarkHandler.Check)
+				protected.GET("/bookmarks/posts", bookmarkHandler.ListPosts)
+				protected.GET("/bookmarks/groups", bookmarkHandler.ListGroups)
+				protected.GET("/bookmarks/events", bookmarkHandler.ListEvents)
+			}
 
 			// Assistant history
 			if assistantHandler != nil {

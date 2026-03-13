@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/bookmark"
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/pkg/apperr"
@@ -17,13 +18,17 @@ type PostHandler struct {
 	postService   *usecase.PostService
 	followService *usecase.FollowService
 	userService   *usecase.UserService
+	groupService  *usecase.GroupService
+	bookmarkSvc   *usecase.BookmarkService
 }
 
-func NewPostHandler(postService *usecase.PostService, followService *usecase.FollowService, userService *usecase.UserService) *PostHandler {
+func NewPostHandler(postService *usecase.PostService, followService *usecase.FollowService, userService *usecase.UserService, groupService *usecase.GroupService, bookmarkSvc *usecase.BookmarkService) *PostHandler {
 	return &PostHandler{
 		postService:   postService,
 		followService: followService,
 		userService:   userService,
+		groupService:  groupService,
+		bookmarkSvc:   bookmarkSvc,
 	}
 }
 
@@ -52,6 +57,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		MediaURLs     []string `json:"media_urls"`
 		Tags          []string `json:"tags"`
 		Visibility    string   `json:"visibility"`
+		GroupID       string   `json:"group_id"`
 		IsAIGenerated bool     `json:"is_ai_generated"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -65,6 +71,32 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 	}
 
 	labels := map[string]bool{"is_ai_generated": req.IsAIGenerated}
+	var groupID *uuid.UUID
+	if req.GroupID != "" {
+		parsed, err := uuid.Parse(req.GroupID)
+		if err != nil {
+			response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的圈子ID"))
+			return
+		}
+		if h.groupService == nil {
+			response.Error(c, apperr.New(apperr.CodeForbidden, "圈子发帖未启用"))
+			return
+		}
+		if _, err := h.groupService.GetGroup(c.Request.Context(), parsed); err != nil {
+			response.Error(c, err)
+			return
+		}
+		member, err := h.groupService.GetMember(c.Request.Context(), parsed, userID)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if member == nil {
+			response.Error(c, apperr.New(apperr.CodeForbidden, "加入圈子后才能在圈子内发帖"))
+			return
+		}
+		groupID = &parsed
+	}
 
 	p, err := h.postService.CreatePost(c.Request.Context(), usecase.CreatePostInput{
 		AuthorID:      userID,
@@ -74,6 +106,7 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		Tags:          req.Tags,
 		ContentLabels: labels,
 		Visibility:    vis,
+		GroupID:       groupID,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -110,6 +143,11 @@ func (h *PostHandler) GetPost(c *gin.Context) {
 		response.Error(c, apperr.ErrNotFound)
 		return
 	}
+	if authed && h.bookmarkSvc != nil {
+		if exists, err := h.bookmarkSvc.Exists(c.Request.Context(), viewerID, bookmark.TargetPost, p.ID); err == nil {
+			p.IsBookmarkedByMe = exists
+		}
+	}
 	response.Success(c, p)
 }
 
@@ -127,13 +165,24 @@ func (h *PostHandler) canViewPost(ctx context.Context, p *post.Post, viewerID uu
 
 	switch p.Visibility {
 	case post.VisibilityPublic:
+		if p.GroupID != nil && h.groupService != nil {
+			canView, _, err := h.groupService.CanViewGroup(ctx, *p.GroupID, viewerID, authed)
+			return err == nil && canView
+		}
 		return true
 	case post.VisibilityFollowersOnly:
 		if !authed || h.followService == nil {
 			return false
 		}
 		ok, err := h.followService.IsFollowing(ctx, viewerID, p.AuthorID)
-		return err == nil && ok
+		if err != nil || !ok {
+			return false
+		}
+		if p.GroupID != nil && h.groupService != nil {
+			canView, _, err := h.groupService.CanViewGroup(ctx, *p.GroupID, viewerID, authed)
+			return err == nil && canView
+		}
+		return true
 	case post.VisibilityPrivate:
 		return false
 	default:
@@ -263,6 +312,9 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	if h.bookmarkSvc != nil {
+		_ = h.bookmarkSvc.MarkPosts(c.Request.Context(), userID, posts)
+	}
 	response.Success(c, gin.H{"posts": posts, "total": total, "page": page, "size": len(posts)})
 }
 
@@ -274,6 +326,9 @@ func (h *PostHandler) GetExplore(c *gin.Context) {
 	if err != nil {
 		response.Error(c, err)
 		return
+	}
+	if viewerID, ok := getUserID(c); ok && h.bookmarkSvc != nil {
+		_ = h.bookmarkSvc.MarkPosts(c.Request.Context(), viewerID, posts)
 	}
 	response.Success(c, gin.H{"posts": posts, "total": total, "page": page, "size": len(posts)})
 }
@@ -307,6 +362,9 @@ func (h *PostHandler) ListUserPosts(c *gin.Context) {
 	if err != nil {
 		response.Error(c, err)
 		return
+	}
+	if viewerID, ok := getUserID(c); ok && h.bookmarkSvc != nil {
+		_ = h.bookmarkSvc.MarkPosts(c.Request.Context(), viewerID, posts)
 	}
 	response.Success(c, gin.H{"posts": posts, "total": total, "page": page, "size": len(posts)})
 }

@@ -23,9 +23,9 @@ func NewPostRepository(pool *pgxpool.Pool) *PostRepository {
 }
 
 const createPostSQL = `
-	INSERT INTO posts (id, author_id, title, content, media_urls, tags, visibility,
+	INSERT INTO posts (id, author_id, group_id, title, content, media_urls, tags, visibility,
 	                   moderation_status, content_labels, like_count, comment_count, is_pinned, created_at, updated_at)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 `
 
 func (r *PostRepository) Create(ctx context.Context, p *post.Post) error {
@@ -34,7 +34,7 @@ func (r *PostRepository) Create(ctx context.Context, p *post.Post) error {
 		return fmt.Errorf("marshal content_labels: %w", err)
 	}
 	_, err = r.pool.Exec(ctx, createPostSQL,
-		p.ID, p.AuthorID, p.Title, p.Content, p.MediaURLs, p.Tags, string(p.Visibility),
+		p.ID, p.AuthorID, p.GroupID, p.Title, p.Content, p.MediaURLs, p.Tags, string(p.Visibility),
 		string(p.ModerationStatus), labelsJSON, p.LikeCount, p.CommentCount, p.IsPinned, p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
@@ -47,9 +47,10 @@ const getPostByIDSQL = `
 	SELECT p.id, p.author_id, p.title, p.content, p.media_urls, p.tags, p.visibility,
 	       p.moderation_status, p.content_labels, p.like_count, p.comment_count, p.is_pinned,
 	       p.created_at, p.updated_at, p.deleted_at,
-	       u.username, u.avatar_key
+	       u.username, u.avatar_key, p.group_id, g.name
 	FROM posts p
 	JOIN users u ON u.id = p.author_id
+	LEFT JOIN groups g ON g.id = p.group_id
 	WHERE p.id = $1 AND p.deleted_at IS NULL
 `
 
@@ -61,7 +62,7 @@ func (r *PostRepository) GetByID(ctx context.Context, id uuid.UUID) (*post.Post,
 		&p.ID, &p.AuthorID, &p.Title, &p.Content, &p.MediaURLs, &p.Tags, &visStr,
 		&modStr, &labelsJSON, &p.LikeCount, &p.CommentCount, &p.IsPinned,
 		&p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
-		&p.AuthorUsername, &p.AuthorAvatarKey,
+		&p.AuthorUsername, &p.AuthorAvatarKey, &p.GroupID, &p.GroupName,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -109,6 +110,11 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 		args = append(args, *filter.AuthorID)
 		idx++
 	}
+	if filter.GroupID != nil {
+		where += fmt.Sprintf(" AND p.group_id = $%d", idx)
+		args = append(args, *filter.GroupID)
+		idx++
+	}
 	if filter.Visibility != nil {
 		where += fmt.Sprintf(" AND p.visibility = $%d", idx)
 		args = append(args, string(*filter.Visibility))
@@ -146,8 +152,9 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 	listSQL := `SELECT p.id, p.author_id, p.title, p.content, p.media_urls, p.tags, p.visibility,
 	                   p.moderation_status, p.content_labels, p.like_count, p.comment_count, p.is_pinned,
 	                   p.created_at, p.updated_at, p.deleted_at,
-	                   u.username, u.avatar_key
-	            FROM posts p JOIN users u ON u.id = p.author_id ` + where + " ORDER BY " + orderBy
+	                   u.username, u.avatar_key, p.group_id, g.name
+	            FROM posts p JOIN users u ON u.id = p.author_id
+	            LEFT JOIN groups g ON g.id = p.group_id ` + where + " ORDER BY " + orderBy
 
 	if filter.PageSize > 0 {
 		offset := (filter.Page - 1) * filter.PageSize
@@ -189,8 +196,9 @@ func (r *PostRepository) ListFeed(ctx context.Context, followeeIDs []uuid.UUID, 
 	listSQL := `SELECT p.id, p.author_id, p.title, p.content, p.media_urls, p.tags, p.visibility,
 	                   p.moderation_status, p.content_labels, p.like_count, p.comment_count, p.is_pinned,
 	                   p.created_at, p.updated_at, p.deleted_at,
-	                   u.username, u.avatar_key
-	            FROM posts p JOIN users u ON u.id = p.author_id ` + where + " ORDER BY p.created_at DESC"
+	                   u.username, u.avatar_key, p.group_id, g.name
+	            FROM posts p JOIN users u ON u.id = p.author_id
+	            LEFT JOIN groups g ON g.id = p.group_id ` + where + " ORDER BY p.created_at DESC"
 	if filter.PageSize > 0 {
 		listSQL += fmt.Sprintf(" LIMIT $%d", idx)
 		args = append(args, filter.PageSize)
@@ -216,7 +224,7 @@ func scanPosts(rows pgx.Rows) ([]*post.Post, int64, error) {
 			&p.ID, &p.AuthorID, &p.Title, &p.Content, &p.MediaURLs, &p.Tags, &visStr,
 			&modStr, &labelsJSON, &p.LikeCount, &p.CommentCount, &p.IsPinned,
 			&p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
-			&p.AuthorUsername, &p.AuthorAvatarKey,
+			&p.AuthorUsername, &p.AuthorAvatarKey, &p.GroupID, &p.GroupName,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan post: %w", err)

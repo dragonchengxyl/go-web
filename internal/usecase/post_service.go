@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/group"
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/infra/moderation"
 	"github.com/studio/platform/internal/infra/streams"
@@ -18,6 +19,7 @@ import (
 // PostService handles post-related business logic
 type PostService struct {
 	postRepo     post.Repository
+	groupRepo    group.Repository
 	moderator    moderation.Moderator // may be nil (moderation disabled)
 	logger       *zap.Logger
 	allowedHosts []string           // OSS media URL whitelist; empty = skip validation
@@ -54,6 +56,13 @@ func WithAllowedHosts(hosts []string) PostServiceOption {
 func WithPublisher(p *streams.Publisher) PostServiceOption {
 	return func(s *PostService) {
 		s.publisher = p
+	}
+}
+
+// WithGroupRepository enables group-aware post workflows.
+func WithGroupRepository(repo group.Repository) PostServiceOption {
+	return func(s *PostService) {
+		s.groupRepo = repo
 	}
 }
 
@@ -101,6 +110,7 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 	p := &post.Post{
 		ID:               uuid.New(),
 		AuthorID:         input.AuthorID,
+		GroupID:          input.GroupID,
 		Title:            input.Title,
 		Content:          input.Content,
 		MediaURLs:        input.MediaURLs,
@@ -114,6 +124,9 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 
 	if err := s.postRepo.Create(ctx, p); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建帖子失败", err)
+	}
+	if input.GroupID != nil && s.groupRepo != nil {
+		_ = s.groupRepo.IncrementPostCount(ctx, *input.GroupID)
 	}
 
 	// Publish post.created event if publisher is configured (moderation-svc consumes it).
@@ -228,6 +241,9 @@ func (s *PostService) DeletePost(ctx context.Context, userID, postID uuid.UUID, 
 	if !isAdmin && p.AuthorID != userID {
 		return apperr.New(apperr.CodeForbidden, "无权删除此帖子")
 	}
+	if p.GroupID != nil && s.groupRepo != nil {
+		_ = s.groupRepo.DecrementPostCount(ctx, *p.GroupID)
+	}
 	return s.postRepo.Delete(ctx, postID)
 }
 
@@ -294,6 +310,42 @@ func (s *PostService) GetHotTags(ctx context.Context, limit int) ([]string, erro
 		limit = 20
 	}
 	return s.postRepo.GetHotTags(ctx, limit)
+}
+
+// ListGroupPosts returns approved public posts inside a group ordered by recency.
+func (s *PostService) ListGroupPosts(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*post.Post, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	vis := post.VisibilityPublic
+	approved := post.ModerationApproved
+	return s.postRepo.List(ctx, post.ListFilter{
+		GroupID:          &groupID,
+		Visibility:       &vis,
+		ModerationStatus: &approved,
+		Page:             page,
+		PageSize:         pageSize,
+	})
+}
+
+// ListGroupHighlights returns the most engaging approved public posts inside a group.
+func (s *PostService) ListGroupHighlights(ctx context.Context, groupID uuid.UUID, limit int) ([]*post.Post, int64, error) {
+	if limit < 1 {
+		limit = 3
+	}
+	vis := post.VisibilityPublic
+	approved := post.ModerationApproved
+	return s.postRepo.List(ctx, post.ListFilter{
+		GroupID:          &groupID,
+		Visibility:       &vis,
+		ModerationStatus: &approved,
+		SortByScore:      true,
+		Page:             1,
+		PageSize:         limit,
+	})
 }
 
 // ListFeed returns posts from followed users

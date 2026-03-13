@@ -166,6 +166,7 @@ func main() {
 	if len(cfg.OSS.AllowedHosts) > 0 {
 		postOpts = append(postOpts, usecase.WithAllowedHosts(cfg.OSS.AllowedHosts))
 	}
+	postOpts = append(postOpts, usecase.WithGroupRepository(groupRepo))
 	if cfg.Moderation.AccessKeyID != "" {
 		moderator := moderation.NewAliyunGreen(
 			cfg.Moderation.AccessKeyID,
@@ -205,6 +206,8 @@ func main() {
 
 	reportRepo := postgres.NewReportRepository(pool)
 	blockRepo := postgres.NewBlockRepository(pool)
+	bookmarkRepo := postgres.NewBookmarkRepository(pool)
+	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
@@ -224,6 +227,7 @@ func main() {
 		ChatService:           chatService,
 		TipService:            tipService,
 		NotificationService:   notificationService,
+		BookmarkService:       bookmarkService,
 		OSSService:            ossService,
 		EventService:          eventService,
 		GroupService:          groupService,

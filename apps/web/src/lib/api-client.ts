@@ -15,6 +15,7 @@ export type ModerationStatus = "pending" | "approved" | "blocked";
 export interface Post {
   id: string;
   author_id: string;
+  group_id?: string;
   title?: string;
   content: string;
   media_urls?: string[];
@@ -29,6 +30,8 @@ export interface Post {
   updated_at: string;
   author_username?: string;
   author_avatar_key?: string;
+  group_name?: string;
+  is_bookmarked_by_me?: boolean;
   is_liked_by_me?: boolean;
 }
 
@@ -404,6 +407,7 @@ class ApiClient {
     media_urls?: string[];
     tags?: string[];
     visibility?: string;
+    group_id?: string;
     is_ai_generated?: boolean;
   }) {
     return this.post<Post>("/posts", data);
@@ -473,6 +477,19 @@ class ApiClient {
       page: number;
       size: number;
     }>(`/users/${userId}/posts?${q}`);
+  }
+
+  async getGroupPosts(groupId: string, page = 1, pageSize = 20) {
+    return this.get<{
+      posts: Post[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/groups/${groupId}/posts?page=${page}&page_size=${pageSize}`);
+  }
+
+  async getGroupHighlights(groupId: string) {
+    return this.get<{ posts: Post[] }>(`/groups/${groupId}/highlights`);
   }
 
   // ── Follow ────────────────────────────────────────────────────────────
@@ -850,6 +867,66 @@ class ApiClient {
     return this.request<{ groups: Group[]; total: number }>(
       `/users/me/groups?page=${page}&page_size=${pageSize}`,
     );
+  }
+
+  async bookmarkPost(id: string) {
+    return this.post<{ message: string }>(`/posts/${id}/bookmark`);
+  }
+
+  async unbookmarkPost(id: string) {
+    return this.delete<{ message: string }>(`/posts/${id}/bookmark`);
+  }
+
+  async bookmarkGroup(id: string) {
+    return this.post<{ message: string }>(`/groups/${id}/bookmark`);
+  }
+
+  async unbookmarkGroup(id: string) {
+    return this.delete<{ message: string }>(`/groups/${id}/bookmark`);
+  }
+
+  async bookmarkEvent(id: string) {
+    return this.post<{ message: string }>(`/events/${id}/bookmark`);
+  }
+
+  async unbookmarkEvent(id: string) {
+    return this.delete<{ message: string }>(`/events/${id}/bookmark`);
+  }
+
+  async checkBookmark(
+    targetType: "post" | "group" | "event",
+    targetId: string,
+  ) {
+    return this.get<{ bookmarked: boolean }>(
+      `/bookmarks/check?target_type=${targetType}&target_id=${targetId}`,
+    );
+  }
+
+  async getBookmarkedPosts(page = 1, pageSize = 20) {
+    return this.get<{
+      posts: Post[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/bookmarks/posts?page=${page}&page_size=${pageSize}`);
+  }
+
+  async getBookmarkedGroups(page = 1, pageSize = 20) {
+    return this.get<{
+      groups: Group[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/bookmarks/groups?page=${page}&page_size=${pageSize}`);
+  }
+
+  async getBookmarkedEvents(page = 1, pageSize = 20) {
+    return this.get<{
+      events: Event[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/bookmarks/events?page=${page}&page_size=${pageSize}`);
   }
 
   // ── Leaderboard ──────────────────────────────────────────────────────────

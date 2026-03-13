@@ -211,6 +211,37 @@ func (s *GroupService) ListMembers(ctx context.Context, groupID uuid.UUID, page,
 	return members, total, nil
 }
 
+// GetMember returns the caller's membership info in a group.
+func (s *GroupService) GetMember(ctx context.Context, groupID, userID uuid.UUID) (*group.GroupMember, error) {
+	member, err := s.groupRepo.GetMember(ctx, groupID, userID)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询圈子成员失败", err)
+	}
+	return member, nil
+}
+
+// CanViewGroup reports whether the caller can view content inside the group.
+func (s *GroupService) CanViewGroup(ctx context.Context, groupID, viewerID uuid.UUID, isAuthenticated bool) (bool, *group.Group, error) {
+	g, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, group.ErrNotFound) {
+			return false, nil, apperr.ErrNotFound
+		}
+		return false, nil, apperr.Wrap(apperr.CodeInternalError, "查询圈子失败", err)
+	}
+	if g.Privacy == group.GroupPrivacyPublic {
+		return true, g, nil
+	}
+	if !isAuthenticated {
+		return false, g, nil
+	}
+	member, err := s.groupRepo.GetMember(ctx, groupID, viewerID)
+	if err != nil {
+		return false, g, apperr.Wrap(apperr.CodeInternalError, "查询圈子成员失败", err)
+	}
+	return member != nil, g, nil
+}
+
 // UpdateMemberRole changes a member's role; only the owner may do this.
 func (s *GroupService) UpdateMemberRole(ctx context.Context, callerID, groupID, targetUserID uuid.UUID, role group.GroupRole) error {
 	g, err := s.groupRepo.GetByID(ctx, groupID)
