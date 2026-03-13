@@ -373,11 +373,13 @@ func (s *PostService) PinPost(ctx context.Context, userID, postID uuid.UUID, pin
 // SearchPosts searches public posts by keyword
 func (s *PostService) SearchPosts(ctx context.Context, query string, limit int) ([]*post.Post, error) {
 	vis := post.VisibilityPublic
+	approved := post.ModerationApproved
 	posts, _, err := s.postRepo.List(ctx, post.ListFilter{
-		Search:     query,
-		Visibility: &vis,
-		Page:       1,
-		PageSize:   limit,
+		Search:           query,
+		Visibility:       &vis,
+		ModerationStatus: &approved,
+		Page:             1,
+		PageSize:         limit,
 	})
 	return posts, err
 }

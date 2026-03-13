@@ -16,6 +16,7 @@ type Config struct {
 	Moderation ModerationConfig `mapstructure:"moderation"`
 	Sponsor    SponsorConfig    `mapstructure:"sponsor"`
 	GRPC       GRPCConfig       `mapstructure:"grpc"`
+	Assistant  AssistantConfig  `mapstructure:"assistant"`
 }
 
 type ServerConfig struct {
@@ -114,4 +115,16 @@ type GRPCConfig struct {
 	StatsPort        int `mapstructure:"stats_port"`
 	NotificationPort int `mapstructure:"notification_port"`
 	ModerationPort   int `mapstructure:"moderation_port"`
+}
+
+// AssistantConfig holds settings for the site AI assistant.
+type AssistantConfig struct {
+	Provider        string  `mapstructure:"provider"` // "deepseek" or any OpenAI-compatible provider
+	BaseURL         string  `mapstructure:"base_url"` // e.g. https://api.deepseek.com/v1
+	APIKey          string  `mapstructure:"api_key"`
+	Model           string  `mapstructure:"model"` // e.g. deepseek-chat
+	Temperature     float64 `mapstructure:"temperature"`
+	TimeoutSec      int     `mapstructure:"timeout_sec"`
+	MaxContextItems int     `mapstructure:"max_context_items"` // cards shown to the user / injected into prompt
+	PersonaName     string  `mapstructure:"persona_name"`
 }

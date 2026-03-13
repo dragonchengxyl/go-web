@@ -71,3 +71,13 @@ grpc:
   stats_port: 50051
   notification_port: 50052
   moderation_port: 50053
+
+assistant:
+  provider: deepseek
+  base_url: https://api.deepseek.com/v1
+  api_key: ""
+  model: deepseek-chat
+  temperature: 0.7
+  timeout_sec: 90
+  max_context_items: 6
+  persona_name: 霜牙

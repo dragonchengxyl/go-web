@@ -14,6 +14,7 @@ import (
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/infra/embedding"
 	"github.com/studio/platform/internal/infra/grpcclient"
+	"github.com/studio/platform/internal/infra/llm"
 	"github.com/studio/platform/internal/infra/moderation"
 	"github.com/studio/platform/internal/infra/oss"
 	paymentpkg "github.com/studio/platform/internal/infra/payment"
@@ -184,6 +185,15 @@ func main() {
 	groupService := usecase.NewGroupService(groupRepo)
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
+	assistantRepo := postgres.NewAssistantRepository(pool)
+	assistantLLM := llm.NewOpenAICompatibleClient(
+		cfg.Assistant.BaseURL,
+		cfg.Assistant.APIKey,
+		cfg.Assistant.Model,
+		cfg.Assistant.Temperature,
+		time.Duration(cfg.Assistant.TimeoutSec)*time.Second,
+	)
+	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantRepo, postService, groupService, eventService)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)
@@ -218,6 +228,7 @@ func main() {
 		EventService:          eventService,
 		GroupService:          groupService,
 		RecommendationService: recommendationService,
+		AssistantService:      assistantService,
 		Hub:                   hub,
 		TokenStore:            tokenStore,
 		ReportRepo:            reportRepo,

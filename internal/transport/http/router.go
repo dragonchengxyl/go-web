@@ -1,6 +1,8 @@
 package http
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -39,6 +41,7 @@ type RouterConfig struct {
 	EventService          *usecase.EventService
 	GroupService          *usecase.GroupService
 	RecommendationService *usecase.RecommendationService
+	AssistantService      *usecase.AssistantService
 	Hub                   ws.HubInterface
 	TokenStore            *redis.TokenStore
 	ReportRepo            report.Repository
@@ -85,6 +88,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		tipHandler := handler.NewTipHandler(cfg.TipService, cfg.PaymentService)
 		achievementHandler := handler.NewAchievementHandler(cfg.AchievementService)
 		notificationHandler := handler.NewNotificationHandler(cfg.NotificationService)
+		var assistantHandler *handler.AssistantHandler
+		if cfg.AssistantService != nil {
+			assistantHandler = handler.NewAssistantHandler(cfg.AssistantService, time.Duration(cfg.Config.Assistant.TimeoutSec)*time.Second)
+		}
 
 		authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)
 
@@ -116,6 +123,13 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		// Sponsor dashboard (public)
 		sponsorHandler := handler.NewSponsorHandler(cfg.Config.Sponsor)
 		v1.GET("/sponsor", sponsorHandler.GetSponsorInfo)
+
+		// AI assistant (public stream with optional auth context)
+		if assistantHandler != nil {
+			assistant := v1.Group("/assistant")
+			assistant.Use(authMiddleware.OptionalAuthenticate())
+			assistant.POST("/chat/stream", assistantHandler.StreamChat)
+		}
 
 		// Music (public read)
 		albums := v1.Group("/albums")
@@ -261,6 +275,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			protected.GET("/notifications", notificationHandler.ListNotifications)
 			protected.POST("/notifications/read", notificationHandler.MarkRead)
 			protected.GET("/notifications/unread-count", notificationHandler.CountUnread)
+
+			// Assistant history
+			if assistantHandler != nil {
+				protected.GET("/assistant/conversations", assistantHandler.ListConversations)
+				protected.GET("/assistant/conversations/:id", assistantHandler.GetConversation)
+			}
 
 			// Upload
 			uploadHandler := handler.NewUploadHandler("./uploads", 10*1024*1024)
