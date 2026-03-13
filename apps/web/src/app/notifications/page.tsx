@@ -68,6 +68,7 @@ function notificationLink(n: Notification): string {
     case 'system':
       if (n.target_type === 'post_approved' && n.target_id) return `/posts/${n.target_id}`;
       if (n.target_type === 'report_post_blocked' && n.target_id) return `/posts/${n.target_id}`;
+      if (n.target_type?.startsWith('report_')) return '/reports';
       return '/creator';
     default:
       return '/feed';

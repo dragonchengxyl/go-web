@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import { Menu, X, Bell, MessageCircle, Compass, PenSquare, LogOut, Settings, Users, Calendar, Trophy, ChevronDown } from 'lucide-react';
+import { Menu, X, Bell, MessageCircle, Compass, PenSquare, LogOut, Settings, Users, Calendar, Trophy, ChevronDown, Flag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { GlobalSearch } from '@/components/search/global-search';
@@ -99,6 +99,14 @@ function UserAvatar() {
                 >
                   <PenSquare className="h-4 w-4 text-muted-foreground" />
                   创作中心
+                </Link>
+                <Link
+                  href="/reports"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <Flag className="h-4 w-4 text-muted-foreground" />
+                  我的举报
                 </Link>
                 <Link
                   href="/settings"

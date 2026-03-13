@@ -278,6 +278,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Reports
 			reportHandler := handler.NewReportHandler(cfg.ReportRepo)
 			protected.POST("/reports", reportHandler.CreateReport)
+			protected.GET("/reports/mine", reportHandler.ListMyReports)
 
 			// Block
 			blockHandler := handler.NewBlockHandler(cfg.BlockRepo, cfg.UserService)

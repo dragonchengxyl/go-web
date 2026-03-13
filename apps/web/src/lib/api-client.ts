@@ -484,6 +484,14 @@ class ApiClient {
     return this.post<{ message: string }>('/reports', { target_type: targetType, target_id: targetId, reason, description })
   }
 
+  async getMyReports(status?: string, page?: number, pageSize?: number) {
+    const q = new URLSearchParams()
+    if (status) q.set('status', status)
+    if (page) q.set('page', String(page))
+    if (pageSize) q.set('page_size', String(pageSize))
+    return this.get<{ reports: any[]; total: number; page: number; size: number }>(`/reports/mine?${q.toString()}`)
+  }
+
   async getCreatorStats() {
     return this.get<{
       post_count: number

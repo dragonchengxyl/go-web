@@ -51,6 +51,7 @@ type Report struct {
 type Repository interface {
 	Create(ctx context.Context, r *Report) error
 	List(ctx context.Context, status string, page, size int) ([]*Report, int64, error)
+	ListByReporter(ctx context.Context, reporterID uuid.UUID, status string, page, size int) ([]*Report, int64, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Report, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status Status, reviewedBy uuid.UUID, actionTaken *Action) error
 }

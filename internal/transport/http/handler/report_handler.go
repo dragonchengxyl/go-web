@@ -67,3 +67,27 @@ func (h *ReportHandler) CreateReport(c *gin.Context) {
 
 	response.Success(c, gin.H{"message": "举报已提交，感谢你的反馈"})
 }
+
+// ListMyReports GET /api/v1/reports/mine
+func (h *ReportHandler) ListMyReports(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+
+	page, pageSize := getPageParams(c)
+	status := c.Query("status")
+	reports, total, err := h.repo.ListByReporter(c.Request.Context(), uid, status, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"reports": reports,
+		"total":   total,
+		"page":    page,
+		"size":    len(reports),
+	})
+}
