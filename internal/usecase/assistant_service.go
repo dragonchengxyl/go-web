@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -348,12 +349,15 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, setti
 	}
 
 	seen := make(map[string]struct{}, maxItems)
-	cards := make([]AssistantCard, 0, maxItems)
+	cards := make([]AssistantCard, 0, maxItems*2)
+	type scoredCard struct {
+		card  AssistantCard
+		score int
+	}
+	scored := make([]scoredCard, 0, maxItems*2)
+
 	appendUnique := func(items ...AssistantCard) {
 		for _, item := range items {
-			if len(cards) >= maxItems {
-				return
-			}
 			if item.Href == "" {
 				continue
 			}
@@ -361,7 +365,10 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, setti
 				continue
 			}
 			seen[item.Href] = struct{}{}
-			cards = append(cards, item)
+			scored = append(scored, scoredCard{
+				card:  item,
+				score: scoreAssistantCard(item, query),
+			})
 		}
 	}
 
@@ -382,6 +389,20 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, setti
 	}
 	if settings.IncludeEvents {
 		appendUnique(s.collectEventCards(ctx, query)...)
+	}
+
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score == scored[j].score {
+			return scored[i].card.Title < scored[j].card.Title
+		}
+		return scored[i].score > scored[j].score
+	})
+
+	for _, item := range scored {
+		if len(cards) >= maxItems {
+			break
+		}
+		cards = append(cards, item.card)
 	}
 
 	for i := range cards {
@@ -997,4 +1018,123 @@ func eventRecommendationReason(e *event.Event, query string) string {
 		return "这是线上活动，参与门槛更低"
 	}
 	return "这是近期可参加的公开活动"
+}
+
+func scoreAssistantCard(card AssistantCard, query string) int {
+	score := kindBaseScore(card.Kind)
+
+	fullQuery := strings.TrimSpace(strings.ToLower(query))
+	if fullQuery == "" {
+		return score
+	}
+
+	title := strings.ToLower(card.Title)
+	summary := strings.ToLower(card.Summary)
+	meta := strings.ToLower(card.Meta)
+	reason := strings.ToLower(card.Reason)
+
+	if strings.Contains(title, fullQuery) {
+		score += 140
+	}
+	if strings.Contains(summary, fullQuery) {
+		score += 90
+	}
+	if strings.Contains(meta, fullQuery) {
+		score += 55
+	}
+	if strings.Contains(reason, fullQuery) {
+		score += 40
+	}
+
+	for _, token := range queryTokens(fullQuery) {
+		switch {
+		case strings.Contains(title, token):
+			score += 20
+		case strings.Contains(summary, token):
+			score += 14
+		case strings.Contains(meta, token):
+			score += 8
+		case strings.Contains(reason, token):
+			score += 6
+		}
+	}
+
+	score += kindIntentBoost(card.Kind, fullQuery)
+	return score
+}
+
+func kindBaseScore(kind string) int {
+	switch kind {
+	case "post":
+		return 55
+	case "user":
+		return 48
+	case "group":
+		return 45
+	case "event":
+		return 45
+	case "tag":
+		return 35
+	case "page":
+		return 25
+	default:
+		return 10
+	}
+}
+
+func kindIntentBoost(kind, query string) int {
+	type rule struct {
+		kind     string
+		keywords []string
+		boost    int
+	}
+
+	rules := []rule{
+		{kind: "event", keywords: []string{"活动", "聚会", "线下", "线上", "报名"}, boost: 50},
+		{kind: "group", keywords: []string{"圈子", "社群", "同好", "群组"}, boost: 50},
+		{kind: "post", keywords: []string{"帖子", "动态", "内容", "发帖", "作品"}, boost: 45},
+		{kind: "user", keywords: []string{"用户", "创作者", "关注谁", "作者"}, boost: 45},
+		{kind: "tag", keywords: []string{"标签", "话题"}, boost: 40},
+		{kind: "page", keywords: []string{"怎么用", "入口", "先逛", "第一次来"}, boost: 40},
+	}
+
+	boost := 0
+	for _, rule := range rules {
+		if rule.kind != kind {
+			continue
+		}
+		for _, keyword := range rule.keywords {
+			if strings.Contains(query, keyword) {
+				boost += rule.boost
+				break
+			}
+		}
+	}
+	return boost
+}
+
+func queryTokens(query string) []string {
+	parts := strings.FieldsFunc(query, func(r rune) bool {
+		switch r {
+		case ' ', '\t', '\n', ',', '，', '.', '。', '/', '|', '-', '_', '、', ':', '：', '(', ')', '（', '）':
+			return true
+		default:
+			return false
+		}
+	})
+
+	tokens := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if utf8.RuneCountInString(part) < 2 {
+			continue
+		}
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		tokens = append(tokens, part)
+	}
+	return tokens
 }
