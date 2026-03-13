@@ -22,6 +22,9 @@ type Repository interface {
 	ListMembers(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*GroupMember, int64, error)
 	CreateAnnouncement(ctx context.Context, item *GroupAnnouncement) error
 	ListAnnouncements(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*GroupAnnouncement, int64, error)
+	ListByOwner(ctx context.Context, ownerID uuid.UUID, page, pageSize int) ([]*Group, int64, error)
+	ListByRole(ctx context.Context, userID uuid.UUID, role GroupRole, page, pageSize int) ([]*Group, int64, error)
+	ListRecentActiveMembers(ctx context.Context, groupID uuid.UUID, limit int) ([]*GroupMember, error)
 
 	// Counts
 	IncrementMemberCount(ctx context.Context, groupID uuid.UUID) error

@@ -203,6 +203,65 @@ func (s *GroupService) ListAnnouncements(ctx context.Context, groupID uuid.UUID,
 	return items, total, nil
 }
 
+type GroupDashboardItem struct {
+	Group         *group.Group         `json:"group"`
+	Role          group.GroupRole      `json:"role"`
+	ActiveMembers []*group.GroupMember `json:"active_members"`
+}
+
+type GroupDashboardStats struct {
+	CreatedCount       int   `json:"created_count"`
+	ManagedCount       int   `json:"managed_count"`
+	TotalMembers       int64 `json:"total_members"`
+	TotalPosts         int64 `json:"total_posts"`
+	FeaturedGroupCount int   `json:"featured_group_count"`
+}
+
+type GroupDashboardOutput struct {
+	Stats         GroupDashboardStats  `json:"stats"`
+	CreatedGroups []GroupDashboardItem `json:"created_groups"`
+	ManagedGroups []GroupDashboardItem `json:"managed_groups"`
+}
+
+func (s *GroupService) GetDashboard(ctx context.Context, userID uuid.UUID) (*GroupDashboardOutput, error) {
+	createdGroups, _, err := s.groupRepo.ListByOwner(ctx, userID, 1, 20)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询我创建的圈子失败", err)
+	}
+	managedGroups, _, err := s.groupRepo.ListByRole(ctx, userID, group.GroupRoleModerator, 1, 20)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询我管理的圈子失败", err)
+	}
+
+	createdItems := s.buildDashboardItems(ctx, createdGroups, group.GroupRoleOwner)
+	managedItems := s.buildDashboardItems(ctx, managedGroups, group.GroupRoleModerator)
+
+	stats := GroupDashboardStats{
+		CreatedCount: len(createdItems),
+		ManagedCount: len(managedItems),
+	}
+	for _, item := range createdItems {
+		stats.TotalMembers += int64(item.Group.MemberCount)
+		stats.TotalPosts += int64(item.Group.PostCount)
+		if item.Group.FeaturedPostID != nil {
+			stats.FeaturedGroupCount++
+		}
+	}
+	for _, item := range managedItems {
+		stats.TotalMembers += int64(item.Group.MemberCount)
+		stats.TotalPosts += int64(item.Group.PostCount)
+		if item.Group.FeaturedPostID != nil {
+			stats.FeaturedGroupCount++
+		}
+	}
+
+	return &GroupDashboardOutput{
+		Stats:         stats,
+		CreatedGroups: createdItems,
+		ManagedGroups: managedItems,
+	}, nil
+}
+
 // JoinGroup adds a user to a group.
 func (s *GroupService) JoinGroup(ctx context.Context, groupID, userID uuid.UUID) error {
 	g, err := s.groupRepo.GetByID(ctx, groupID)
@@ -354,4 +413,17 @@ func (s *GroupService) MyGroups(ctx context.Context, userID uuid.UUID, page, pag
 	}
 	// Fallback: list all and filter (not used in practice).
 	return nil, 0, nil
+}
+
+func (s *GroupService) buildDashboardItems(ctx context.Context, groups []*group.Group, role group.GroupRole) []GroupDashboardItem {
+	items := make([]GroupDashboardItem, 0, len(groups))
+	for _, g := range groups {
+		activeMembers, _ := s.groupRepo.ListRecentActiveMembers(ctx, g.ID, 5)
+		items = append(items, GroupDashboardItem{
+			Group:         g,
+			Role:          role,
+			ActiveMembers: activeMembers,
+		})
+	}
+	return items
 }

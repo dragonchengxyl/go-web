@@ -930,6 +930,10 @@ class ApiClient {
     );
   }
 
+  async getMyGroupsDashboard() {
+    return this.request<GroupDashboard>("/users/me/groups/dashboard");
+  }
+
   async bookmarkPost(id: string) {
     return this.post<{ message: string }>(`/posts/${id}/bookmark`);
   }
@@ -1212,6 +1216,26 @@ export interface GroupAnnouncement {
   author_name?: string;
   furry_name?: string;
   avatar_key?: string;
+}
+
+export interface GroupDashboardItem {
+  group: Group;
+  role: "owner" | "moderator" | "member";
+  active_members: GroupMember[];
+}
+
+export interface GroupDashboardStats {
+  created_count: number;
+  managed_count: number;
+  total_members: number;
+  total_posts: number;
+  featured_group_count: number;
+}
+
+export interface GroupDashboard {
+  stats: GroupDashboardStats;
+  created_groups: GroupDashboardItem[];
+  managed_groups: GroupDashboardItem[];
 }
 
 export interface LeaderboardEntry {

@@ -229,6 +229,122 @@ func (r *GroupRepository) ListAnnouncements(ctx context.Context, groupID uuid.UU
 	return items, total, rows.Err()
 }
 
+func (r *GroupRepository) ListByOwner(ctx context.Context, ownerID uuid.UUID, page, pageSize int) ([]*group.Group, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, owner_id, name, description, announcement, rules, avatar_key, featured_post_id, tags, privacy, member_count, post_count, created_at, updated_at
+		FROM groups
+		WHERE owner_id = $1
+		ORDER BY updated_at DESC
+		LIMIT $2 OFFSET $3
+	`, ownerID, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]*group.Group, 0, pageSize)
+	for rows.Next() {
+		var g group.Group
+		var tags []byte
+		if err := rows.Scan(&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.Announcement, &g.Rules, &g.AvatarKey, &g.FeaturedPostID, &tags, &g.Privacy, &g.MemberCount, &g.PostCount, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		_ = json.Unmarshal(tags, &g.Tags)
+		items = append(items, &g)
+	}
+
+	var total int64
+	_ = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM groups WHERE owner_id = $1`, ownerID).Scan(&total)
+	return items, total, rows.Err()
+}
+
+func (r *GroupRepository) ListByRole(ctx context.Context, userID uuid.UUID, role group.GroupRole, page, pageSize int) ([]*group.Group, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT g.id, g.owner_id, g.name, g.description, g.announcement, g.rules, g.avatar_key, g.featured_post_id, g.tags, g.privacy, g.member_count, g.post_count, g.created_at, g.updated_at
+		FROM groups g
+		JOIN group_members gm ON gm.group_id = g.id
+		WHERE gm.user_id = $1 AND gm.role = $2
+		ORDER BY g.updated_at DESC
+		LIMIT $3 OFFSET $4
+	`, userID, role, pageSize, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]*group.Group, 0, pageSize)
+	for rows.Next() {
+		var g group.Group
+		var tags []byte
+		if err := rows.Scan(&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.Announcement, &g.Rules, &g.AvatarKey, &g.FeaturedPostID, &tags, &g.Privacy, &g.MemberCount, &g.PostCount, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, 0, err
+		}
+		_ = json.Unmarshal(tags, &g.Tags)
+		items = append(items, &g)
+	}
+
+	var total int64
+	_ = r.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM group_members
+		WHERE user_id = $1 AND role = $2
+	`, userID, role).Scan(&total)
+	return items, total, rows.Err()
+}
+
+func (r *GroupRepository) ListRecentActiveMembers(ctx context.Context, groupID uuid.UUID, limit int) ([]*group.GroupMember, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		WITH recent_posts AS (
+			SELECT author_id, MAX(created_at) AS last_active_at
+			FROM posts
+			WHERE group_id = $1 AND deleted_at IS NULL
+			GROUP BY author_id
+		)
+		SELECT gm.group_id, gm.user_id, gm.role, gm.joined_at,
+		       u.username, u.furry_name, u.avatar_key
+		FROM group_members gm
+		JOIN users u ON u.id = gm.user_id
+		LEFT JOIN recent_posts rp ON rp.author_id = gm.user_id
+		WHERE gm.group_id = $1
+		ORDER BY COALESCE(rp.last_active_at, gm.joined_at) DESC, gm.joined_at DESC
+		LIMIT $2
+	`, groupID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]*group.GroupMember, 0, limit)
+	for rows.Next() {
+		var m group.GroupMember
+		if err := rows.Scan(&m.GroupID, &m.UserID, &m.Role, &m.JoinedAt, &m.Username, &m.FurryName, &m.AvatarKey); err != nil {
+			return nil, err
+		}
+		items = append(items, &m)
+	}
+	return items, rows.Err()
+}
+
 func (r *GroupRepository) IncrementMemberCount(ctx context.Context, groupID uuid.UUID) error {
 	_, err := r.pool.Exec(ctx, `UPDATE groups SET member_count=member_count+1 WHERE id=$1`, groupID)
 	return err

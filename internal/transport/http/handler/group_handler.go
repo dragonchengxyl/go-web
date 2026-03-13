@@ -387,6 +387,21 @@ func (h *GroupHandler) MyGroups(c *gin.Context) {
 	response.Success(c, gin.H{"groups": groups, "total": total})
 }
 
+// Dashboard handles GET /api/v1/users/me/groups/dashboard
+func (h *GroupHandler) Dashboard(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.New(apperr.CodeUnauthorized, "未登录"))
+		return
+	}
+	data, err := h.groupSvc.GetDashboard(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
 // SetFeaturedPost handles PUT /api/v1/groups/:id/featured-post
 func (h *GroupHandler) SetFeaturedPost(c *gin.Context) {
 	userID, ok := getUserID(c)

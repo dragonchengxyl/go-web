@@ -125,6 +125,14 @@ function UserAvatar() {
                   创作中心
                 </Link>
                 <Link
+                  href="/groups/manage"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  我的圈子
+                </Link>
+                <Link
                   href="/bookmarks"
                   onClick={() => setOpen(false)}
                   className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
@@ -360,6 +368,13 @@ export function Header() {
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
                         通知{unreadCount > 0 && ` (${unreadCount})`}
+                      </Link>
+                      <Link
+                        href="/groups/manage"
+                        className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        我的圈子
                       </Link>
                       <Link
                         href="/bookmarks"

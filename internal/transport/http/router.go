@@ -258,6 +258,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				protected.PUT("/groups/:id/members/:uid", groupHandler.UpdateMemberRole)
 				protected.DELETE("/groups/:id/members/:uid", groupHandler.KickMember)
 				protected.GET("/users/me/groups", groupHandler.MyGroups)
+				protected.GET("/users/me/groups/dashboard", groupHandler.Dashboard)
 			}
 
 			// Follow
