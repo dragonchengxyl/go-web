@@ -74,7 +74,8 @@ func (h *BookmarkHandler) ListPosts(c *gin.Context) {
 		return
 	}
 	page, pageSize := getPageParams(c)
-	posts, total, err := h.service.ListPosts(c.Request.Context(), userID, page, pageSize)
+	sort := c.DefaultQuery("sort", "latest")
+	posts, total, err := h.service.ListPosts(c.Request.Context(), userID, page, pageSize, sort)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -89,7 +90,8 @@ func (h *BookmarkHandler) ListGroups(c *gin.Context) {
 		return
 	}
 	page, pageSize := getPageParams(c)
-	groups, total, err := h.service.ListGroups(c.Request.Context(), userID, page, pageSize)
+	sort := c.DefaultQuery("sort", "latest")
+	groups, total, err := h.service.ListGroups(c.Request.Context(), userID, page, pageSize, sort)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -104,7 +106,8 @@ func (h *BookmarkHandler) ListEvents(c *gin.Context) {
 		return
 	}
 	page, pageSize := getPageParams(c)
-	events, total, err := h.service.ListEvents(c.Request.Context(), userID, page, pageSize)
+	sort := c.DefaultQuery("sort", "latest")
+	events, total, err := h.service.ListEvents(c.Request.Context(), userID, page, pageSize, sort)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -146,6 +149,45 @@ func (h *BookmarkHandler) remove(c *gin.Context, targetType bookmark.TargetType,
 		return
 	}
 	response.Success(c, gin.H{"message": "已取消收藏"})
+}
+
+func (h *BookmarkHandler) RemoveBatch(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+
+	var req struct {
+		TargetType string   `json:"target_type" binding:"required"`
+		TargetIDs  []string `json:"target_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	targetType := bookmark.TargetType(req.TargetType)
+	if !isValidBookmarkType(targetType) {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的收藏类型"))
+		return
+	}
+
+	ids := make([]uuid.UUID, 0, len(req.TargetIDs))
+	for _, rawID := range req.TargetIDs {
+		id, err := uuid.Parse(rawID)
+		if err != nil {
+			response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的目标ID"))
+			return
+		}
+		ids = append(ids, id)
+	}
+
+	if err := h.service.RemoveBatch(c.Request.Context(), userID, targetType, ids); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "批量移除完成"})
 }
 
 func isValidBookmarkType(t bookmark.TargetType) bool {

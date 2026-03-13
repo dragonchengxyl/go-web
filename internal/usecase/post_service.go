@@ -314,6 +314,11 @@ func (s *PostService) GetHotTags(ctx context.Context, limit int) ([]string, erro
 
 // ListGroupPosts returns approved public posts inside a group ordered by recency.
 func (s *PostService) ListGroupPosts(ctx context.Context, groupID uuid.UUID, page, pageSize int) ([]*post.Post, int64, error) {
+	return s.ListGroupPostsWithOptions(ctx, groupID, page, pageSize, "", "latest")
+}
+
+// ListGroupPostsWithOptions returns approved public posts inside a group ordered by sort mode and tag.
+func (s *PostService) ListGroupPostsWithOptions(ctx context.Context, groupID uuid.UUID, page, pageSize int, tag, sort string) ([]*post.Post, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -322,13 +327,20 @@ func (s *PostService) ListGroupPosts(ctx context.Context, groupID uuid.UUID, pag
 	}
 	vis := post.VisibilityPublic
 	approved := post.ModerationApproved
-	return s.postRepo.List(ctx, post.ListFilter{
+	filter := post.ListFilter{
 		GroupID:          &groupID,
 		Visibility:       &vis,
 		ModerationStatus: &approved,
 		Page:             page,
 		PageSize:         pageSize,
-	})
+	}
+	if tag != "" {
+		filter.Tags = []string{tag}
+	}
+	if sort == "hot" {
+		filter.SortByScore = true
+	}
+	return s.postRepo.List(ctx, filter)
 }
 
 // ListGroupHighlights returns the most engaging approved public posts inside a group.
@@ -346,6 +358,14 @@ func (s *PostService) ListGroupHighlights(ctx context.Context, groupID uuid.UUID
 		Page:             1,
 		PageSize:         limit,
 	})
+}
+
+// GetGroupHotTags returns the most used tags inside a group.
+func (s *PostService) GetGroupHotTags(ctx context.Context, groupID uuid.UUID, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	return s.postRepo.GetGroupHotTags(ctx, groupID, limit)
 }
 
 // ListFeed returns posts from followed users
@@ -416,6 +436,31 @@ func (s *PostService) PinPost(ctx context.Context, userID, postID uuid.UUID, pin
 	}
 	if p.AuthorID != userID {
 		return apperr.New(apperr.CodeForbidden, "无权操作此帖子")
+	}
+	p.IsPinned = pin
+	p.UpdatedAt = time.Now()
+	return s.postRepo.Update(ctx, p)
+}
+
+// PinGroupPost pins or unpins a post inside a group; only owner/moderator may do this.
+func (s *PostService) PinGroupPost(ctx context.Context, actorID, groupID, postID uuid.UUID, pin bool) error {
+	if s.groupRepo == nil {
+		return apperr.New(apperr.CodeForbidden, "圈子置顶未启用")
+	}
+	member, err := s.groupRepo.GetMember(ctx, groupID, actorID)
+	if err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "查询圈子成员失败", err)
+	}
+	if member == nil || (member.Role != group.GroupRoleOwner && member.Role != group.GroupRoleModerator) {
+		return apperr.New(apperr.CodeForbidden, "只有圈主或管理员可以置顶帖子")
+	}
+
+	p, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		return apperr.ErrNotFound
+	}
+	if p.GroupID == nil || *p.GroupID != groupID {
+		return apperr.New(apperr.CodeInvalidParam, "该帖子不属于这个圈子")
 	}
 	p.IsPinned = pin
 	p.UpdatedAt = time.Now()

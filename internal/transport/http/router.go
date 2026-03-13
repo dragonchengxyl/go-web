@@ -188,6 +188,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			groups.GET("/:id/members", groupHandler.ListMembers)
 			groups.GET("/:id/posts", groupHandler.ListPosts)
 			groups.GET("/:id/highlights", groupHandler.GetHighlights)
+			groups.GET("/:id/tags", groupHandler.GetPostTags)
 		}
 
 		// Users public profile
@@ -250,6 +251,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				protected.PUT("/groups/:id", groupHandler.UpdateGroup)
 				protected.POST("/groups/:id/join", groupHandler.JoinGroup)
 				protected.DELETE("/groups/:id/leave", groupHandler.LeaveGroup)
+				protected.PUT("/groups/:id/featured-post", groupHandler.SetFeaturedPost)
+				protected.POST("/groups/:id/posts/:post_id/pin", groupHandler.PinPost)
+				protected.DELETE("/groups/:id/posts/:post_id/pin", groupHandler.UnpinPost)
 				protected.PUT("/groups/:id/members/:uid", groupHandler.UpdateMemberRole)
 				protected.DELETE("/groups/:id/members/:uid", groupHandler.KickMember)
 				protected.GET("/users/me/groups", groupHandler.MyGroups)
@@ -296,6 +300,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				protected.GET("/bookmarks/posts", bookmarkHandler.ListPosts)
 				protected.GET("/bookmarks/groups", bookmarkHandler.ListGroups)
 				protected.GET("/bookmarks/events", bookmarkHandler.ListEvents)
+				protected.POST("/bookmarks/batch-delete", bookmarkHandler.RemoveBatch)
 			}
 
 			// Assistant history

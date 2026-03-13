@@ -22,9 +22,9 @@ func NewGroupRepository(pool *pgxpool.Pool) *GroupRepository {
 func (r *GroupRepository) Create(ctx context.Context, g *group.Group) error {
 	tags, _ := json.Marshal(g.Tags)
 	_, err := r.pool.Exec(ctx, `
-		INSERT INTO groups (id, owner_id, name, description, avatar_key, tags, privacy, member_count, post_count, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-	`, g.ID, g.OwnerID, g.Name, g.Description, g.AvatarKey, tags, g.Privacy, g.MemberCount, g.PostCount, g.CreatedAt, g.UpdatedAt)
+		INSERT INTO groups (id, owner_id, name, description, announcement, rules, avatar_key, featured_post_id, tags, privacy, member_count, post_count, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+	`, g.ID, g.OwnerID, g.Name, g.Description, g.Announcement, g.Rules, g.AvatarKey, g.FeaturedPostID, tags, g.Privacy, g.MemberCount, g.PostCount, g.CreatedAt, g.UpdatedAt)
 	return err
 }
 
@@ -32,10 +32,10 @@ func (r *GroupRepository) GetByID(ctx context.Context, id uuid.UUID) (*group.Gro
 	var g group.Group
 	var tags []byte
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, owner_id, name, description, avatar_key, tags, privacy, member_count, post_count, created_at, updated_at
+		SELECT id, owner_id, name, description, announcement, rules, avatar_key, featured_post_id, tags, privacy, member_count, post_count, created_at, updated_at
 		FROM groups WHERE id=$1
 	`, id).Scan(
-		&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.AvatarKey, &tags,
+		&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.Announcement, &g.Rules, &g.AvatarKey, &g.FeaturedPostID, &tags,
 		&g.Privacy, &g.MemberCount, &g.PostCount, &g.CreatedAt, &g.UpdatedAt,
 	)
 	if err != nil {
@@ -51,9 +51,9 @@ func (r *GroupRepository) GetByID(ctx context.Context, id uuid.UUID) (*group.Gro
 func (r *GroupRepository) Update(ctx context.Context, g *group.Group) error {
 	tags, _ := json.Marshal(g.Tags)
 	_, err := r.pool.Exec(ctx, `
-		UPDATE groups SET name=$1, description=$2, avatar_key=$3, tags=$4, privacy=$5, updated_at=$6
-		WHERE id=$7
-	`, g.Name, g.Description, g.AvatarKey, tags, g.Privacy, g.UpdatedAt, g.ID)
+		UPDATE groups SET name=$1, description=$2, announcement=$3, rules=$4, avatar_key=$5, featured_post_id=$6, tags=$7, privacy=$8, updated_at=$9
+		WHERE id=$10
+	`, g.Name, g.Description, g.Announcement, g.Rules, g.AvatarKey, g.FeaturedPostID, tags, g.Privacy, g.UpdatedAt, g.ID)
 	return err
 }
 
@@ -74,7 +74,7 @@ func (r *GroupRepository) List(ctx context.Context, filter group.ListFilter) ([]
 	offset := (page - 1) * pageSize
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT g.id, g.owner_id, g.name, g.description, g.avatar_key, g.tags, g.privacy, g.member_count, g.post_count, g.created_at, g.updated_at
+		SELECT g.id, g.owner_id, g.name, g.description, g.announcement, g.rules, g.avatar_key, g.featured_post_id, g.tags, g.privacy, g.member_count, g.post_count, g.created_at, g.updated_at
 		FROM groups g
 		WHERE ($1::text IS NULL OR g.privacy = $1)
 		  AND ($2::text IS NULL OR g.name ILIKE '%' || $2 || '%')
@@ -91,7 +91,7 @@ func (r *GroupRepository) List(ctx context.Context, filter group.ListFilter) ([]
 		var g group.Group
 		var tags []byte
 		if err := rows.Scan(
-			&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.AvatarKey, &tags,
+			&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.Announcement, &g.Rules, &g.AvatarKey, &g.FeaturedPostID, &tags,
 			&g.Privacy, &g.MemberCount, &g.PostCount, &g.CreatedAt, &g.UpdatedAt,
 		); err != nil {
 			continue
@@ -208,7 +208,7 @@ func (r *GroupRepository) ListByMember(ctx context.Context, userID uuid.UUID, pa
 	offset := (page - 1) * pageSize
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT g.id, g.owner_id, g.name, g.description, g.avatar_key, g.tags, g.privacy, g.member_count, g.post_count, g.created_at, g.updated_at
+		SELECT g.id, g.owner_id, g.name, g.description, g.announcement, g.rules, g.avatar_key, g.featured_post_id, g.tags, g.privacy, g.member_count, g.post_count, g.created_at, g.updated_at
 		FROM groups g
 		JOIN group_members gm ON gm.group_id = g.id
 		WHERE gm.user_id=$1
@@ -225,7 +225,7 @@ func (r *GroupRepository) ListByMember(ctx context.Context, userID uuid.UUID, pa
 		var g group.Group
 		var tags []byte
 		if err := rows.Scan(
-			&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.AvatarKey, &tags,
+			&g.ID, &g.OwnerID, &g.Name, &g.Description, &g.Announcement, &g.Rules, &g.AvatarKey, &g.FeaturedPostID, &tags,
 			&g.Privacy, &g.MemberCount, &g.PostCount, &g.CreatedAt, &g.UpdatedAt,
 		); err != nil {
 			continue

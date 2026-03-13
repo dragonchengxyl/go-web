@@ -26,17 +26,20 @@ const (
 
 // Group is the core group entity.
 type Group struct {
-	ID          uuid.UUID    `json:"id"`
-	OwnerID     uuid.UUID    `json:"owner_id"`
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	AvatarKey   *string      `json:"avatar_key,omitempty"`
-	Tags        []string     `json:"tags"`
-	Privacy     GroupPrivacy `json:"privacy"`
-	MemberCount int          `json:"member_count"`
-	PostCount   int          `json:"post_count"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
+	ID             uuid.UUID    `json:"id"`
+	OwnerID        uuid.UUID    `json:"owner_id"`
+	Name           string       `json:"name"`
+	Description    string       `json:"description"`
+	Announcement   string       `json:"announcement"`
+	Rules          string       `json:"rules"`
+	AvatarKey      *string      `json:"avatar_key,omitempty"`
+	FeaturedPostID *uuid.UUID   `json:"featured_post_id,omitempty"`
+	Tags           []string     `json:"tags"`
+	Privacy        GroupPrivacy `json:"privacy"`
+	MemberCount    int          `json:"member_count"`
+	PostCount      int          `json:"post_count"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
 }
 
 // GroupMember records a user's membership in a group.

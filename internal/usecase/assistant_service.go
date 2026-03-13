@@ -45,6 +45,7 @@ type AssistantService struct {
 	cfg          configs.AssistantConfig
 	llmClient    *llm.OpenAICompatibleClient
 	historyRepo  assistantdomain.Repository
+	bookmarkSvc  *BookmarkService
 	postService  *PostService
 	groupService *GroupService
 	eventService *EventService
@@ -56,6 +57,7 @@ func NewAssistantService(
 	cfg configs.AssistantConfig,
 	llmClient *llm.OpenAICompatibleClient,
 	historyRepo assistantdomain.Repository,
+	bookmarkSvc *BookmarkService,
 	postService *PostService,
 	groupService *GroupService,
 	eventService *EventService,
@@ -75,6 +77,7 @@ func NewAssistantService(
 		cfg:          cfg,
 		llmClient:    llmClient,
 		historyRepo:  historyRepo,
+		bookmarkSvc:  bookmarkSvc,
 		postService:  postService,
 		groupService: groupService,
 		eventService: eventService,
@@ -90,6 +93,7 @@ func (s *AssistantService) HistoryEnabled() bool {
 // StreamReply streams a response for the provided conversation history.
 func (s *AssistantService) StreamReply(
 	ctx context.Context,
+	userID uuid.UUID,
 	messages []AssistantChatMessage,
 	onMeta func(AssistantMeta) error,
 	onToken func(string) error,
@@ -108,7 +112,7 @@ func (s *AssistantService) StreamReply(
 		return apperr.BadRequest("请输入你想咨询的问题")
 	}
 
-	meta, contextText, fallbackAnswer := s.buildPromptContext(ctx, latestUser, settings)
+	meta, contextText, fallbackAnswer := s.buildPromptContext(ctx, userID, latestUser, settings)
 	if onMeta != nil {
 		if err := onMeta(meta); err != nil {
 			return err
@@ -305,7 +309,7 @@ func (s *AssistantService) GetConversation(ctx context.Context, userID, conversa
 	return conv, items, total, nil
 }
 
-func (s *AssistantService) buildPromptContext(ctx context.Context, query string, settings *assistantdomain.Settings) (AssistantMeta, string, string) {
+func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.UUID, query string, settings *assistantdomain.Settings) (AssistantMeta, string, string) {
 	cards := s.collectCards(ctx, query, settings)
 	meta := AssistantMeta{
 		Query:    query,
@@ -317,6 +321,9 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, query string,
 	var contextParts []string
 	contextParts = append(contextParts, fmt.Sprintf("当前日期: %s", time.Now().Format("2006-01-02")))
 	contextParts = append(contextParts, siteOverviewContext())
+	if bookmarkContext := s.buildBookmarkContext(ctx, userID); bookmarkContext != "" {
+		contextParts = append(contextParts, bookmarkContext)
+	}
 	if len(cards) > 0 {
 		var itemLines []string
 		for _, card := range cards {
@@ -638,6 +645,7 @@ func (s *AssistantService) buildSystemPrompt(contextText string, settings *assis
 7. 当你推荐具体内容时，尽量说明推荐理由，并写清楚用户该从哪个入口进入。
 8. 只要使用了给定来源中的具体内容或做出具体推荐，就在对应句末附上来源引用，例如 [R1]、[R2]。
 9. 不要伪造引用编号；只能使用给定上下文里出现的引用编号。
+10. 如果给定上下文里存在“用户最近收藏偏好”，优先结合这些偏好做个性化推荐。
 
 以下是你可用的站内信息：
 %s
@@ -990,6 +998,43 @@ func userRecommendationReason(u *user.User, query string) string {
 		return "这是创作者账号，适合继续查看其内容和动态"
 	}
 	return "这个用户的主页信息和你的问题更相关"
+}
+
+func (s *AssistantService) buildBookmarkContext(ctx context.Context, userID uuid.UUID) string {
+	if userID == uuid.Nil || s.bookmarkSvc == nil {
+		return ""
+	}
+
+	var lines []string
+	if posts, _, err := s.bookmarkSvc.ListPosts(ctx, userID, 1, 2, "latest"); err == nil {
+		for _, item := range posts {
+			lines = append(lines, fmt.Sprintf("- 帖子：%s", truncateText(firstNonEmpty(item.Title, item.Content), 32)))
+		}
+	}
+	if groups, _, err := s.bookmarkSvc.ListGroups(ctx, userID, 1, 2, "latest"); err == nil {
+		for _, item := range groups {
+			lines = append(lines, fmt.Sprintf("- 圈子：%s", item.Name))
+		}
+	}
+	if events, _, err := s.bookmarkSvc.ListEvents(ctx, userID, 1, 2, "latest"); err == nil {
+		for _, item := range events {
+			lines = append(lines, fmt.Sprintf("- 活动：%s", item.Title))
+		}
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+	return "用户最近收藏偏好：\n" + strings.Join(lines, "\n")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func groupRecommendationReason(g *group.Group, query string) string {

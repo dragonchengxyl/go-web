@@ -16,6 +16,7 @@ type Repository interface {
 	List(ctx context.Context, filter ListFilter) ([]*Post, int64, error)
 	ListFeed(ctx context.Context, followeeIDs []uuid.UUID, filter ListFilter) ([]*Post, int64, error)
 	GetHotTags(ctx context.Context, limit int) ([]string, error)
+	GetGroupHotTags(ctx context.Context, groupID uuid.UUID, limit int) ([]string, error)
 
 	LikePost(ctx context.Context, like *PostLike) error
 	UnlikePost(ctx context.Context, userID, postID uuid.UUID) error

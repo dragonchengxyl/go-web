@@ -16,10 +16,12 @@ import {
   Sparkles,
   PenSquare,
   Bookmark,
+  Pin,
 } from "lucide-react";
 import { apiClient, Group, GroupMember, Post } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { PostCard } from "@/components/post/post-card";
+import { Textarea } from "@/components/ui/textarea";
 
 const ROLE_CONFIG: Record<
   string,
@@ -47,8 +49,11 @@ function hashGradient(str: string): string {
 
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [sortMode, setSortMode] = useState<"latest" | "hot">("latest");
+  const [activeTag, setActiveTag] = useState("");
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [postsLoading, setPostsLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -58,8 +63,14 @@ export default function GroupDetailPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
   const [highlights, setHighlights] = useState<Post[]>([]);
+  const [featuredPost, setFeaturedPost] = useState<Post | null>(null);
   const [bookmarked, setBookmarked] = useState(false);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
+  const [pinningPostId, setPinningPostId] = useState<string | null>(null);
+  const [featuringPostId, setFeaturingPostId] = useState<string | null>(null);
+  const [savingGroupMeta, setSavingGroupMeta] = useState(false);
+  const [announcementDraft, setAnnouncementDraft] = useState("");
+  const [rulesDraft, setRulesDraft] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -83,30 +94,53 @@ export default function GroupDetailPage() {
     Promise.all([
       apiClient.getGroup(id),
       apiClient.listGroupMembers(id),
-      apiClient.getGroupPosts(id).catch(() => ({ posts: [] })),
-      apiClient.getGroupHighlights(id).catch(() => ({ posts: [] })),
+      token ? apiClient.getMe().catch(() => null) : Promise.resolve(null),
     ])
-      .then(([g, mRes, postsRes, highlightsRes]) => {
-        setGroup(g);
+      .then(([g, mRes, me]) => {
         const list = mRes.members ?? [];
+        setGroup(g);
+        setAnnouncementDraft(g.announcement || "");
+        setRulesDraft(g.rules || "");
         setMembers(list);
-        setPosts(postsRes.posts ?? []);
-        setHighlights(highlightsRes.posts ?? []);
-        if (token) {
-          apiClient
-            .getMe()
-            .then((me) => {
-              setIsMember(list.some((m) => m.user_id === me?.id));
-            })
-            .catch(() => {});
-        }
+        setIsMember(!!me && list.some((m) => m.user_id === me?.id));
       })
       .catch(console.error)
       .finally(() => {
         setLoading(false);
-        setPostsLoading(false);
       });
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setPostsLoading(true);
+    Promise.all([
+      apiClient
+        .getGroupPosts(id, 1, 20, {
+          sort: sortMode,
+          tag: activeTag || undefined,
+        })
+        .catch(() => ({ posts: [] })),
+      apiClient.getGroupHighlights(id).catch(() => ({ posts: [] })),
+      apiClient.getGroupPostTags(id).catch(() => []),
+    ])
+      .then(([postsRes, highlightsRes, tagsRes]) => {
+        setPosts(postsRes.posts ?? []);
+        setHighlights(highlightsRes.posts ?? []);
+        setAvailableTags(tagsRes ?? []);
+      })
+      .finally(() => setPostsLoading(false));
+  }, [id, sortMode, activeTag]);
+
+  useEffect(() => {
+    if (!group?.featured_post_id) {
+      setFeaturedPost(null);
+      return;
+    }
+    apiClient
+      .getPost(group.featured_post_id)
+      .then(setFeaturedPost)
+      .catch(() => setFeaturedPost(null));
+  }, [group?.featured_post_id]);
 
   const handleJoin = async () => {
     if (!id) return;
@@ -121,14 +155,7 @@ export default function GroupDetailPage() {
       setGroup(updated);
       setMembers(mRes.members ?? []);
       setIsMember(true);
-      setPostsLoading(true);
-      const [postsRes, highlightsRes] = await Promise.all([
-        apiClient.getGroupPosts(id).catch(() => ({ posts: [] })),
-        apiClient.getGroupHighlights(id).catch(() => ({ posts: [] })),
-      ]);
-      setPosts(postsRes.posts ?? []);
-      setHighlights(highlightsRes.posts ?? []);
-      setPostsLoading(false);
+      setActiveTag("");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "加入失败");
     } finally {
@@ -149,6 +176,10 @@ export default function GroupDetailPage() {
       setGroup(updated);
       setMembers(mRes.members ?? []);
       setIsMember(false);
+      if (updated.privacy === "private") {
+        setPosts([]);
+        setHighlights([]);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "退出失败");
     } finally {
@@ -171,6 +202,69 @@ export default function GroupDetailPage() {
       setError(err instanceof Error ? err.message : "操作失败");
     } finally {
       setBookmarkLoading(false);
+    }
+  };
+
+  const handlePin = async (postId: string, pin: boolean) => {
+    if (!id) return;
+    setPinningPostId(postId);
+    setError("");
+    try {
+      if (pin) {
+        await apiClient.pinGroupPost(id, postId);
+      } else {
+        await apiClient.unpinGroupPost(id, postId);
+      }
+      const [postsRes, highlightsRes] = await Promise.all([
+        apiClient
+          .getGroupPosts(id, 1, 20, {
+            sort: sortMode,
+            tag: activeTag || undefined,
+          })
+          .catch(() => ({ posts: [] })),
+        apiClient.getGroupHighlights(id).catch(() => ({ posts: [] })),
+      ]);
+      setPosts(postsRes.posts ?? []);
+      setHighlights(highlightsRes.posts ?? []);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "置顶操作失败");
+    } finally {
+      setPinningPostId(null);
+    }
+  };
+
+  const handleSetFeatured = async (postId?: string) => {
+    if (!id) return;
+    setFeaturingPostId(postId ?? "clear");
+    setError("");
+    try {
+      const updated = await apiClient.setGroupFeaturedPost(id, postId);
+      setGroup(updated);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "设置精选失败");
+    } finally {
+      setFeaturingPostId(null);
+    }
+  };
+
+  const handleSaveGroupMeta = async () => {
+    if (!id || !group) return;
+    setSavingGroupMeta(true);
+    setError("");
+    try {
+      const updated = await apiClient.updateGroup(id, {
+        name: group.name,
+        description: group.description,
+        announcement: announcementDraft,
+        rules: rulesDraft,
+        tags: group.tags,
+        privacy: group.privacy,
+      });
+      setGroup(updated);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "保存圈子信息失败");
+    } finally {
+      setSavingGroupMeta(false);
     }
   };
 
@@ -198,6 +292,8 @@ export default function GroupDetailPage() {
 
   const isOwner =
     myId && members.find((m) => m.user_id === myId)?.role === "owner";
+  const myRole = members.find((m) => m.user_id === myId)?.role;
+  const canManagePosts = myRole === "owner" || myRole === "moderator";
   const gradient = hashGradient(group.id);
 
   return (
@@ -345,8 +441,79 @@ export default function GroupDetailPage() {
         </div>
       )}
 
+      {/* Announcement / Rules */}
+      {(group.announcement || canManagePosts) && (
+        <div className="bg-card border rounded-2xl p-6 mb-5">
+          <h2 className="font-semibold mb-3">圈子公告</h2>
+          {canManagePosts ? (
+            <div className="space-y-3">
+              <Textarea
+                value={announcementDraft}
+                onChange={(e) => setAnnouncementDraft(e.target.value)}
+                rows={4}
+                placeholder="给圈友们写一条公告..."
+              />
+              <h3 className="font-medium">圈子规则</h3>
+              <Textarea
+                value={rulesDraft}
+                onChange={(e) => setRulesDraft(e.target.value)}
+                rows={5}
+                placeholder="写下发帖规范、活动要求或交流边界..."
+              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSaveGroupMeta}
+                  disabled={savingGroupMeta}
+                >
+                  {savingGroupMeta ? "保存中..." : "保存公告与规则"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {group.announcement && (
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                  {group.announcement}
+                </p>
+              )}
+              {group.rules && (
+                <div>
+                  <h3 className="font-medium mb-2">圈子规则</h3>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                    {group.rules}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Featured post */}
+      {featuredPost && (
+        <div className="bg-card border rounded-2xl p-6 mb-5">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-yellow-500" />
+              <h2 className="font-semibold">精选内容</h2>
+            </div>
+            {canManagePosts && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleSetFeatured()}
+                disabled={featuringPostId === "clear"}
+              >
+                {featuringPostId === "clear" ? "处理中..." : "取消精选"}
+              </Button>
+            )}
+          </div>
+          <PostCard post={featuredPost} />
+        </div>
+      )}
+
       {/* Highlights */}
-      {highlights.length > 0 && (
+      {highlights.length > 0 && sortMode === "latest" && !activeTag && (
         <div className="bg-card border rounded-2xl p-6 mb-5">
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="h-4 w-4 text-yellow-500" />
@@ -381,11 +548,58 @@ export default function GroupDetailPage() {
       {/* Latest posts */}
       <div className="bg-card border rounded-2xl p-6 mb-5">
         <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 className="font-semibold">最新内容</h2>
+          <h2 className="font-semibold">
+            {sortMode === "hot" ? "热门内容" : "最新内容"}
+          </h2>
           <span className="text-xs text-muted-foreground">
             {posts.length} 条
           </span>
         </div>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {(["latest", "hot"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setSortMode(mode)}
+              className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                sortMode === mode
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              }`}
+            >
+              {mode === "latest" ? "最新" : "热门"}
+            </button>
+          ))}
+        </div>
+        {availableTags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setActiveTag("")}
+              className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                activeTag === ""
+                  ? "bg-brand-teal text-white border-brand-teal"
+                  : "text-muted-foreground hover:border-brand-teal/40 hover:text-foreground"
+              }`}
+            >
+              全部
+            </button>
+            {availableTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setActiveTag(tag)}
+                className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                  activeTag === tag
+                    ? "bg-brand-teal text-white border-brand-teal"
+                    : "text-muted-foreground hover:border-brand-teal/40 hover:text-foreground"
+                }`}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
         {postsLoading ? (
           <div className="space-y-3">
             {[0, 1].map((i) => (
@@ -401,7 +615,51 @@ export default function GroupDetailPage() {
         ) : (
           <div className="space-y-4">
             {posts.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <div key={post.id} className="space-y-2">
+                {canManagePosts && (
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePin(post.id, !post.is_pinned)}
+                      disabled={pinningPostId === post.id}
+                      className={
+                        post.is_pinned
+                          ? "border-yellow-500 text-yellow-600"
+                          : ""
+                      }
+                    >
+                      <Pin
+                        className={`h-4 w-4 mr-1 ${post.is_pinned ? "fill-current" : ""}`}
+                      />
+                      {pinningPostId === post.id
+                        ? "处理中..."
+                        : post.is_pinned
+                          ? "取消置顶"
+                          : "置顶帖子"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleSetFeatured(post.id)}
+                      disabled={featuringPostId === post.id}
+                      className={
+                        group.featured_post_id === post.id
+                          ? "border-yellow-500 text-yellow-600"
+                          : ""
+                      }
+                    >
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      {featuringPostId === post.id
+                        ? "处理中..."
+                        : group.featured_post_id === post.id
+                          ? "当前精选"
+                          : "设为精选"}
+                    </Button>
+                  </div>
+                )}
+                <PostCard post={post} />
+              </div>
             ))}
           </div>
         )}

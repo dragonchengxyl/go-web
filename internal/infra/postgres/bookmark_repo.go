@@ -33,6 +33,16 @@ func (r *BookmarkRepository) Delete(ctx context.Context, userID uuid.UUID, targe
 	return err
 }
 
+func (r *BookmarkRepository) DeleteBatch(ctx context.Context, userID uuid.UUID, targetType bookmark.TargetType, targetIDs []uuid.UUID) error {
+	if len(targetIDs) == 0 {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM user_bookmarks WHERE user_id = $1 AND target_type = $2 AND target_id = ANY($3)
+	`, userID, string(targetType), targetIDs)
+	return err
+}
+
 func (r *BookmarkRepository) Exists(ctx context.Context, userID uuid.UUID, targetType bookmark.TargetType, targetID uuid.UUID) (bool, error) {
 	var exists bool
 	err := r.pool.QueryRow(ctx, `
@@ -43,7 +53,7 @@ func (r *BookmarkRepository) Exists(ctx context.Context, userID uuid.UUID, targe
 	return exists, err
 }
 
-func (r *BookmarkRepository) List(ctx context.Context, userID uuid.UUID, targetType bookmark.TargetType, page, pageSize int) ([]*bookmark.Bookmark, int64, error) {
+func (r *BookmarkRepository) List(ctx context.Context, userID uuid.UUID, targetType bookmark.TargetType, page, pageSize int, sort string) ([]*bookmark.Bookmark, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -59,11 +69,16 @@ func (r *BookmarkRepository) List(ctx context.Context, userID uuid.UUID, targetT
 		return nil, 0, fmt.Errorf("count bookmarks: %w", err)
 	}
 
+	orderBy := "created_at DESC"
+	if sort == "oldest" {
+		orderBy = "created_at ASC"
+	}
+
 	rows, err := r.pool.Query(ctx, `
 		SELECT user_id, target_type, target_id, created_at
 		FROM user_bookmarks
 		WHERE user_id = $1 AND target_type = $2
-		ORDER BY created_at DESC
+		ORDER BY `+orderBy+`
 		LIMIT $3 OFFSET $4
 	`, userID, string(targetType), pageSize, offset)
 	if err != nil {

@@ -187,6 +187,8 @@ func main() {
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
 	assistantRepo := postgres.NewAssistantRepository(pool)
+	bookmarkRepo := postgres.NewBookmarkRepository(pool)
+	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService)
 	assistantLLM := llm.NewOpenAICompatibleClient(
 		cfg.Assistant.BaseURL,
 		cfg.Assistant.APIKey,
@@ -194,7 +196,7 @@ func main() {
 		cfg.Assistant.Temperature,
 		time.Duration(cfg.Assistant.TimeoutSec)*time.Second,
 	)
-	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantRepo, postService, groupService, eventService, userService)
+	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantRepo, bookmarkService, postService, groupService, eventService, userService)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)
@@ -206,8 +208,6 @@ func main() {
 
 	reportRepo := postgres.NewReportRepository(pool)
 	blockRepo := postgres.NewBlockRepository(pool)
-	bookmarkRepo := postgres.NewBookmarkRepository(pool)
-	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{

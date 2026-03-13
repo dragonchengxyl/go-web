@@ -146,7 +146,7 @@ func (r *PostRepository) List(ctx context.Context, filter post.ListFilter) ([]*p
 	if filter.SortByScore {
 		// Engagement score: (like_count + comment_count*3) / time_decay
 		// EXTRACT(EPOCH ...) gives seconds; add 1 to avoid division by zero.
-		orderBy = "(p.like_count + p.comment_count * 3)::float / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600 + 1, 1) DESC"
+		orderBy = "p.is_pinned DESC, (p.like_count + p.comment_count * 3)::float / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600 + 1, 1) DESC, p.created_at DESC"
 	}
 
 	listSQL := `SELECT p.id, p.author_id, p.title, p.content, p.media_urls, p.tags, p.visibility,
@@ -263,6 +263,36 @@ func (r *PostRepository) GetHotTags(ctx context.Context, limit int) ([]string, e
 		var cnt int64
 		if err := rows.Scan(&tag, &cnt); err != nil {
 			return nil, fmt.Errorf("failed to scan tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+	return tags, rows.Err()
+}
+
+func (r *PostRepository) GetGroupHotTags(ctx context.Context, groupID uuid.UUID, limit int) ([]string, error) {
+	const sql = `
+		SELECT tag, COUNT(*) AS cnt
+		FROM posts p, unnest(p.tags) AS tag
+		WHERE p.deleted_at IS NULL
+		  AND p.group_id = $1
+		  AND p.visibility = 'public'
+		  AND p.moderation_status = 'approved'
+		GROUP BY tag
+		ORDER BY cnt DESC, tag ASC
+		LIMIT $2
+	`
+	rows, err := r.pool.Query(ctx, sql, groupID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group hot tags: %w", err)
+	}
+	defer rows.Close()
+
+	tags := make([]string, 0, limit)
+	for rows.Next() {
+		var tag string
+		var cnt int64
+		if err := rows.Scan(&tag, &cnt); err != nil {
+			return nil, fmt.Errorf("failed to scan group tag: %w", err)
 		}
 		tags = append(tags, tag)
 	}

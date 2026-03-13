@@ -81,7 +81,9 @@ func (h *GroupHandler) ListPosts(c *gin.Context) {
 	}
 
 	page, pageSize := getPageParams(c)
-	posts, total, err := h.postSvc.ListGroupPosts(c.Request.Context(), groupID, page, pageSize)
+	sort := c.DefaultQuery("sort", "latest")
+	tag := c.Query("tag")
+	posts, total, err := h.postSvc.ListGroupPostsWithOptions(c.Request.Context(), groupID, page, pageSize, tag, sort)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -90,6 +92,33 @@ func (h *GroupHandler) ListPosts(c *gin.Context) {
 		_ = h.bookmarkSvc.MarkPosts(c.Request.Context(), viewerID, posts)
 	}
 	response.Success(c, gin.H{"posts": posts, "total": total, "page": page, "size": len(posts)})
+}
+
+// GetPostTags handles GET /api/v1/groups/:id/tags
+func (h *GroupHandler) GetPostTags(c *gin.Context) {
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的圈子ID"))
+		return
+	}
+
+	viewerID, authed := getUserID(c)
+	canView, _, err := h.groupSvc.CanViewGroup(c.Request.Context(), groupID, viewerID, authed)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if !canView {
+		response.Error(c, apperr.New(apperr.CodeForbidden, "该圈子内容仅成员可见"))
+		return
+	}
+
+	tags, err := h.postSvc.GetGroupHotTags(c.Request.Context(), groupID, 12)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, tags)
 }
 
 // GetHighlights handles GET /api/v1/groups/:id/highlights
@@ -116,14 +145,19 @@ func (h *GroupHandler) GetHighlights(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	if authed && h.bookmarkSvc != nil {
+		_ = h.bookmarkSvc.MarkPosts(c.Request.Context(), viewerID, posts)
+	}
 	response.Success(c, gin.H{"posts": posts})
 }
 
 type createGroupRequest struct {
-	Name        string             `json:"name" binding:"required"`
-	Description string             `json:"description"`
-	Tags        []string           `json:"tags"`
-	Privacy     group.GroupPrivacy `json:"privacy"`
+	Name         string             `json:"name" binding:"required"`
+	Description  string             `json:"description"`
+	Announcement string             `json:"announcement"`
+	Rules        string             `json:"rules"`
+	Tags         []string           `json:"tags"`
+	Privacy      group.GroupPrivacy `json:"privacy"`
 }
 
 // CreateGroup handles POST /api/v1/groups
@@ -152,11 +186,13 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 	}
 
 	g, err := h.groupSvc.CreateGroup(c.Request.Context(), usecase.CreateGroupInput{
-		OwnerID:     userID,
-		Name:        req.Name,
-		Description: req.Description,
-		Tags:        req.Tags,
-		Privacy:     req.Privacy,
+		OwnerID:      userID,
+		Name:         req.Name,
+		Description:  req.Description,
+		Announcement: req.Announcement,
+		Rules:        req.Rules,
+		Tags:         req.Tags,
+		Privacy:      req.Privacy,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -166,10 +202,12 @@ func (h *GroupHandler) CreateGroup(c *gin.Context) {
 }
 
 type updateGroupRequest struct {
-	Name        string             `json:"name"`
-	Description string             `json:"description"`
-	Tags        []string           `json:"tags"`
-	Privacy     group.GroupPrivacy `json:"privacy"`
+	Name         string             `json:"name"`
+	Description  string             `json:"description"`
+	Announcement string             `json:"announcement"`
+	Rules        string             `json:"rules"`
+	Tags         []string           `json:"tags"`
+	Privacy      group.GroupPrivacy `json:"privacy"`
 }
 
 // UpdateGroup handles PUT /api/v1/groups/:id
@@ -192,10 +230,12 @@ func (h *GroupHandler) UpdateGroup(c *gin.Context) {
 	}
 
 	g, err := h.groupSvc.UpdateGroup(c.Request.Context(), userID, id, usecase.UpdateGroupInput{
-		Name:        req.Name,
-		Description: req.Description,
-		Tags:        req.Tags,
-		Privacy:     req.Privacy,
+		Name:         req.Name,
+		Description:  req.Description,
+		Announcement: req.Announcement,
+		Rules:        req.Rules,
+		Tags:         req.Tags,
+		Privacy:      req.Privacy,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -329,4 +369,90 @@ func (h *GroupHandler) MyGroups(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"groups": groups, "total": total})
+}
+
+// SetFeaturedPost handles PUT /api/v1/groups/:id/featured-post
+func (h *GroupHandler) SetFeaturedPost(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.New(apperr.CodeUnauthorized, "未登录"))
+		return
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的圈子ID"))
+		return
+	}
+	var req struct {
+		PostID string `json:"post_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.BadRequest(err.Error()))
+		return
+	}
+
+	var postID *uuid.UUID
+	if req.PostID != "" {
+		parsed, err := uuid.Parse(req.PostID)
+		if err != nil {
+			response.Error(c, apperr.BadRequest("无效的帖子ID"))
+			return
+		}
+		postID = &parsed
+	}
+
+	g, err := h.groupSvc.SetFeaturedPost(c.Request.Context(), userID, groupID, postID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, g)
+}
+
+// PinPost handles POST /api/v1/groups/:id/posts/:post_id/pin
+func (h *GroupHandler) PinPost(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.New(apperr.CodeUnauthorized, "未登录"))
+		return
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的圈子ID"))
+		return
+	}
+	postID, err := uuid.Parse(c.Param("post_id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的帖子ID"))
+		return
+	}
+	if err := h.postSvc.PinGroupPost(c.Request.Context(), userID, groupID, postID, true); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "帖子已置顶"})
+}
+
+// UnpinPost handles DELETE /api/v1/groups/:id/posts/:post_id/pin
+func (h *GroupHandler) UnpinPost(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.New(apperr.CodeUnauthorized, "未登录"))
+		return
+	}
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的圈子ID"))
+		return
+	}
+	postID, err := uuid.Parse(c.Param("post_id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的帖子ID"))
+		return
+	}
+	if err := h.postSvc.PinGroupPost(c.Request.Context(), userID, groupID, postID, false); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "已取消置顶"})
 }

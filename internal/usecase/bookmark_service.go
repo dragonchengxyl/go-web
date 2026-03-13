@@ -44,6 +44,10 @@ func (s *BookmarkService) Remove(ctx context.Context, userID uuid.UUID, targetTy
 	return s.repo.Delete(ctx, userID, targetType, targetID)
 }
 
+func (s *BookmarkService) RemoveBatch(ctx context.Context, userID uuid.UUID, targetType bookmark.TargetType, targetIDs []uuid.UUID) error {
+	return s.repo.DeleteBatch(ctx, userID, targetType, targetIDs)
+}
+
 func (s *BookmarkService) Exists(ctx context.Context, userID uuid.UUID, targetType bookmark.TargetType, targetID uuid.UUID) (bool, error) {
 	return s.repo.Exists(ctx, userID, targetType, targetID)
 }
@@ -59,8 +63,8 @@ func (s *BookmarkService) MarkPosts(ctx context.Context, userID uuid.UUID, posts
 	return nil
 }
 
-func (s *BookmarkService) ListPosts(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*post.Post, int64, error) {
-	items, total, err := s.repo.List(ctx, userID, bookmark.TargetPost, page, pageSize)
+func (s *BookmarkService) ListPosts(ctx context.Context, userID uuid.UUID, page, pageSize int, sort string) ([]*post.Post, int64, error) {
+	items, total, err := s.repo.List(ctx, userID, bookmark.TargetPost, page, pageSize, sort)
 	if err != nil {
 		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "读取收藏帖子失败", err)
 	}
@@ -76,8 +80,8 @@ func (s *BookmarkService) ListPosts(ctx context.Context, userID uuid.UUID, page,
 	return posts, total, nil
 }
 
-func (s *BookmarkService) ListGroups(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*group.Group, int64, error) {
-	items, total, err := s.repo.List(ctx, userID, bookmark.TargetGroup, page, pageSize)
+func (s *BookmarkService) ListGroups(ctx context.Context, userID uuid.UUID, page, pageSize int, sort string) ([]*group.Group, int64, error) {
+	items, total, err := s.repo.List(ctx, userID, bookmark.TargetGroup, page, pageSize, sort)
 	if err != nil {
 		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "读取收藏圈子失败", err)
 	}
@@ -92,8 +96,8 @@ func (s *BookmarkService) ListGroups(ctx context.Context, userID uuid.UUID, page
 	return groups, total, nil
 }
 
-func (s *BookmarkService) ListEvents(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*event.Event, int64, error) {
-	items, total, err := s.repo.List(ctx, userID, bookmark.TargetEvent, page, pageSize)
+func (s *BookmarkService) ListEvents(ctx context.Context, userID uuid.UUID, page, pageSize int, sort string) ([]*event.Event, int64, error) {
+	items, total, err := s.repo.List(ctx, userID, bookmark.TargetEvent, page, pageSize, sort)
 	if err != nil {
 		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "读取收藏活动失败", err)
 	}

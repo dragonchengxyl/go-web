@@ -102,8 +102,10 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 
 	var reply strings.Builder
 	var cards []usecase.AssistantCard
+	userID, _ := getUserID(c)
 	if err := h.service.StreamReply(
 		ctx,
+		userID,
 		streamMessages,
 		func(meta usecase.AssistantMeta) error {
 			if persistedConversationID != uuid.Nil {

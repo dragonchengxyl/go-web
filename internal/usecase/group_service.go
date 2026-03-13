@@ -22,27 +22,31 @@ func NewGroupService(groupRepo group.Repository) *GroupService {
 
 // CreateGroupInput holds data needed to create a group.
 type CreateGroupInput struct {
-	OwnerID     uuid.UUID
-	Name        string
-	Description string
-	Tags        []string
-	Privacy     group.GroupPrivacy
+	OwnerID      uuid.UUID
+	Name         string
+	Description  string
+	Announcement string
+	Rules        string
+	Tags         []string
+	Privacy      group.GroupPrivacy
 }
 
 // CreateGroup creates a new group and adds the owner as a member.
 func (s *GroupService) CreateGroup(ctx context.Context, input CreateGroupInput) (*group.Group, error) {
 	now := time.Now()
 	g := &group.Group{
-		ID:          uuid.New(),
-		OwnerID:     input.OwnerID,
-		Name:        input.Name,
-		Description: input.Description,
-		Tags:        input.Tags,
-		Privacy:     input.Privacy,
-		MemberCount: 1,
-		PostCount:   0,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           uuid.New(),
+		OwnerID:      input.OwnerID,
+		Name:         input.Name,
+		Description:  input.Description,
+		Announcement: input.Announcement,
+		Rules:        input.Rules,
+		Tags:         input.Tags,
+		Privacy:      input.Privacy,
+		MemberCount:  1,
+		PostCount:    0,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if g.Privacy == "" {
 		g.Privacy = group.GroupPrivacyPublic
@@ -77,10 +81,12 @@ func (s *GroupService) GetGroup(ctx context.Context, id uuid.UUID) (*group.Group
 
 // UpdateGroupInput holds fields that can be updated.
 type UpdateGroupInput struct {
-	Name        string
-	Description string
-	Tags        []string
-	Privacy     group.GroupPrivacy
+	Name         string
+	Description  string
+	Announcement string
+	Rules        string
+	Tags         []string
+	Privacy      group.GroupPrivacy
 }
 
 // UpdateGroup updates a group; only owner/moderator may update.
@@ -103,6 +109,12 @@ func (s *GroupService) UpdateGroup(ctx context.Context, callerID, groupID uuid.U
 	}
 	if input.Description != "" {
 		g.Description = input.Description
+	}
+	if input.Announcement != "" || g.Announcement != "" {
+		g.Announcement = input.Announcement
+	}
+	if input.Rules != "" || g.Rules != "" {
+		g.Rules = input.Rules
 	}
 	if len(input.Tags) > 0 {
 		g.Tags = input.Tags
@@ -146,6 +158,29 @@ func (s *GroupService) ListGroups(ctx context.Context, input ListGroupsInput) ([
 		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "查询圈子列表失败", err)
 	}
 	return groups, total, nil
+}
+
+// SetFeaturedPost sets or clears the featured post for a group; only owner/moderator may do this.
+func (s *GroupService) SetFeaturedPost(ctx context.Context, callerID, groupID uuid.UUID, postID *uuid.UUID) (*group.Group, error) {
+	g, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, group.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询圈子失败", err)
+	}
+
+	member, err := s.groupRepo.GetMember(ctx, groupID, callerID)
+	if err != nil || member == nil || (member.Role != group.GroupRoleOwner && member.Role != group.GroupRoleModerator) {
+		return nil, apperr.New(apperr.CodeForbidden, "只有圈主或管理员可以设置精选内容")
+	}
+
+	g.FeaturedPostID = postID
+	g.UpdatedAt = time.Now()
+	if err := s.groupRepo.Update(ctx, g); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "更新圈子精选失败", err)
+	}
+	return g, nil
 }
 
 // JoinGroup adds a user to a group.

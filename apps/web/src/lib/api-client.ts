@@ -479,17 +479,50 @@ class ApiClient {
     }>(`/users/${userId}/posts?${q}`);
   }
 
-  async getGroupPosts(groupId: string, page = 1, pageSize = 20) {
+  async getGroupPosts(
+    groupId: string,
+    page = 1,
+    pageSize = 20,
+    params?: { sort?: "latest" | "hot"; tag?: string },
+  ) {
+    const q = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    });
+    if (params?.sort) q.set("sort", params.sort);
+    if (params?.tag) q.set("tag", params.tag);
     return this.get<{
       posts: Post[];
       total: number;
       page: number;
       size: number;
-    }>(`/groups/${groupId}/posts?page=${page}&page_size=${pageSize}`);
+    }>(`/groups/${groupId}/posts?${q.toString()}`);
   }
 
   async getGroupHighlights(groupId: string) {
     return this.get<{ posts: Post[] }>(`/groups/${groupId}/highlights`);
+  }
+
+  async getGroupPostTags(groupId: string) {
+    return this.get<string[]>(`/groups/${groupId}/tags`);
+  }
+
+  async pinGroupPost(groupId: string, postId: string) {
+    return this.post<{ message: string }>(
+      `/groups/${groupId}/posts/${postId}/pin`,
+    );
+  }
+
+  async unpinGroupPost(groupId: string, postId: string) {
+    return this.delete<{ message: string }>(
+      `/groups/${groupId}/posts/${postId}/pin`,
+    );
+  }
+
+  async setGroupFeaturedPost(groupId: string, postId?: string) {
+    return this.put<Group>(`/groups/${groupId}/featured-post`, {
+      post_id: postId ?? "",
+    });
   }
 
   // ── Follow ────────────────────────────────────────────────────────────
@@ -840,6 +873,8 @@ class ApiClient {
   async createGroup(data: {
     name: string;
     description?: string;
+    announcement?: string;
+    rules?: string;
     tags?: string[];
     privacy?: "public" | "private";
   }) {
@@ -851,6 +886,23 @@ class ApiClient {
 
   async joinGroup(id: string) {
     return this.request<void>(`/groups/${id}/join`, { method: "POST" });
+  }
+
+  async updateGroup(
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      announcement?: string;
+      rules?: string;
+      tags?: string[];
+      privacy?: "public" | "private";
+    },
+  ) {
+    return this.request<Group>(`/groups/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
   }
 
   async leaveGroup(id: string) {
@@ -903,30 +955,64 @@ class ApiClient {
   }
 
   async getBookmarkedPosts(page = 1, pageSize = 20) {
+    return this.getBookmarkedPostsWithSort(page, pageSize, "latest");
+  }
+
+  async getBookmarkedPostsWithSort(
+    page = 1,
+    pageSize = 20,
+    sort: "latest" | "oldest" = "latest",
+  ) {
     return this.get<{
       posts: Post[];
       total: number;
       page: number;
       size: number;
-    }>(`/bookmarks/posts?page=${page}&page_size=${pageSize}`);
+    }>(`/bookmarks/posts?page=${page}&page_size=${pageSize}&sort=${sort}`);
   }
 
   async getBookmarkedGroups(page = 1, pageSize = 20) {
+    return this.getBookmarkedGroupsWithSort(page, pageSize, "latest");
+  }
+
+  async getBookmarkedGroupsWithSort(
+    page = 1,
+    pageSize = 20,
+    sort: "latest" | "oldest" = "latest",
+  ) {
     return this.get<{
       groups: Group[];
       total: number;
       page: number;
       size: number;
-    }>(`/bookmarks/groups?page=${page}&page_size=${pageSize}`);
+    }>(`/bookmarks/groups?page=${page}&page_size=${pageSize}&sort=${sort}`);
   }
 
   async getBookmarkedEvents(page = 1, pageSize = 20) {
+    return this.getBookmarkedEventsWithSort(page, pageSize, "latest");
+  }
+
+  async getBookmarkedEventsWithSort(
+    page = 1,
+    pageSize = 20,
+    sort: "latest" | "oldest" = "latest",
+  ) {
     return this.get<{
       events: Event[];
       total: number;
       page: number;
       size: number;
-    }>(`/bookmarks/events?page=${page}&page_size=${pageSize}`);
+    }>(`/bookmarks/events?page=${page}&page_size=${pageSize}&sort=${sort}`);
+  }
+
+  async batchDeleteBookmarks(
+    targetType: "post" | "group" | "event",
+    targetIds: string[],
+  ) {
+    return this.post<{ message: string }>("/bookmarks/batch-delete", {
+      target_type: targetType,
+      target_ids: targetIds,
+    });
   }
 
   // ── Leaderboard ──────────────────────────────────────────────────────────
@@ -1086,7 +1172,10 @@ export interface Group {
   owner_id: string;
   name: string;
   description: string;
+  announcement: string;
+  rules: string;
   avatar_key?: string;
+  featured_post_id?: string;
   tags: string[];
   privacy: "public" | "private";
   member_count: number;
