@@ -7,6 +7,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const slowRequestThreshold = 750 * time.Millisecond
+
 // PerformanceMonitor creates a performance monitoring middleware
 type PerformanceMonitor struct {
 	logger *zap.Logger
@@ -50,8 +52,8 @@ func (pm *PerformanceMonitor) Monitor() gin.HandlerFunc {
 			fields = append(fields, zap.Any("user_id", userID))
 		}
 
-		// Log slow requests (> 1 second)
-		if duration > time.Second {
+		// Log slow requests
+		if duration > slowRequestThreshold {
 			pm.logger.Warn("Slow request detected", fields...)
 		} else if statusCode >= 500 {
 			pm.logger.Error("Server error", fields...)
@@ -112,7 +114,7 @@ func (mc *MetricsCollector) Collect() gin.HandlerFunc {
 			m.TotalErrors++
 		}
 
-		if duration > time.Second {
+		if duration > slowRequestThreshold {
 			m.SlowRequests++
 		}
 

@@ -1,4 +1,7 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all seed-dev frontend-lint frontend-typecheck frontend-build ci-backend ci-frontend ci
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all seed-dev frontend-lint frontend-typecheck frontend-build perf-db-report pprof-cpu pprof-heap ci-backend ci-frontend ci
+
+PPROF_URL ?= http://localhost:8080/debug/pprof
+PPROF_SECONDS ?= 30
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -55,6 +58,15 @@ frontend-typecheck: ## Run frontend type check
 
 frontend-build: ## Build frontend
 	pnpm --filter web build
+
+perf-db-report: ## Generate PostgreSQL performance report
+	./scripts/analyze_performance.sh
+
+pprof-cpu: ## Capture CPU profile from a running server
+	curl -sS "$(PPROF_URL)/profile?seconds=$(PPROF_SECONDS)" -o cpu.pprof
+
+pprof-heap: ## Capture heap profile from a running server
+	curl -sS "$(PPROF_URL)/heap" -o heap.pprof
 
 clean: ## Clean build artifacts
 	rm -rf bin/ coverage.out coverage.html

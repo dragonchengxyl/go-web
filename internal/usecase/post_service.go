@@ -405,6 +405,9 @@ func (s *PostService) LikePost(ctx context.Context, userID, postID uuid.UUID) er
 		CreatedAt: time.Now(),
 	}
 	if err := s.postRepo.LikePost(ctx, like); err != nil {
+		if errors.Is(err, post.ErrAlreadyLiked) {
+			return apperr.New(apperr.CodeInvalidParam, "已点赞")
+		}
 		return err
 	}
 	_ = s.postRepo.IncrementLikeCount(ctx, postID)
@@ -423,6 +426,9 @@ func (s *PostService) LikePost(ctx context.Context, userID, postID uuid.UUID) er
 
 func (s *PostService) UnlikePost(ctx context.Context, userID, postID uuid.UUID) error {
 	if err := s.postRepo.UnlikePost(ctx, userID, postID); err != nil {
+		if errors.Is(err, post.ErrNotLiked) {
+			return apperr.New(apperr.CodeInvalidParam, "未点赞")
+		}
 		return err
 	}
 	_ = s.postRepo.DecrementLikeCount(ctx, postID)

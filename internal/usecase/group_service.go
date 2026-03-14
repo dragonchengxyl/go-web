@@ -284,6 +284,9 @@ func (s *GroupService) JoinGroup(ctx context.Context, groupID, userID uuid.UUID)
 		Role:     group.GroupRoleMember,
 		JoinedAt: time.Now(),
 	}); err != nil {
+		if errors.Is(err, group.ErrAlreadyMember) {
+			return apperr.New(apperr.CodeInvalidParam, "已是圈子成员")
+		}
 		return apperr.Wrap(apperr.CodeInternalError, "加入圈子失败", err)
 	}
 
@@ -310,6 +313,9 @@ func (s *GroupService) LeaveGroup(ctx context.Context, groupID, userID uuid.UUID
 	}
 
 	if err := s.groupRepo.RemoveMember(ctx, groupID, userID); err != nil {
+		if errors.Is(err, group.ErrNotMember) {
+			return apperr.New(apperr.CodeInvalidParam, "未加入此圈子")
+		}
 		return apperr.Wrap(apperr.CodeInternalError, "退出圈子失败", err)
 	}
 	_ = s.groupRepo.DecrementMemberCount(ctx, groupID)
@@ -393,6 +399,9 @@ func (s *GroupService) KickMember(ctx context.Context, callerID, groupID, target
 	}
 
 	if err := s.groupRepo.RemoveMember(ctx, groupID, targetUserID); err != nil {
+		if errors.Is(err, group.ErrNotMember) {
+			return apperr.New(apperr.CodeInvalidParam, "目标用户不是圈子成员")
+		}
 		return apperr.Wrap(apperr.CodeInternalError, "踢出成员失败", err)
 	}
 	_ = s.groupRepo.DecrementMemberCount(ctx, groupID)

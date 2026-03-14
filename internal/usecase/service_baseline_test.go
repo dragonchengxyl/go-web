@@ -160,6 +160,20 @@ func TestFollowAndFeedFlow(t *testing.T) {
 	assert.Equal(t, followedAuthorID, feed[0].AuthorID)
 }
 
+func TestFollowServiceHandlesConcurrentDuplicateGracefully(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeFollowRepo()
+	repo.forceFollowErr = follow.ErrAlreadyFollowing
+
+	svc := usecase.NewFollowService(repo)
+	err := svc.Follow(ctx, uuid.New(), uuid.New())
+	require.Error(t, err)
+
+	var appErr *apperr.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperr.CodeInvalidParam, appErr.Code)
+}
+
 func TestGroupServiceUpdateGroupCreatesAnnouncement(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeGroupRepo()
@@ -213,6 +227,31 @@ func TestNotificationServiceNotifyPersistsAndPushes(t *testing.T) {
 	require.Len(t, hub.sent, 1)
 	assert.Equal(t, userID, hub.sent[0].userID)
 	assert.Equal(t, ws.MessageTypeNotification, hub.sent[0].msg.Type)
+}
+
+func TestPostServiceLikePostHandlesConcurrentDuplicateGracefully(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakePostRepo()
+	repo.forceLikeErr = post.ErrAlreadyLiked
+
+	postID := uuid.New()
+	repo.seed(&post.Post{
+		ID:               postID,
+		AuthorID:         uuid.New(),
+		Content:          "content",
+		Visibility:       post.VisibilityPublic,
+		ModerationStatus: post.ModerationApproved,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	})
+
+	svc := usecase.NewPostService(repo)
+	err := svc.LikePost(ctx, uuid.New(), postID)
+	require.Error(t, err)
+
+	var appErr *apperr.AppError
+	require.ErrorAs(t, err, &appErr)
+	assert.Equal(t, apperr.CodeInvalidParam, appErr.Code)
 }
 
 func TestChatServiceCreateConversationAndSendMessage(t *testing.T) {
@@ -380,8 +419,9 @@ func (r *fakeUserRepo) Delete(_ context.Context, id uuid.UUID) error {
 }
 
 type fakePostRepo struct {
-	posts map[uuid.UUID]*post.Post
-	likes map[string]struct{}
+	posts        map[uuid.UUID]*post.Post
+	likes        map[string]struct{}
+	forceLikeErr error
 }
 
 func newFakePostRepo() *fakePostRepo {
@@ -478,6 +518,9 @@ func (r *fakePostRepo) GetGroupHotTags(_ context.Context, _ uuid.UUID, _ int) ([
 }
 
 func (r *fakePostRepo) LikePost(_ context.Context, like *post.PostLike) error {
+	if r.forceLikeErr != nil {
+		return r.forceLikeErr
+	}
 	r.likes[like.UserID.String()+":"+like.PostID.String()] = struct{}{}
 	return nil
 }
@@ -522,7 +565,8 @@ func (r *fakePostRepo) UpdateModerationStatus(_ context.Context, id uuid.UUID, s
 }
 
 type fakeFollowRepo struct {
-	following map[uuid.UUID]map[uuid.UUID]*follow.UserFollow
+	following      map[uuid.UUID]map[uuid.UUID]*follow.UserFollow
+	forceFollowErr error
 }
 
 func newFakeFollowRepo() *fakeFollowRepo {
@@ -532,6 +576,9 @@ func newFakeFollowRepo() *fakeFollowRepo {
 }
 
 func (r *fakeFollowRepo) Follow(_ context.Context, entity *follow.UserFollow) error {
+	if r.forceFollowErr != nil {
+		return r.forceFollowErr
+	}
 	if r.following[entity.FollowerID] == nil {
 		r.following[entity.FollowerID] = make(map[uuid.UUID]*follow.UserFollow)
 	}

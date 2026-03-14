@@ -19,7 +19,7 @@ func NewFollowRepository(pool *pgxpool.Pool) *FollowRepository {
 }
 
 func (r *FollowRepository) Follow(ctx context.Context, f *follow.UserFollow) error {
-	_, err := r.pool.Exec(ctx,
+	result, err := r.pool.Exec(ctx,
 		`INSERT INTO user_follows (follower_id, followee_id, created_at) VALUES ($1, $2, $3)
 		 ON CONFLICT (follower_id, followee_id) DO NOTHING`,
 		f.FollowerID, f.FolloweeID, f.CreatedAt,
@@ -27,15 +27,24 @@ func (r *FollowRepository) Follow(ctx context.Context, f *follow.UserFollow) err
 	if err != nil {
 		return fmt.Errorf("failed to follow: %w", err)
 	}
+	if result.RowsAffected() == 0 {
+		return follow.ErrAlreadyFollowing
+	}
 	return nil
 }
 
 func (r *FollowRepository) Unfollow(ctx context.Context, followerID, followeeID uuid.UUID) error {
-	_, err := r.pool.Exec(ctx,
+	result, err := r.pool.Exec(ctx,
 		`DELETE FROM user_follows WHERE follower_id = $1 AND followee_id = $2`,
 		followerID, followeeID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return follow.ErrNotFollowing
+	}
+	return nil
 }
 
 func (r *FollowRepository) IsFollowing(ctx context.Context, followerID, followeeID uuid.UUID) (bool, error) {
@@ -81,7 +90,11 @@ func (r *FollowRepository) ListFollowing(ctx context.Context, userID uuid.UUID, 
 	return scanFollows(rows, total)
 }
 
-func scanFollows(rows interface{ Next() bool; Scan(...any) error; Err() error }, total int64) ([]*follow.UserFollow, int64, error) {
+func scanFollows(rows interface {
+	Next() bool
+	Scan(...any) error
+	Err() error
+}, total int64) ([]*follow.UserFollow, int64, error) {
 	follows := make([]*follow.UserFollow, 0)
 	for rows.Next() {
 		var f follow.UserFollow

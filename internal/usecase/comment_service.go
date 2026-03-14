@@ -216,6 +216,9 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID uuid
 	}
 
 	if err := s.commentRepo.LikeComment(ctx, like); err != nil {
+		if errors.Is(err, comment.ErrAlreadyLiked) {
+			return apperr.New(apperr.CodeInvalidParam, "已点赞")
+		}
 		return apperr.Wrap(apperr.CodeInternalError, "点赞失败", err)
 	}
 

@@ -111,17 +111,29 @@ func (r *GroupRepository) List(ctx context.Context, filter group.ListFilter) ([]
 }
 
 func (r *GroupRepository) AddMember(ctx context.Context, m *group.GroupMember) error {
-	_, err := r.pool.Exec(ctx, `
+	result, err := r.pool.Exec(ctx, `
 		INSERT INTO group_members (group_id, user_id, role, joined_at)
 		VALUES ($1,$2,$3,$4)
 		ON CONFLICT (group_id, user_id) DO NOTHING
 	`, m.GroupID, m.UserID, m.Role, m.JoinedAt)
-	return err
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return group.ErrAlreadyMember
+	}
+	return nil
 }
 
 func (r *GroupRepository) RemoveMember(ctx context.Context, groupID, userID uuid.UUID) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM group_members WHERE group_id=$1 AND user_id=$2`, groupID, userID)
-	return err
+	result, err := r.pool.Exec(ctx, `DELETE FROM group_members WHERE group_id=$1 AND user_id=$2`, groupID, userID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return group.ErrNotMember
+	}
+	return nil
 }
 
 func (r *GroupRepository) GetMember(ctx context.Context, groupID, userID uuid.UUID) (*group.GroupMember, error) {

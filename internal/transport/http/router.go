@@ -1,6 +1,7 @@
 package http
 
 import (
+	"net/http/pprof"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -68,9 +69,17 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	rateLimiter := middleware.NewRateLimiter(cfg.RedisClient, cfg.Config.RateLimit)
 	r.Use(rateLimiter.Limit())
 
+	authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)
+
 	healthHandler := handler.NewHealthHandler(cfg.Pool, cfg.RedisClient)
 	r.GET("/health", healthHandler.Health)
 	r.GET("/ready", healthHandler.Ready)
+
+	debug := r.Group("/debug/pprof")
+	if cfg.Config.Server.Mode == "release" {
+		debug.Use(authMiddleware.Authenticate(), authMiddleware.RequireRole(user.RoleAdmin))
+	}
+	registerPprofRoutes(debug)
 
 	// Static file serving for local uploads
 	r.Static("/uploads", "./uploads")
@@ -97,8 +106,6 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		if cfg.AssistantService != nil {
 			assistantHandler = handler.NewAssistantHandler(cfg.AssistantService, time.Duration(cfg.Config.Assistant.TimeoutSec)*time.Second)
 		}
-
-		authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)
 
 		// ── Public routes ──────────────────────────────────────────────
 
@@ -396,4 +403,19 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.GET("/ws/chat", middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore).Authenticate(), chatHandler.ServeWS)
 
 	return r
+}
+
+func registerPprofRoutes(rg *gin.RouterGroup) {
+	rg.GET("/", gin.WrapF(pprof.Index))
+	rg.GET("/cmdline", gin.WrapF(pprof.Cmdline))
+	rg.GET("/profile", gin.WrapF(pprof.Profile))
+	rg.GET("/symbol", gin.WrapF(pprof.Symbol))
+	rg.POST("/symbol", gin.WrapF(pprof.Symbol))
+	rg.GET("/trace", gin.WrapF(pprof.Trace))
+	rg.GET("/allocs", gin.WrapH(pprof.Handler("allocs")))
+	rg.GET("/block", gin.WrapH(pprof.Handler("block")))
+	rg.GET("/goroutine", gin.WrapH(pprof.Handler("goroutine")))
+	rg.GET("/heap", gin.WrapH(pprof.Handler("heap")))
+	rg.GET("/mutex", gin.WrapH(pprof.Handler("mutex")))
+	rg.GET("/threadcreate", gin.WrapH(pprof.Handler("threadcreate")))
 }

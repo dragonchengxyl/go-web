@@ -300,19 +300,31 @@ func (r *PostRepository) GetGroupHotTags(ctx context.Context, groupID uuid.UUID,
 }
 
 func (r *PostRepository) LikePost(ctx context.Context, like *post.PostLike) error {
-	_, err := r.pool.Exec(ctx,
+	result, err := r.pool.Exec(ctx,
 		`INSERT INTO post_likes (post_id, user_id, created_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
 		like.PostID, like.UserID, like.CreatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return post.ErrAlreadyLiked
+	}
+	return nil
 }
 
 func (r *PostRepository) UnlikePost(ctx context.Context, userID, postID uuid.UUID) error {
-	_, err := r.pool.Exec(ctx,
+	result, err := r.pool.Exec(ctx,
 		`DELETE FROM post_likes WHERE user_id = $1 AND post_id = $2`,
 		userID, postID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return post.ErrNotLiked
+	}
+	return nil
 }
 
 func (r *PostRepository) HasLiked(ctx context.Context, userID, postID uuid.UUID) (bool, error) {

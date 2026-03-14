@@ -74,6 +74,8 @@ type ListFilter struct {
 }
 
 var (
-	ErrNotFound  = errors.New("post not found")
-	ErrForbidden = errors.New("not authorized to modify this post")
+	ErrNotFound     = errors.New("post not found")
+	ErrForbidden    = errors.New("not authorized to modify this post")
+	ErrAlreadyLiked = errors.New("post already liked")
+	ErrNotLiked     = errors.New("post not liked")
 )

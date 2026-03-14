@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,6 +49,9 @@ func (s *FollowService) Follow(ctx context.Context, followerID, followeeID uuid.
 		CreatedAt:  time.Now(),
 	}
 	if err := s.followRepo.Follow(ctx, f); err != nil {
+		if errors.Is(err, follow.ErrAlreadyFollowing) {
+			return apperr.BadRequest("已关注该用户")
+		}
 		return err
 	}
 	if s.publisher != nil {
@@ -62,7 +66,13 @@ func (s *FollowService) Follow(ctx context.Context, followerID, followeeID uuid.
 }
 
 func (s *FollowService) Unfollow(ctx context.Context, followerID, followeeID uuid.UUID) error {
-	return s.followRepo.Unfollow(ctx, followerID, followeeID)
+	if err := s.followRepo.Unfollow(ctx, followerID, followeeID); err != nil {
+		if errors.Is(err, follow.ErrNotFollowing) {
+			return apperr.BadRequest("未关注该用户")
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *FollowService) IsFollowing(ctx context.Context, followerID, followeeID uuid.UUID) (bool, error) {

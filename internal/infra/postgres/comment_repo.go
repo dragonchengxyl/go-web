@@ -179,9 +179,12 @@ const likeCommentSQL = `
 `
 
 func (r *CommentRepository) LikeComment(ctx context.Context, like *comment.CommentLike) error {
-	_, err := r.pool.Exec(ctx, likeCommentSQL, like.ID, like.UserID, like.CommentID, like.CreatedAt)
+	result, err := r.pool.Exec(ctx, likeCommentSQL, like.ID, like.UserID, like.CommentID, like.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to like comment: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return comment.ErrAlreadyLiked
 	}
 	return nil
 }
