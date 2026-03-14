@@ -143,6 +143,31 @@ pnpm --filter web build
 make ci
 ```
 
+## 辅助工具
+
+仓库内置了一个 Go 编写的运维/QA 辅助工具 `studio-cli`：
+
+```bash
+# 构建
+make build-studio-cli
+
+# 健康检查
+./bin/studio-cli health
+
+# 数据库性能分析
+./bin/studio-cli perf db
+
+# 抓取 pprof
+./bin/studio-cli pprof cpu --seconds 30
+./bin/studio-cli pprof heap
+
+# 播种演示数据
+./bin/studio-cli seed demo
+
+# 运行 smoke test
+./bin/studio-cli smoke
+```
+
 ## 许可证
 
 MIT License

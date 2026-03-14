@@ -1,4 +1,4 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all seed-dev frontend-lint frontend-typecheck frontend-build perf-db-report pprof-cpu pprof-heap ci-backend ci-frontend ci
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-studio-cli build-all seed-dev frontend-lint frontend-typecheck frontend-build perf-db-report pprof-cpu pprof-heap ci-backend ci-frontend ci
 
 PPROF_URL ?= http://localhost:8080/debug/pprof
 PPROF_SECONDS ?= 30
@@ -30,11 +30,15 @@ build-moderation-svc: ## Build the moderation microservice
 build-notification-svc: ## Build the notification microservice
 	go build -o bin/notification-svc ./cmd/notification-svc
 
+build-studio-cli: ## Build the operational CLI
+	go build -o bin/studio-cli ./cmd/studio-cli
+
 build-all: ## Build all binaries
 	@make build
 	@make build-stats-svc
 	@make build-moderation-svc
 	@make build-notification-svc
+	@make build-studio-cli
 	@echo "✓ All binaries built successfully"
 
 run: ## Run the application (local config by default)
