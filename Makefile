@@ -1,4 +1,4 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all seed-dev
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-all seed-dev frontend-lint frontend-typecheck frontend-build ci-backend ci-frontend ci
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -46,6 +46,15 @@ test-coverage: ## Run tests with coverage report
 
 lint: ## Run linters
 	golangci-lint run
+
+frontend-lint: ## Run frontend lint
+	pnpm --filter web lint
+
+frontend-typecheck: ## Run frontend type check
+	pnpm --filter web type-check
+
+frontend-build: ## Build frontend
+	pnpm --filter web build
 
 clean: ## Clean build artifacts
 	rm -rf bin/ coverage.out coverage.html
@@ -142,9 +151,19 @@ dev: dev-all ## Alias for dev-all
 seed-dev: ## Seed local development data
 	go run ./cmd/seed-dev -config configs/config.local.yaml
 
-ci: ## Run CI checks locally
+ci-backend: ## Run backend CI checks locally
 	@echo "Running CI checks..."
 	@make lint
 	@make test
-	@make build
+	@make build-all
+	@echo "✓ Backend CI checks passed"
+
+ci-frontend: ## Run frontend CI checks locally
+	@echo "Running frontend CI checks..."
+	@make frontend-lint
+	@make frontend-typecheck
+	@make frontend-build
+	@echo "✓ Frontend CI checks passed"
+
+ci: ci-backend ci-frontend ## Run all CI checks locally
 	@echo "✓ All CI checks passed"

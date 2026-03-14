@@ -4,16 +4,18 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - '**.go'
+      - '**/*.go'
       - 'go.mod'
       - 'go.sum'
+      - 'Makefile'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     branches: [ main, develop ]
     paths:
-      - '**.go'
+      - '**/*.go'
       - 'go.mod'
       - 'go.sum'
+      - 'Makefile'
 
 jobs:
   lint:
@@ -80,7 +82,14 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Run tests
+      - name: Run unit tests
+        env:
+          STUDIO_DATABASE_DSN: postgres://studio:password@localhost:5432/studio_db_test?sslmode=disable
+          STUDIO_REDIS_ADDR: localhost:6379
+          STUDIO_JWT_SECRET: test-secret-key-for-ci
+        run: go test -v ./...
+
+      - name: Run race detector and coverage
         env:
           STUDIO_DATABASE_DSN: postgres://studio:password@localhost:5432/studio_db_test?sslmode=disable
           STUDIO_REDIS_ADDR: localhost:6379
@@ -106,12 +115,12 @@ jobs:
         with:
           go-version: '1.22.2'
 
-      - name: Build
-        run: go build -v -o server ./cmd/server
+      - name: Build all binaries
+        run: make build-all
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backend-binary
-          path: server
+          name: backend-binaries
+          path: bin/
           retention-days: 7

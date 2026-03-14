@@ -3,6 +3,8 @@ package ws
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,30 +28,86 @@ const (
 	rateInterval = 200 * time.Millisecond
 )
 
+var (
+	allowedOriginsMu sync.RWMutex
+	allowedOrigins   []string
+)
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// TODO: restrict to allowed origins in production
+	CheckOrigin:     isOriginAllowed,
+}
+
+// SetAllowedOrigins updates the WebSocket origin allowlist.
+func SetAllowedOrigins(origins []string) {
+	normalized := make([]string, 0, len(origins))
+	for _, origin := range origins {
+		if normalizedOrigin := normalizeOrigin(origin); normalizedOrigin != "" {
+			normalized = append(normalized, normalizedOrigin)
+		}
+	}
+
+	allowedOriginsMu.Lock()
+	allowedOrigins = normalized
+	allowedOriginsMu.Unlock()
+}
+
+func isOriginAllowed(r *http.Request) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		// Non-browser clients may omit Origin entirely.
 		return true
-	},
+	}
+
+	normalizedOrigin := normalizeOrigin(origin)
+	if normalizedOrigin == "" {
+		return false
+	}
+
+	allowedOriginsMu.RLock()
+	defer allowedOriginsMu.RUnlock()
+
+	for _, allowed := range allowedOrigins {
+		if allowed == "*" || allowed == normalizedOrigin {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeOrigin(raw string) string {
+	raw = strings.TrimSpace(strings.TrimRight(raw, "/"))
+	if raw == "" {
+		return ""
+	}
+	if raw == "*" {
+		return raw
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+
+	return strings.ToLower(parsed.Scheme + "://" + parsed.Host)
 }
 
 // tokenBucket is a simple in-memory token bucket for rate limiting.
 type tokenBucket struct {
-	mu       sync.Mutex
-	tokens   int
-	maxTokens int
+	mu         sync.Mutex
+	tokens     int
+	maxTokens  int
 	lastRefill time.Time
-	interval  time.Duration
+	interval   time.Duration
 }
 
 func newTokenBucket(burst int, interval time.Duration) *tokenBucket {
 	return &tokenBucket{
-		tokens:    burst,
-		maxTokens: burst,
+		tokens:     burst,
+		maxTokens:  burst,
 		lastRefill: time.Now(),
-		interval:  interval,
+		interval:   interval,
 	}
 }
 

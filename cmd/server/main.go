@@ -52,6 +52,8 @@ func main() {
 
 	ctx := context.Background()
 
+	ws.SetAllowedOrigins(cfg.Server.AllowOrigins)
+
 	// Initialize PostgreSQL
 	pool, err := postgres.NewPool(ctx, cfg.Database)
 	if err != nil {

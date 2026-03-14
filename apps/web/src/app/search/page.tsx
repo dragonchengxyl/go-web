@@ -217,7 +217,7 @@ function SearchContent() {
                 </div>
               ) : (
                 albums.map((album: any) => (
-                  <Link key={album.id} href={`/music/${album.slug}`} className="flex items-center gap-3 p-4 rounded-xl border hover:bg-muted/50 transition-colors">
+                  <article key={album.id} className="flex items-center gap-3 p-4 rounded-xl border bg-muted/20">
                     <div className="w-14 h-14 rounded-lg bg-muted flex-shrink-0 overflow-hidden">
                       {album.cover_image_url && <img src={album.cover_image_url} alt="" className="w-full h-full object-cover" />}
                     </div>
@@ -227,8 +227,9 @@ function SearchContent() {
                       </p>
                       <p className="text-sm text-muted-foreground">{album.artist_name}</p>
                       {album.track_count > 0 && <p className="text-xs text-muted-foreground">{album.track_count} 首歌曲</p>}
+                      <p className="text-xs text-muted-foreground mt-1">专辑详情页尚未开放，当前仅展示检索结果。</p>
                     </div>
-                  </Link>
+                  </article>
                 ))
               )}
             </div>

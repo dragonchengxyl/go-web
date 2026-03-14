@@ -52,7 +52,7 @@
 - Cloudflare R2 / 阿里云 OSS 文件存储，支持前端 OSS 直传签名 Policy
 - WebSocket 分布式 Hub（Redis Pub/Sub，支持多节点部署）
 - 每连接 Token Bucket 限流 + 单用户最多 5 路并发连接
-- 数据库迁移管理（032 个迁移）
+- 数据库迁移管理（043 个迁移）
 
 ### 用户系统
 - 注册 / 登录（JWT，Access + Refresh Token）
@@ -125,7 +125,23 @@ migrate -path migrations -database "postgres://studio:password@localhost:5432/st
 make migrate-up
 ```
 
-迁移文件位于 `migrations/`，共 032 个，覆盖：用户、帖子（含 `moderation_status`、`content_labels`）、评论、点赞、关注、会话、通知、举报、屏蔽等表。
+迁移文件位于 `migrations/`，共 043 个，覆盖：用户、帖子（含 `moderation_status`、`content_labels`）、评论、点赞、关注、会话、通知、举报、屏蔽、群组、活动、AI 助手等表。
+
+## 质量门禁
+
+```bash
+# 后端
+go test ./...
+go test -race ./...
+
+# 前端
+pnpm --filter web lint
+pnpm --filter web type-check
+pnpm --filter web build
+
+# 一次性跑完本地门禁
+make ci
+```
 
 ## 许可证
 
