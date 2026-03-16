@@ -191,6 +191,8 @@ func main() {
 	assistantRepo := postgres.NewAssistantRepository(pool)
 	bookmarkRepo := postgres.NewBookmarkRepository(pool)
 	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService)
+	auditRepo := postgres.NewAuditRepository(pool)
+	auditService := usecase.NewAuditService(auditRepo)
 	assistantLLM := llm.NewOpenAICompatibleClient(
 		cfg.Assistant.BaseURL,
 		cfg.Assistant.APIKey,
@@ -224,6 +226,7 @@ func main() {
 		SearchService:         searchService,
 		StatsService:          statsService,
 		AchievementService:    achievementService,
+		AuditService:          auditService,
 		PostService:           postService,
 		FollowService:         followService,
 		ChatService:           chatService,
@@ -239,6 +242,7 @@ func main() {
 		TokenStore:            tokenStore,
 		ReportRepo:            reportRepo,
 		BlockRepo:             blockRepo,
+		OrderRepo:             orderRepo,
 	})
 
 	// Start server

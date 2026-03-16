@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -77,6 +78,86 @@ func (r *orderRepo) GetByID(ctx context.Context, id uuid.UUID) (*order.Order, er
 	}
 
 	return &o, nil
+}
+
+func (r *orderRepo) List(ctx context.Context, filter order.ListFilter) ([]*order.Order, int64, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PageSize < 1 {
+		filter.PageSize = 20
+	}
+	if filter.PageSize > 100 {
+		filter.PageSize = 100
+	}
+
+	whereParts := []string{"1=1"}
+	args := make([]any, 0, 6)
+
+	if filter.Status != nil {
+		args = append(args, *filter.Status)
+		whereParts = append(whereParts, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.PaymentMethod != nil {
+		args = append(args, *filter.PaymentMethod)
+		whereParts = append(whereParts, fmt.Sprintf("payment_method = $%d", len(args)))
+	}
+	if filter.Type != "" {
+		args = append(args, filter.Type)
+		whereParts = append(whereParts, fmt.Sprintf("metadata->>'type' = $%d", len(args)))
+	}
+	if filter.Search != "" {
+		args = append(args, "%"+filter.Search+"%")
+		idx := len(args)
+		whereParts = append(whereParts, fmt.Sprintf(
+			"(order_no ILIKE $%d OR user_id::text ILIKE $%d OR COALESCE(metadata->>'to_user_id', '') ILIKE $%d)",
+			idx, idx, idx,
+		))
+	}
+
+	whereClause := strings.Join(whereParts, " AND ")
+
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM orders WHERE %s", whereClause)
+	var total int64
+	if err := r.db.QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count orders: %w", err)
+	}
+
+	args = append(args, filter.PageSize, (filter.Page-1)*filter.PageSize)
+	listSQL := fmt.Sprintf(`
+		SELECT id, order_no, user_id, status, total_cents, currency, discount_cents, coupon_code, payment_method, paid_at, idempotency_key, metadata, created_at, expires_at, updated_at
+		FROM orders
+		WHERE %s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, len(args)-1, len(args))
+
+	rows, err := r.db.Query(ctx, listSQL, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list orders: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]*order.Order, 0, filter.PageSize)
+	for rows.Next() {
+		var o order.Order
+		var metadataJSON []byte
+		if err := rows.Scan(
+			&o.ID, &o.OrderNo, &o.UserID, &o.Status, &o.TotalCents, &o.Currency,
+			&o.DiscountCents, &o.CouponCode, &o.PaymentMethod, &o.PaidAt,
+			&o.IdempotencyKey, &metadataJSON, &o.CreatedAt, &o.ExpiresAt, &o.UpdatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan order: %w", err)
+		}
+		if len(metadataJSON) > 0 {
+			if err := json.Unmarshal(metadataJSON, &o.Metadata); err != nil {
+				return nil, 0, fmt.Errorf("failed to unmarshal order metadata: %w", err)
+			}
+		}
+		items = append(items, &o)
+	}
+
+	return items, total, rows.Err()
 }
 
 const listTipsReceivedByUserSQL = `

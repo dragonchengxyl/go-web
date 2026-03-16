@@ -38,6 +38,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().DurationVar(&opts.Timeout, "timeout", opts.Timeout, "Default network timeout")
 
 	cmd.AddCommand(
+		newAdminCmd(opts),
 		newHealthCmd(opts),
 		newPerfCmd(opts),
 		newPprofCmd(opts),

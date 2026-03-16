@@ -103,6 +103,29 @@ func (s *EventService) ListEvents(ctx context.Context, input ListEventsInput) ([
 	})
 }
 
+func (s *EventService) AdminUpdateStatus(ctx context.Context, eventID uuid.UUID, status event.EventStatus) (*event.Event, error) {
+	e, err := s.repo.GetByID(ctx, eventID)
+	if err != nil {
+		if errors.Is(err, event.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, err
+	}
+
+	switch status {
+	case event.EventStatusDraft, event.EventStatusPublished, event.EventStatusCancelled, event.EventStatusCompleted:
+	default:
+		return nil, apperr.BadRequest("无效的活动状态")
+	}
+
+	e.Status = status
+	e.UpdatedAt = time.Now()
+	if err := s.repo.Update(ctx, e); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "更新活动状态失败", err)
+	}
+	return e, nil
+}
+
 // UpdateEventInput is the input for updating an event.
 type UpdateEventInput struct {
 	Title       string

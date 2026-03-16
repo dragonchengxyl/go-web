@@ -31,6 +31,13 @@ const (
 	ResourceComment     Resource = "comment"
 	ResourceAchievement Resource = "achievement"
 	ResourceCoupon      Resource = "coupon"
+	ResourcePost        Resource = "post"
+	ResourceReport      Resource = "report"
+	ResourceGroup       Resource = "group"
+	ResourceEvent       Resource = "event"
+	ResourceAssistant   Resource = "assistant"
+	ResourcePermission  Resource = "permission"
+	ResourceSystem      Resource = "system"
 )
 
 // Log represents an audit log entry

@@ -6,6 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
+type ListFilter struct {
+	Status        *OrderStatus
+	PaymentMethod *PaymentMethod
+	Type          string
+	Search        string
+	Page          int
+	PageSize      int
+}
+
 // Repository 订单仓储接口
 type Repository interface {
 	// Create 创建订单
@@ -19,6 +28,9 @@ type Repository interface {
 
 	// UpdateStatus 更新订单状态
 	UpdateStatus(ctx context.Context, id uuid.UUID, status OrderStatus) error
+
+	// List 获取订单列表
+	List(ctx context.Context, filter ListFilter) ([]*Order, int64, error)
 
 	// ListTipsReceivedByUser 获取用户收到的打赏订单
 	ListTipsReceivedByUser(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*Order, int, error)

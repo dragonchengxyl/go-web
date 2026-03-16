@@ -1,12 +1,20 @@
 package handler
 
 import (
+	"encoding/csv"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/domain/audit"
+	"github.com/studio/platform/internal/domain/event"
+	"github.com/studio/platform/internal/domain/group"
 	"github.com/studio/platform/internal/domain/notification"
+	"github.com/studio/platform/internal/domain/order"
+	"github.com/studio/platform/internal/domain/permission"
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
@@ -21,6 +29,11 @@ type AdminHandler struct {
 	userService    *usecase.UserService
 	commentService *usecase.CommentService
 	postService    *usecase.PostService
+	groupService   *usecase.GroupService
+	eventService   *usecase.EventService
+	auditService   *usecase.AuditService
+	config         *configs.Config
+	orderRepo      order.Repository
 	reportRepo     report.Repository
 	notifyService  *usecase.NotificationService
 }
@@ -32,6 +45,11 @@ func NewAdminHandler(
 	_ any, // was gameService - no longer needed
 	commentService *usecase.CommentService,
 	postService *usecase.PostService,
+	groupService *usecase.GroupService,
+	eventService *usecase.EventService,
+	auditService *usecase.AuditService,
+	config *configs.Config,
+	orderRepo order.Repository,
 	reportRepo report.Repository,
 	notifyService *usecase.NotificationService,
 ) *AdminHandler {
@@ -40,6 +58,11 @@ func NewAdminHandler(
 		userService:    userService,
 		commentService: commentService,
 		postService:    postService,
+		groupService:   groupService,
+		eventService:   eventService,
+		auditService:   auditService,
+		config:         config,
+		orderRepo:      orderRepo,
 		reportRepo:     reportRepo,
 		notifyService:  notifyService,
 	}
@@ -112,6 +135,7 @@ func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceUser, &userID, gin.H{"role": input.Role})
 	response.Success(c, u)
 }
 
@@ -128,6 +152,7 @@ func (h *AdminHandler) BanUser(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceUser, &userID, gin.H{"status": user.StatusBanned})
 	response.Success(c, u)
 }
 
@@ -144,6 +169,7 @@ func (h *AdminHandler) UnbanUser(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceUser, &userID, gin.H{"status": user.StatusActive})
 	response.Success(c, u)
 }
 
@@ -159,6 +185,7 @@ func (h *AdminHandler) DeleteUser(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logAudit(c, audit.ActionDelete, audit.ResourceUser, &userID, nil)
 	c.Status(http.StatusNoContent)
 }
 
@@ -187,6 +214,7 @@ func (h *AdminHandler) DeleteComment(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logAudit(c, audit.ActionDelete, audit.ResourceComment, &commentID, nil)
 	c.Status(http.StatusNoContent)
 }
 
@@ -235,7 +263,271 @@ func (h *AdminHandler) UpdatePostModeration(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourcePost, &postID, gin.H{"status": input.Status})
 	response.Success(c, gin.H{"status": input.Status})
+}
+
+// ListGroups returns paginated groups for admin operations.
+func (h *AdminHandler) ListGroups(c *gin.Context) {
+	if h.groupService == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	search := c.Query("search")
+
+	var privacy *group.GroupPrivacy
+	if raw := c.Query("privacy"); raw != "" {
+		gp := group.GroupPrivacy(raw)
+		privacy = &gp
+	}
+
+	items, total, err := h.groupService.ListGroups(c.Request.Context(), usecase.ListGroupsInput{
+		Privacy:  privacy,
+		Search:   search,
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	type adminGroupItem struct {
+		*group.Group
+		OwnerUsername string `json:"owner_username,omitempty"`
+		OwnerEmail    string `json:"owner_email,omitempty"`
+	}
+
+	cache := make(map[uuid.UUID]*user.User)
+	result := make([]adminGroupItem, 0, len(items))
+	for _, item := range items {
+		enriched := adminGroupItem{Group: item}
+		if owner := h.resolveUser(c, cache, item.OwnerID); owner != nil {
+			enriched.OwnerUsername = owner.Username
+			enriched.OwnerEmail = owner.Email
+		}
+		result = append(result, enriched)
+	}
+
+	response.Success(c, gin.H{"groups": result, "total": total, "page": page, "size": pageSize})
+}
+
+// UpdateGroup updates admin-managed group settings.
+func (h *AdminHandler) UpdateGroup(c *gin.Context) {
+	if h.groupService == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	groupID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.ErrInvalidParam)
+		return
+	}
+
+	var req struct {
+		Privacy group.GroupPrivacy `json:"privacy" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	item, err := h.groupService.AdminUpdatePrivacy(c.Request.Context(), groupID, req.Privacy)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceGroup, &groupID, gin.H{"privacy": req.Privacy})
+	response.Success(c, item)
+}
+
+// ListEvents returns paginated events for admin operations.
+func (h *AdminHandler) ListEvents(c *gin.Context) {
+	if h.eventService == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	var status *event.EventStatus
+	if raw := c.Query("status"); raw != "" {
+		es := event.EventStatus(raw)
+		status = &es
+	}
+
+	items, total, err := h.eventService.ListEvents(c.Request.Context(), usecase.ListEventsInput{
+		Status:   status,
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	type adminEventItem struct {
+		*event.Event
+		OrganizerUsername string `json:"organizer_username,omitempty"`
+		OrganizerEmail    string `json:"organizer_email,omitempty"`
+	}
+
+	cache := make(map[uuid.UUID]*user.User)
+	result := make([]adminEventItem, 0, len(items))
+	for _, item := range items {
+		enriched := adminEventItem{Event: item}
+		if organizer := h.resolveUser(c, cache, item.OrganizerID); organizer != nil {
+			enriched.OrganizerUsername = organizer.Username
+			enriched.OrganizerEmail = organizer.Email
+		}
+		result = append(result, enriched)
+	}
+
+	response.Success(c, gin.H{"events": result, "total": total, "page": page, "size": pageSize})
+}
+
+// UpdateEventStatus updates an event status from the admin console.
+func (h *AdminHandler) UpdateEventStatus(c *gin.Context) {
+	if h.eventService == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	eventID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.ErrInvalidParam)
+		return
+	}
+
+	var req struct {
+		Status event.EventStatus `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	item, err := h.eventService.AdminUpdateStatus(c.Request.Context(), eventID, req.Status)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceEvent, &eventID, gin.H{"status": req.Status})
+	response.Success(c, item)
+}
+
+// ListOrders returns paginated orders for admin operations.
+func (h *AdminHandler) ListOrders(c *gin.Context) {
+	if h.orderRepo == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	search := c.Query("search")
+	orderType := c.Query("type")
+
+	var status *order.OrderStatus
+	if raw := c.Query("status"); raw != "" {
+		os := order.OrderStatus(raw)
+		status = &os
+	}
+
+	var method *order.PaymentMethod
+	if raw := c.Query("payment_method"); raw != "" {
+		pm := order.PaymentMethod(raw)
+		method = &pm
+	}
+
+	items, total, err := h.orderRepo.List(c.Request.Context(), order.ListFilter{
+		Status:        status,
+		PaymentMethod: method,
+		Type:          orderType,
+		Search:        search,
+		Page:          page,
+		PageSize:      pageSize,
+	})
+	if err != nil {
+		response.Error(c, apperr.Wrap(apperr.CodeInternalError, "查询订单失败", err))
+		return
+	}
+
+	type adminOrderItem struct {
+		*order.Order
+		OrderType         string `json:"order_type,omitempty"`
+		RecipientUserID   string `json:"recipient_user_id,omitempty"`
+		PayerUsername     string `json:"payer_username,omitempty"`
+		PayerEmail        string `json:"payer_email,omitempty"`
+		RecipientUsername string `json:"recipient_username,omitempty"`
+		RecipientEmail    string `json:"recipient_email,omitempty"`
+	}
+
+	cache := make(map[uuid.UUID]*user.User)
+	result := make([]adminOrderItem, 0, len(items))
+	for _, item := range items {
+		enriched := adminOrderItem{Order: item}
+		if payer := h.resolveUser(c, cache, item.UserID); payer != nil {
+			enriched.PayerUsername = payer.Username
+			enriched.PayerEmail = payer.Email
+		}
+		if orderTypeValue, ok := item.Metadata["type"].(string); ok {
+			enriched.OrderType = orderTypeValue
+		}
+		if recipientID, ok := item.Metadata["to_user_id"].(string); ok && recipientID != "" {
+			enriched.RecipientUserID = recipientID
+			if uid, parseErr := uuid.Parse(recipientID); parseErr == nil {
+				if recipient := h.resolveUser(c, cache, uid); recipient != nil {
+					enriched.RecipientUsername = recipient.Username
+					enriched.RecipientEmail = recipient.Email
+				}
+			}
+		}
+		result = append(result, enriched)
+	}
+
+	response.Success(c, gin.H{"orders": result, "total": total, "page": page, "size": pageSize})
+}
+
+// UpdateOrderStatus updates an order status from the admin console.
+func (h *AdminHandler) UpdateOrderStatus(c *gin.Context) {
+	if h.orderRepo == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	orderID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.ErrInvalidParam)
+		return
+	}
+
+	var req struct {
+		Status order.OrderStatus `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	switch req.Status {
+	case order.OrderStatusPendingPayment, order.OrderStatusPaid, order.OrderStatusFulfilled, order.OrderStatusCancelled, order.OrderStatusFailed, order.OrderStatusRefunded:
+	default:
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的订单状态"))
+		return
+	}
+
+	if err := h.orderRepo.UpdateStatus(c.Request.Context(), orderID, req.Status); err != nil {
+		response.Error(c, apperr.Wrap(apperr.CodeInternalError, "更新订单状态失败", err))
+		return
+	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceOrder, &orderID, gin.H{"status": req.Status})
+	response.Success(c, gin.H{"status": req.Status})
 }
 
 // ListReports returns paginated reports (admin)
@@ -305,6 +597,7 @@ func (h *AdminHandler) UpdateReport(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceReport, &reportID, gin.H{"status": input.Status, "action": input.Action})
 
 	if h.notifyService != nil {
 		targetType := "report_dismissed"
@@ -330,6 +623,356 @@ func (h *AdminHandler) UpdateReport(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"status": input.Status, "action": input.Action})
+}
+
+// ListAuditLogs returns paginated audit logs (admin).
+func (h *AdminHandler) ListAuditLogs(c *gin.Context) {
+	if h.auditService == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	input, err := h.parseAuditLogFilters(c, true)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.auditService.ListAuditLogs(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// ExportAuditLogs returns CSV export for audit logs (admin).
+func (h *AdminHandler) ExportAuditLogs(c *gin.Context) {
+	if h.auditService == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	input, err := h.parseAuditLogFilters(c, false)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	input.Page = 1
+	input.PageSize = 1000
+
+	result, err := h.auditService.ListAuditLogs(c.Request.Context(), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	filename := "audit_logs_" + time.Now().Format("20060102_150405") + ".csv"
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+
+	writer := csv.NewWriter(c.Writer)
+	defer writer.Flush()
+
+	_ = writer.Write([]string{
+		"created_at",
+		"username",
+		"user_id",
+		"action",
+		"resource",
+		"resource_id",
+		"ip_address",
+		"user_agent",
+		"before_data",
+		"after_data",
+		"error_message",
+	})
+
+	for _, logItem := range result.Logs {
+		var userID, resourceID, beforeData, afterData, errorMessage string
+		if logItem.UserID != nil {
+			userID = logItem.UserID.String()
+		}
+		if logItem.ResourceID != nil {
+			resourceID = logItem.ResourceID.String()
+		}
+		if logItem.BeforeData != nil {
+			beforeData = *logItem.BeforeData
+		}
+		if logItem.AfterData != nil {
+			afterData = *logItem.AfterData
+		}
+		if logItem.ErrorMessage != nil {
+			errorMessage = *logItem.ErrorMessage
+		}
+
+		_ = writer.Write([]string{
+			logItem.CreatedAt.Format(time.RFC3339),
+			logItem.Username,
+			userID,
+			string(logItem.Action),
+			string(logItem.Resource),
+			resourceID,
+			logItem.IPAddress,
+			logItem.UserAgent,
+			beforeData,
+			afterData,
+			errorMessage,
+		})
+	}
+}
+
+// GetPermissionMatrix returns role-permission mappings (admin).
+func (h *AdminHandler) GetPermissionMatrix(c *gin.Context) {
+	matrix := []gin.H{}
+	roles := []user.Role{
+		user.RoleSuperAdmin,
+		user.RoleAdmin,
+		user.RoleModerator,
+		user.RoleCreator,
+		user.RoleSupporter,
+		user.RoleMember,
+		user.RoleGuest,
+	}
+
+	for _, role := range roles {
+		perms := permission.GetPermissionStrings(role)
+		matrix = append(matrix, gin.H{
+			"role":        role,
+			"permissions": perms,
+			"count":       len(perms),
+		})
+	}
+
+	catalog := gin.H{
+		"dashboard": []string{string(permission.DashboardView)},
+		"user": []string{
+			string(permission.UserView),
+			string(permission.UserUpdate),
+			string(permission.UserDelete),
+			string(permission.UserManage),
+		},
+		"comment": []string{
+			string(permission.CommentCreate),
+			string(permission.CommentDeleteOwn),
+			string(permission.CommentDeleteAny),
+			string(permission.CommentUpdate),
+		},
+		"game": []string{
+			string(permission.GameView),
+			string(permission.GameManage),
+			string(permission.GameReleaseCreate),
+			string(permission.GameReleaseUpdate),
+			string(permission.GameReleaseDelete),
+		},
+		"ost": []string{
+			string(permission.OSTView),
+			string(permission.OSTDownloadHiFi),
+			string(permission.OSTManage),
+		},
+	}
+
+	response.Success(c, gin.H{
+		"roles":   matrix,
+		"catalog": catalog,
+	})
+}
+
+// GetSystemConfig returns a safe runtime config snapshot for the admin console.
+func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
+	if h.config == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"server": gin.H{
+			"mode":          h.config.Server.Mode,
+			"port":          h.config.Server.Port,
+			"frontend_url":  h.config.Server.FrontendURL,
+			"allow_origins": h.config.Server.AllowOrigins,
+		},
+		"ratelimit": gin.H{
+			"unauthenticated": h.config.RateLimit.Unauthenticated,
+			"authenticated":   h.config.RateLimit.Authenticated,
+			"admin":           h.config.RateLimit.Admin,
+		},
+		"sponsor": gin.H{
+			"monthly_goal":   h.config.Sponsor.MonthlyGoal,
+			"current_raised": h.config.Sponsor.CurrentRaised,
+			"alipay_qr_url":  h.config.Sponsor.AlipayQRURL,
+			"wechat_qr_url":  h.config.Sponsor.WechatQRURL,
+			"message":        h.config.Sponsor.Message,
+		},
+		"assistant": gin.H{
+			"provider":          h.config.Assistant.Provider,
+			"base_url":          h.config.Assistant.BaseURL,
+			"model":             h.config.Assistant.Model,
+			"timeout_sec":       h.config.Assistant.TimeoutSec,
+			"max_context_items": h.config.Assistant.MaxContextItems,
+			"persona_name":      h.config.Assistant.PersonaName,
+			"configured":        h.config.Assistant.APIKey != "",
+		},
+		"oss": gin.H{
+			"provider":      h.config.OSS.Provider,
+			"bucket":        h.config.OSS.Bucket,
+			"endpoint":      h.config.OSS.Endpoint,
+			"region":        h.config.OSS.Region,
+			"allowed_hosts": h.config.OSS.AllowedHosts,
+		},
+		"email": gin.H{
+			"configured": h.config.Email.Host != "",
+			"host":       h.config.Email.Host,
+			"from":       h.config.Email.From,
+		},
+		"payment": gin.H{
+			"alipay_configured": h.config.Payment.Alipay.AppID != "",
+			"wechat_configured": h.config.Payment.Wechat.AppID != "",
+		},
+		"grpc": gin.H{
+			"stats_addr":        h.config.GRPC.StatsAddr,
+			"notification_addr": h.config.GRPC.NotificationAddr,
+			"moderation_addr":   h.config.GRPC.ModerationAddr,
+			"stats_port":        h.config.GRPC.StatsPort,
+			"notification_port": h.config.GRPC.NotificationPort,
+			"moderation_port":   h.config.GRPC.ModerationPort,
+		},
+	})
+}
+
+// UpdateSponsorConfig updates runtime sponsor display config.
+func (h *AdminHandler) UpdateSponsorConfig(c *gin.Context) {
+	if h.config == nil {
+		response.Error(c, apperr.ErrNotFound)
+		return
+	}
+
+	var req struct {
+		MonthlyGoal   float64 `json:"monthly_goal"`
+		CurrentRaised float64 `json:"current_raised"`
+		AlipayQRURL   string  `json:"alipay_qr_url"`
+		WechatQRURL   string  `json:"wechat_qr_url"`
+		Message       string  `json:"message"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+	if req.MonthlyGoal < 0 || req.CurrentRaised < 0 {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "金额不能为负数"))
+		return
+	}
+
+	h.config.Sponsor.MonthlyGoal = req.MonthlyGoal
+	h.config.Sponsor.CurrentRaised = req.CurrentRaised
+	h.config.Sponsor.AlipayQRURL = req.AlipayQRURL
+	h.config.Sponsor.WechatQRURL = req.WechatQRURL
+	h.config.Sponsor.Message = req.Message
+
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceSystem, nil, gin.H{
+		"monthly_goal":   req.MonthlyGoal,
+		"current_raised": req.CurrentRaised,
+		"message":        req.Message,
+	})
+
+	response.Success(c, gin.H{
+		"monthly_goal":   h.config.Sponsor.MonthlyGoal,
+		"current_raised": h.config.Sponsor.CurrentRaised,
+		"alipay_qr_url":  h.config.Sponsor.AlipayQRURL,
+		"wechat_qr_url":  h.config.Sponsor.WechatQRURL,
+		"message":        h.config.Sponsor.Message,
+	})
+}
+
+func (h *AdminHandler) resolveUser(c *gin.Context, cache map[uuid.UUID]*user.User, userID uuid.UUID) *user.User {
+	if userID == uuid.Nil || h.userService == nil {
+		return nil
+	}
+	if cached, ok := cache[userID]; ok {
+		return cached
+	}
+	item, err := h.userService.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		cache[userID] = nil
+		return nil
+	}
+	cache[userID] = item
+	return item
+}
+
+func (h *AdminHandler) parseAuditLogFilters(c *gin.Context, usePagination bool) (usecase.ListAuditLogsInput, error) {
+	input := usecase.ListAuditLogsInput{}
+	if usePagination {
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+		input.Page = page
+		input.PageSize = pageSize
+	}
+
+	if raw := c.Query("user_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return input, apperr.New(apperr.CodeInvalidParam, "无效的用户ID")
+		}
+		input.UserID = &parsed
+	}
+
+	if raw := c.Query("resource_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			return input, apperr.New(apperr.CodeInvalidParam, "无效的资源ID")
+		}
+		input.ResourceID = &parsed
+	}
+
+	if raw := c.Query("action"); raw != "" {
+		next := audit.Action(raw)
+		input.Action = &next
+	}
+
+	if raw := c.Query("resource"); raw != "" {
+		next := audit.Resource(raw)
+		input.Resource = &next
+	}
+
+	input.StartTime = optionalStringPtr(c.Query("start_time"))
+	input.EndTime = optionalStringPtr(c.Query("end_time"))
+	return input, nil
+}
+
+func (h *AdminHandler) logAudit(c *gin.Context, action audit.Action, resource audit.Resource, resourceID *uuid.UUID, afterData any) {
+	if h.auditService == nil {
+		return
+	}
+
+	var userID *uuid.UUID
+	var username string
+	if value, ok := getUserID(c); ok {
+		userID = &value
+		if userItem, err := h.userService.GetUserByID(c.Request.Context(), value); err == nil {
+			username = userItem.Username
+		}
+	}
+	if username == "" {
+		username = "admin"
+	}
+
+	_ = h.auditService.Log(c.Request.Context(), usecase.LogInput{
+		UserID:     userID,
+		Username:   username,
+		Action:     action,
+		Resource:   resource,
+		ResourceID: resourceID,
+		IPAddress:  c.ClientIP(),
+		UserAgent:  c.Request.UserAgent(),
+		AfterData:  afterData,
+	})
+}
+
+func optionalStringPtr(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func (h *AdminHandler) applyReportAction(c *gin.Context, rep *report.Report, rawAction string) (*report.Action, error) {

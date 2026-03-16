@@ -1,20 +1,20 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Loader2, RotateCcw, Search, Shield, UserCog, UserX } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Loader2 } from 'lucide-react'
+import { AdminDataTable, type AdminColumn } from '@/components/admin/admin-data-table'
+import { AdminEmptyState } from '@/components/admin/admin-empty-state'
+import { AdminFilterBar } from '@/components/admin/admin-filter-bar'
+import { AdminMetricCard } from '@/components/admin/admin-metric-card'
+import { AdminPageHeader } from '@/components/admin/admin-page-header'
+import { AdminPagination } from '@/components/admin/admin-pagination'
+import { AdminStatusBadge } from '@/components/admin/admin-status-badge'
+import { showAdminToast } from '@/components/admin/admin-toast'
 
 interface User {
   id: string
@@ -33,37 +33,42 @@ interface ListUsersOutput {
   size: number
 }
 
-const ROLES = [
-  { value: 'member', label: '普通用户', color: 'bg-gray-500' },
-  { value: 'creator', label: '创作者', color: 'bg-purple-500' },
-  { value: 'moderator', label: '版主', color: 'bg-blue-500' },
-  { value: 'admin', label: '管理员', color: 'bg-red-500' },
+const roles = [
+  { value: 'member', label: '普通用户' },
+  { value: 'creator', label: '创作者' },
+  { value: 'moderator', label: '版主' },
+  { value: 'admin', label: '管理员' },
 ]
 
-function roleBadgeClass(role: string) {
-  return ROLES.find(r => r.value === role)?.color ?? 'bg-gray-400'
-}
+const statusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'active', label: '正常' },
+  { value: 'banned', label: '已封禁' },
+]
 
-function toast(msg: string) {
-  const el = document.createElement('div')
-  el.className = 'fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50'
-  el.textContent = msg
-  document.body.appendChild(el)
-  setTimeout(() => el.remove(), 2500)
+function getRoleLabel(role: string) {
+  return roles.find((item) => item.value === role)?.label ?? role
 }
 
 export default function AdminUsersPage() {
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [keywordInput, setKeywordInput] = useState('')
+  const [keyword, setKeyword] = useState('')
+  const [status, setStatus] = useState('')
   const [roleDialogUser, setRoleDialogUser] = useState<User | null>(null)
   const [selectedRole, setSelectedRole] = useState('')
-  const [banConfirm, setBanConfirm] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ userId: string; type: 'ban' | 'unban' } | null>(null)
 
   const { data, isLoading } = useQuery<ListUsersOutput>({
-    queryKey: ['admin-users', search],
+    queryKey: ['admin-users', keyword, status, page],
     queryFn: () => {
-      const params = new URLSearchParams()
-      if (search) params.append('search', search)
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: '20',
+      })
+      if (keyword) params.set('search', keyword)
+      if (status) params.set('status', status)
       return apiClient.get(`/admin/users?${params.toString()}`)
     },
   })
@@ -74,192 +79,289 @@ export default function AdminUsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       setRoleDialogUser(null)
-      toast('角色更新成功')
+      showAdminToast('角色更新成功', 'success')
     },
-    onError: () => toast('更新失败，请重试'),
+    onError: () => {
+      showAdminToast('更新失败，请重试', 'error')
+    },
   })
 
   const banMutation = useMutation({
     mutationFn: (userId: string) => apiClient.post(`/admin/users/${userId}/ban`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-      setBanConfirm(null)
-      toast('封禁成功')
+      setConfirmAction(null)
+      showAdminToast('用户已封禁', 'success')
     },
-    onError: () => toast('操作失败，请重试'),
+    onError: () => {
+      showAdminToast('操作失败，请重试', 'error')
+    },
   })
 
   const unbanMutation = useMutation({
     mutationFn: (userId: string) => apiClient.post(`/admin/users/${userId}/unban`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
-      setBanConfirm(null)
-      toast('解封成功')
+      setConfirmAction(null)
+      showAdminToast('用户已解封', 'success')
     },
-    onError: () => toast('操作失败，请重试'),
+    onError: () => {
+      showAdminToast('操作失败，请重试', 'error')
+    },
   })
 
   const users = data?.users ?? []
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / 20)) : 1
+  const bannedOnPage = users.filter((user) => user.status === 'banned').length
+
+  const columns: AdminColumn<User>[] = [
+    {
+      key: 'user',
+      header: '用户',
+      className: 'min-w-[240px]',
+      render: (user) => (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium text-slate-900">
+              {user.nickname || user.username}
+            </p>
+            <AdminStatusBadge value={user.role} label={getRoleLabel(user.role)} />
+            <AdminStatusBadge value={user.status} label={user.status === 'banned' ? '已封禁' : '正常'} />
+          </div>
+          <div className="space-y-1 text-sm text-slate-500">
+            <p>@{user.username}</p>
+            <p>{user.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'created_at',
+      header: '注册时间',
+      className: 'whitespace-nowrap text-slate-500',
+      render: (user) => new Date(user.created_at).toLocaleString('zh-CN'),
+    },
+    {
+      key: 'actions',
+      header: '操作',
+      className: 'w-[260px]',
+      render: (user) => {
+        const isConfirmingBan = confirmAction?.userId === user.id && confirmAction.type === 'ban'
+        const isConfirmingUnban = confirmAction?.userId === user.id && confirmAction.type === 'unban'
+
+        return (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setSelectedRole(user.role)
+                setRoleDialogUser(user)
+              }}
+            >
+              <Shield className="mr-1 h-4 w-4" />
+              修改角色
+            </Button>
+
+            {user.status === 'banned' ? (
+              <Button
+                size="sm"
+                variant={isConfirmingUnban ? 'default' : 'outline'}
+                className={isConfirmingUnban ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'}
+                disabled={unbanMutation.isPending}
+                onClick={() => {
+                  if (isConfirmingUnban) {
+                    unbanMutation.mutate(user.id)
+                  } else {
+                    setConfirmAction({ userId: user.id, type: 'unban' })
+                  }
+                }}
+              >
+                {unbanMutation.isPending && isConfirmingUnban ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="mr-1 h-4 w-4" />
+                )}
+                {isConfirmingUnban ? '再次确认解封' : '解封'}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant={isConfirmingBan ? 'default' : 'outline'}
+                className={isConfirmingBan ? 'bg-rose-600 text-white hover:bg-rose-500' : 'border-rose-200 text-rose-700 hover:bg-rose-50'}
+                disabled={banMutation.isPending}
+                onClick={() => {
+                  if (isConfirmingBan) {
+                    banMutation.mutate(user.id)
+                  } else {
+                    setConfirmAction({ userId: user.id, type: 'ban' })
+                  }
+                }}
+              >
+                {banMutation.isPending && isConfirmingBan ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <UserX className="mr-1 h-4 w-4" />
+                )}
+                {isConfirmingBan ? '再次确认封禁' : '封禁'}
+              </Button>
+            )}
+          </div>
+        )
+      },
+    },
+  ]
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">用户管理</h1>
-        {data && <span className="text-sm text-gray-400">共 {data.total} 个用户</span>}
-      </div>
+    <div className="space-y-6">
+      <AdminPageHeader
+        eyebrow="User Operations"
+        title="用户管理"
+        description="统一处理用户搜索、角色调整和封禁状态，是最常用的运营治理工作面。"
+      />
 
-      <div className="max-w-sm">
-        <Input
-          placeholder="搜索用户名或邮箱..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      <div className="grid gap-4 md:grid-cols-3">
+        <AdminMetricCard
+          label="筛选结果"
+          value={(data?.total ?? 0).toLocaleString()}
+          hint="当前搜索条件下的用户总数"
+          icon={UserCog}
+          tone="brand"
+        />
+        <AdminMetricCard
+          label="本页封禁用户"
+          value={bannedOnPage.toLocaleString()}
+          hint="用于快速发现异常账户"
+          icon={UserX}
+          tone={bannedOnPage > 0 ? 'warning' : 'success'}
+        />
+        <AdminMetricCard
+          label="当前页容量"
+          value={users.length.toLocaleString()}
+          hint="单页最多展示 20 个用户"
+          icon={Shield}
+          tone="default"
         />
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">用户列表</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="animate-spin text-gray-400" />
-            </div>
-          ) : users.length === 0 ? (
-            <div className="text-center py-10 text-gray-400">
-              {search ? '未找到匹配的用户' : '暂无用户'}
-            </div>
-          ) : (
-            <div className="divide-y">
-              {users.map((user) => (
-                <div key={user.id} className="flex items-center justify-between py-3 gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="font-medium text-sm">{user.nickname || user.username}</span>
-                      <Badge className={`${roleBadgeClass(user.role)} text-white text-xs`}>
-                        {ROLES.find(r => r.value === user.role)?.label ?? user.role}
-                      </Badge>
-                      {user.status === 'banned' && (
-                        <Badge className="bg-red-600 text-white text-xs">已封禁</Badge>
-                      )}
-                    </div>
-                    <div className="flex gap-4 text-xs text-gray-400 flex-wrap">
-                      <span>@{user.username}</span>
-                      <span>{user.email}</span>
-                      <span>注册: {new Date(user.created_at).toLocaleDateString('zh-CN')}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedRole(user.role)
-                        setRoleDialogUser(user)
-                      }}
-                    >
-                      修改角色
-                    </Button>
-                    {user.status === 'banned' ? (
-                      banConfirm === user.id ? (
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                          onClick={() => unbanMutation.mutate(user.id)}
-                          disabled={unbanMutation.isPending}
-                        >
-                          {unbanMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : '确认解封'}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-green-600 hover:text-green-700"
-                          onClick={() => setBanConfirm(user.id)}
-                        >
-                          解封
-                        </Button>
-                      )
-                    ) : (
-                      banConfirm === user.id ? (
-                        <Button
-                          size="sm"
-                          className="bg-red-600 hover:bg-red-700 text-white"
-                          onClick={() => banMutation.mutate(user.id)}
-                          disabled={banMutation.isPending}
-                        >
-                          {banMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : '确认封禁'}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700"
-                          onClick={() => setBanConfirm(user.id)}
-                        >
-                          封禁
-                        </Button>
-                      )
-                    )}
-                    {banConfirm === user.id && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-gray-400"
-                        onClick={() => setBanConfirm(null)}
-                      >
-                        取消
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <AdminFilterBar>
+        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={keywordInput}
+              onChange={(e) => setKeywordInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setPage(1)
+                  setKeyword(keywordInput.trim())
+                }
+              }}
+              placeholder="搜索用户名或邮箱"
+              className="pl-10"
+            />
+          </div>
+          <select
+            value={status}
+            onChange={(e) => {
+              setPage(1)
+              setStatus(e.target.value)
+            }}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {statusOptions.map((option) => (
+              <option key={option.value || 'all'} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              setPage(1)
+              setKeyword(keywordInput.trim())
+            }}
+            className="bg-slate-950 text-white hover:bg-slate-800"
+          >
+            搜索
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setPage(1)
+              setKeywordInput('')
+              setKeyword('')
+              setStatus('')
+            }}
+          >
+            重置
+          </Button>
+        </div>
+      </AdminFilterBar>
 
-      {/* Role dialog */}
+      <AdminDataTable
+        data={users}
+        columns={columns}
+        keyExtractor={(user) => user.id}
+        loading={isLoading}
+        empty={
+          <AdminEmptyState
+            title="没有匹配的用户"
+            description="调整搜索关键词或状态筛选后再试一次。"
+          />
+        }
+      />
+
+      <AdminPagination page={page} totalPages={totalPages} onPageChange={setPage} />
+
       <Dialog open={!!roleDialogUser} onOpenChange={(open) => !open && setRoleDialogUser(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md rounded-3xl">
           <DialogHeader>
-            <DialogTitle>修改角色 — @{roleDialogUser?.username}</DialogTitle>
+            <DialogTitle>修改角色</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            {ROLES.map(({ value, label, color }) => (
+          <div className="space-y-3 py-2">
+            {roles.map((role) => (
               <label
-                key={value}
-                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                  selectedRole === value
-                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                key={role.value}
+                className={`flex cursor-pointer items-center justify-between rounded-2xl border p-4 transition-colors ${
+                  selectedRole === role.value
+                    ? 'border-slate-950 bg-slate-950 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
+                <div>
+                  <p className="font-medium">{role.label}</p>
+                  <p className={`text-xs ${selectedRole === role.value ? 'text-slate-300' : 'text-slate-400'}`}>
+                    {role.value}
+                  </p>
+                </div>
                 <input
                   type="radio"
                   name="role"
-                  value={value}
-                  checked={selectedRole === value}
-                  onChange={() => setSelectedRole(value)}
-                  className="sr-only"
+                  checked={selectedRole === role.value}
+                  onChange={() => setSelectedRole(role.value)}
+                  className="h-4 w-4"
                 />
-                <Badge className={`${color} text-white text-xs`}>{label}</Badge>
-                <span className="text-sm text-gray-600 dark:text-gray-300">{value}</span>
               </label>
             ))}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setRoleDialogUser(null)}>取消</Button>
+            <Button variant="ghost" onClick={() => setRoleDialogUser(null)}>
+              取消
+            </Button>
             <Button
+              disabled={updateRoleMutation.isPending || !roleDialogUser || !selectedRole}
               onClick={() => {
-                if (roleDialogUser && selectedRole) {
-                  updateRoleMutation.mutate({ userId: roleDialogUser.id, role: selectedRole })
-                }
+                if (!roleDialogUser) return
+                updateRoleMutation.mutate({ userId: roleDialogUser.id, role: selectedRole })
               }}
-              disabled={updateRoleMutation.isPending || !selectedRole}
+              className="bg-slate-950 text-white hover:bg-slate-800"
             >
-              {updateRoleMutation.isPending ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-              确认修改
+              {updateRoleMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              保存角色
             </Button>
           </DialogFooter>
         </DialogContent>

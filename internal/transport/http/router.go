@@ -10,6 +10,7 @@ import (
 	redisClient "github.com/redis/go-redis/v9"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/block"
+	"github.com/studio/platform/internal/domain/order"
 	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/redis"
@@ -33,6 +34,7 @@ type RouterConfig struct {
 	SearchService         *usecase.SearchService
 	StatsService          usecase.StatsProvider
 	AchievementService    *usecase.AchievementService
+	AuditService          *usecase.AuditService
 	PostService           *usecase.PostService
 	FollowService         *usecase.FollowService
 	ChatService           *usecase.ChatService
@@ -48,6 +50,7 @@ type RouterConfig struct {
 	TokenStore            *redis.TokenStore
 	ReportRepo            report.Repository
 	BlockRepo             block.Repository
+	OrderRepo             order.Repository
 }
 
 // NewRouter creates a new HTTP router
@@ -133,7 +136,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		v1.GET("/explore/tags", postHandler.GetHotTags)
 
 		// Sponsor dashboard (public)
-		sponsorHandler := handler.NewSponsorHandler(cfg.Config.Sponsor)
+		sponsorHandler := handler.NewSponsorHandler(cfg.Config)
 		v1.GET("/sponsor", sponsorHandler.GetSponsorInfo)
 
 		// AI assistant (public stream with optional auth context)
@@ -354,10 +357,28 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			admin := protected.Group("/admin")
 			admin.Use(authMiddleware.RequireRole(user.RoleAdmin))
 			{
-				adminHandler := handler.NewAdminHandler(cfg.StatsService, cfg.UserService, nil, cfg.CommentService, cfg.PostService, cfg.ReportRepo, cfg.NotificationService)
+				adminHandler := handler.NewAdminHandler(
+					cfg.StatsService,
+					cfg.UserService,
+					nil,
+					cfg.CommentService,
+					cfg.PostService,
+					cfg.GroupService,
+					cfg.EventService,
+					cfg.AuditService,
+					cfg.Config,
+					cfg.OrderRepo,
+					cfg.ReportRepo,
+					cfg.NotificationService,
+				)
 
 				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
 				admin.GET("/stats/user-growth", adminHandler.GetUserGrowthChart)
+				admin.GET("/audit-logs", adminHandler.ListAuditLogs)
+				admin.GET("/audit-logs/export", adminHandler.ExportAuditLogs)
+				admin.GET("/permissions/matrix", adminHandler.GetPermissionMatrix)
+				admin.GET("/system/config", adminHandler.GetSystemConfig)
+				admin.PUT("/system/sponsor", adminHandler.UpdateSponsorConfig)
 
 				admin.GET("/users", adminHandler.ListUsers)
 				admin.PUT("/users/:id/role", adminHandler.UpdateUserRole)
@@ -372,6 +393,21 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				admin.GET("/posts", adminHandler.ListPosts)
 				admin.PUT("/posts/:id/moderation", adminHandler.UpdatePostModeration)
 				admin.DELETE("/posts/:id", postHandler.DeletePost)
+
+				if cfg.GroupService != nil {
+					admin.GET("/groups", adminHandler.ListGroups)
+					admin.PUT("/groups/:id", adminHandler.UpdateGroup)
+				}
+
+				if cfg.EventService != nil {
+					admin.GET("/events", adminHandler.ListEvents)
+					admin.PUT("/events/:id/status", adminHandler.UpdateEventStatus)
+				}
+
+				if cfg.OrderRepo != nil {
+					admin.GET("/orders", adminHandler.ListOrders)
+					admin.PUT("/orders/:id/status", adminHandler.UpdateOrderStatus)
+				}
 
 				// Admin reports
 				admin.GET("/reports", adminHandler.ListReports)

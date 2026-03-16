@@ -1,13 +1,20 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { MessageSquare, Trash2 } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, ExternalLink } from 'lucide-react'
+import { AdminDataTable, type AdminColumn } from '@/components/admin/admin-data-table'
+import { AdminEmptyState } from '@/components/admin/admin-empty-state'
+import { AdminMetricCard } from '@/components/admin/admin-metric-card'
+import { AdminPageHeader } from '@/components/admin/admin-page-header'
+import { AdminPagination } from '@/components/admin/admin-pagination'
+import { AdminStatusBadge } from '@/components/admin/admin-status-badge'
+import { showAdminToast } from '@/components/admin/admin-toast'
 
-interface Comment {
+interface CommentRow {
   id: string
   user_id: string
   author_username?: string
@@ -22,24 +29,16 @@ interface Comment {
 }
 
 interface ListCommentsOutput {
-  comments: Comment[]
+  comments: CommentRow[]
   total: number
   page: number
   size: number
 }
 
-function toast(msg: string) {
-  const el = document.createElement('div')
-  el.className = 'fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50'
-  el.textContent = msg
-  document.body.appendChild(el)
-  setTimeout(() => el.remove(), 2500)
-}
-
 export default function AdminCommentsPage() {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery<ListCommentsOutput>({
     queryKey: ['admin-comments', page],
@@ -52,135 +51,145 @@ export default function AdminCommentsPage() {
   const deleteMutation = useMutation({
     mutationFn: (commentId: string) => apiClient.delete(`/admin/comments/${commentId}`),
     onSuccess: () => {
+      setDeleteConfirmId(null)
       queryClient.invalidateQueries({ queryKey: ['admin-comments'] })
-      setDeleteConfirm(null)
-      toast('评论已删除')
+      showAdminToast('评论已删除', 'success')
     },
-    onError: () => toast('删除失败，请重试'),
+    onError: () => {
+      showAdminToast('删除失败，请重试', 'error')
+    },
   })
 
   const comments = data?.comments ?? []
-  const totalPages = data ? Math.ceil(data.total / 20) : 1
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / 20)) : 1
+
+  const columns: AdminColumn<CommentRow>[] = [
+    {
+      key: 'content',
+      header: '评论内容',
+      className: 'min-w-[340px]',
+      render: (comment) => (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-900">
+              {comment.author_username ? `@${comment.author_username}` : `用户 ${comment.user_id.slice(0, 8)}...`}
+            </span>
+            {comment.is_edited ? (
+              <AdminStatusBadge value="reviewed" label="已编辑" />
+            ) : null}
+            {comment.is_deleted ? (
+              <AdminStatusBadge value="blocked" label="已删除" />
+            ) : null}
+          </div>
+          <p className="text-sm leading-6 text-slate-600">{comment.content}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'target',
+      header: '关联对象',
+      className: 'min-w-[220px]',
+      render: (comment) => (
+        <div className="space-y-2">
+          <AdminStatusBadge value={comment.commentable_type} label={comment.commentable_type} />
+          {comment.commentable_type === 'post' ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/posts/${comment.commentable_id}`} target="_blank">
+                查看帖子
+              </Link>
+            </Button>
+          ) : (
+            <span className="text-sm text-slate-400">无直接跳转</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'metrics',
+      header: '互动',
+      className: 'whitespace-nowrap text-slate-500',
+      render: (comment) => (
+        <div className="space-y-1">
+          <p>点赞 {comment.like_count}</p>
+          <p>回复 {comment.reply_count}</p>
+          <p>{new Date(comment.created_at).toLocaleString('zh-CN')}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '操作',
+      className: 'w-[180px]',
+      render: (comment) => {
+        const confirming = deleteConfirmId === comment.id
+        return (
+          <Button
+            size="sm"
+            variant={confirming ? 'default' : 'outline'}
+            className={confirming ? 'bg-rose-600 text-white hover:bg-rose-500' : 'border-rose-200 text-rose-700 hover:bg-rose-50'}
+            disabled={deleteMutation.isPending}
+            onClick={() => {
+              if (confirming) {
+                deleteMutation.mutate(comment.id)
+              } else {
+                setDeleteConfirmId(comment.id)
+              }
+            }}
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            {confirming ? '再次确认删除' : '删除评论'}
+          </Button>
+        )
+      },
+    },
+  ]
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">评论管理</h1>
-        {data && <span className="text-sm text-gray-400">共 {data.total} 条评论</span>}
+    <div className="space-y-6">
+      <AdminPageHeader
+        eyebrow="Comment Patrol"
+        title="评论管理"
+        description="用于巡检评论区内容质量，快速下线违规评论，并跳回原帖查看上下文。"
+      />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <AdminMetricCard
+          label="评论总数"
+          value={(data?.total ?? 0).toLocaleString()}
+          hint="当前分页接口返回的总记录数"
+          icon={MessageSquare}
+          tone="brand"
+        />
+        <AdminMetricCard
+          label="本页评论"
+          value={comments.length.toLocaleString()}
+          hint="单页最多展示 20 条"
+          icon={MessageSquare}
+          tone="default"
+        />
+        <AdminMetricCard
+          label="已删除评论"
+          value={comments.filter((item) => item.is_deleted).length.toLocaleString()}
+          hint="仅统计当前页"
+          icon={Trash2}
+          tone="warning"
+        />
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">评论列表</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="animate-spin text-gray-400" />
-            </div>
-          ) : comments.length === 0 ? (
-            <div className="text-center py-10 text-gray-400">暂无评论</div>
-          ) : (
-            <div className="divide-y">
-              {comments.map((comment) => (
-                <div key={comment.id} className="py-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap text-xs text-gray-400">
-                        <span className="font-medium text-gray-700 dark:text-gray-300">
-                          {comment.author_username
-                            ? `@${comment.author_username}`
-                            : `用户 ${comment.user_id.slice(0, 8)}…`}
-                        </span>
-                        <span>·</span>
-                        <span>{comment.commentable_type}</span>
-                        {comment.commentable_type === 'post' && (
-                          <a
-                            href={`/posts/${comment.commentable_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-500 hover:underline flex items-center gap-0.5"
-                          >
-                            查看帖子 <ExternalLink size={10} />
-                          </a>
-                        )}
-                        <span>·</span>
-                        <span>{new Date(comment.created_at).toLocaleString('zh-CN')}</span>
-                        {comment.is_edited && <span className="text-yellow-500">(已编辑)</span>}
-                        {comment.is_deleted && <span className="text-red-500">(已删除)</span>}
-                      </div>
-                      <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                        {comment.content}
-                      </p>
-                      <div className="flex gap-4 mt-1.5 text-xs text-gray-400">
-                        <span>点赞 {comment.like_count}</span>
-                        <span>回复 {comment.reply_count}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {deleteConfirm === comment.id ? (
-                        <>
-                          <Button
-                            size="sm"
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                            onClick={() => deleteMutation.mutate(comment.id)}
-                            disabled={deleteMutation.isPending}
-                          >
-                            {deleteMutation.isPending
-                              ? <Loader2 size={12} className="animate-spin" />
-                              : '确认删除'}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-gray-400"
-                            onClick={() => setDeleteConfirm(null)}
-                          >
-                            取消
-                          </Button>
-                        </>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => setDeleteConfirm(comment.id)}
-                        >
-                          删除
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+      <AdminDataTable
+        data={comments}
+        columns={columns}
+        keyExtractor={(comment) => comment.id}
+        loading={isLoading}
+        empty={
+          <AdminEmptyState
+            title="没有评论记录"
+            description="当前页面没有可管理的评论数据。"
+          />
+        }
+      />
 
-          {totalPages > 1 && (
-            <div className="flex justify-center gap-2 mt-6">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                上一页
-              </Button>
-              <span className="flex items-center px-3 text-sm text-gray-500">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-              >
-                下一页
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <AdminPagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   )
 }

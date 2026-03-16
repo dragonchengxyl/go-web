@@ -171,6 +171,27 @@ func (s *GroupService) ListGroups(ctx context.Context, input ListGroupsInput) ([
 	return groups, total, nil
 }
 
+func (s *GroupService) AdminUpdatePrivacy(ctx context.Context, groupID uuid.UUID, privacy group.GroupPrivacy) (*group.Group, error) {
+	g, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, group.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询圈子失败", err)
+	}
+
+	if privacy != group.GroupPrivacyPublic && privacy != group.GroupPrivacyPrivate {
+		return nil, apperr.BadRequest("无效的圈子可见性")
+	}
+
+	g.Privacy = privacy
+	g.UpdatedAt = time.Now()
+	if err := s.groupRepo.Update(ctx, g); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "更新圈子可见性失败", err)
+	}
+	return g, nil
+}
+
 // SetFeaturedPost sets or clears the featured post for a group; only owner/moderator may do this.
 func (s *GroupService) SetFeaturedPost(ctx context.Context, callerID, groupID uuid.UUID, postID *uuid.UUID) (*group.Group, error) {
 	g, err := s.groupRepo.GetByID(ctx, groupID)

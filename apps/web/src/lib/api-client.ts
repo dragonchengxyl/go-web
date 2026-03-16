@@ -1150,6 +1150,150 @@ class ApiClient {
   async updateAssistantSettings(data: AssistantSettings) {
     return this.put<AssistantSettings>("/admin/assistant/settings", data);
   }
+
+  async getAdminOrders(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    payment_method?: string;
+    type?: string;
+    search?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.status) q.set("status", params.status);
+    if (params?.payment_method) q.set("payment_method", params.payment_method);
+    if (params?.type) q.set("type", params.type);
+    if (params?.search) q.set("search", params.search);
+    return this.get<{
+      orders: AdminOrder[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/admin/orders?${q.toString()}`);
+  }
+
+  async updateAdminOrderStatus(id: string, status: string) {
+    return this.put<{ status: string }>(`/admin/orders/${id}/status`, { status });
+  }
+
+  async getAdminGroups(params?: {
+    page?: number;
+    page_size?: number;
+    privacy?: string;
+    search?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.privacy) q.set("privacy", params.privacy);
+    if (params?.search) q.set("search", params.search);
+    return this.get<{
+      groups: AdminGroup[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/admin/groups?${q.toString()}`);
+  }
+
+  async updateAdminGroup(id: string, data: { privacy: "public" | "private" }) {
+    return this.put<Group>(`/admin/groups/${id}`, data);
+  }
+
+  async getAdminEvents(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.status) q.set("status", params.status);
+    return this.get<{
+      events: AdminEvent[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/admin/events?${q.toString()}`);
+  }
+
+  async updateAdminEventStatus(id: string, status: Event["status"]) {
+    return this.put<Event>(`/admin/events/${id}/status`, { status });
+  }
+
+  async getAdminAuditLogs(params?: {
+    page?: number;
+    page_size?: number;
+    action?: string;
+    resource?: string;
+    user_id?: string;
+    resource_id?: string;
+    start_time?: string;
+    end_time?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.action) q.set("action", params.action);
+    if (params?.resource) q.set("resource", params.resource);
+    if (params?.user_id) q.set("user_id", params.user_id);
+    if (params?.resource_id) q.set("resource_id", params.resource_id);
+    if (params?.start_time) q.set("start_time", params.start_time);
+    if (params?.end_time) q.set("end_time", params.end_time);
+    return this.get<{
+      logs: AuditLog[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/admin/audit-logs?${q.toString()}`);
+  }
+
+  async getAdminPermissionMatrix() {
+    return this.get<{
+      roles: PermissionMatrixRole[];
+      catalog: Record<string, string[]>;
+    }>("/admin/permissions/matrix");
+  }
+
+  async exportAdminAuditLogsCsv(params?: {
+    action?: string;
+    resource?: string;
+    user_id?: string;
+    resource_id?: string;
+    start_time?: string;
+    end_time?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.action) q.set("action", params.action);
+    if (params?.resource) q.set("resource", params.resource);
+    if (params?.user_id) q.set("user_id", params.user_id);
+    if (params?.resource_id) q.set("resource_id", params.resource_id);
+    if (params?.start_time) q.set("start_time", params.start_time);
+    if (params?.end_time) q.set("end_time", params.end_time);
+
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/admin/audit-logs/export?${q.toString()}`, {
+      method: "GET",
+      headers,
+    });
+    if (!response.ok) {
+      throw new Error("导出审计日志失败");
+    }
+    return response.blob();
+  }
+
+  async getAdminSystemConfig() {
+    return this.get<AdminSystemConfig>("/admin/system/config");
+  }
+
+  async updateAdminSponsorConfig(data: AdminSponsorConfig) {
+    return this.put<AdminSponsorConfig>("/admin/system/sponsor", data);
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL);
@@ -1171,6 +1315,11 @@ export interface Event {
   attendee_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface AdminEvent extends Event {
+  organizer_username?: string;
+  organizer_email?: string;
 }
 
 export interface EventAttendee {
@@ -1197,6 +1346,11 @@ export interface Group {
   updated_at: string;
 }
 
+export interface AdminGroup extends Group {
+  owner_username?: string;
+  owner_email?: string;
+}
+
 export interface GroupMember {
   group_id: string;
   user_id: string;
@@ -1205,6 +1359,105 @@ export interface GroupMember {
   username?: string;
   furry_name?: string;
   avatar_key?: string;
+}
+
+export interface AdminOrder {
+  id: string;
+  order_no: string;
+  user_id: string;
+  status: string;
+  total_cents: number;
+  currency: string;
+  discount_cents: number;
+  payment_method?: string;
+  metadata?: Record<string, any>;
+  paid_at?: string | null;
+  created_at: string;
+  expires_at?: string | null;
+  updated_at: string;
+  order_type?: string;
+  recipient_user_id?: string;
+  payer_username?: string;
+  payer_email?: string;
+  recipient_username?: string;
+  recipient_email?: string;
+}
+
+export interface AuditLog {
+  id: string;
+  user_id?: string | null;
+  username: string;
+  action: string;
+  resource: string;
+  resource_id?: string | null;
+  ip_address: string;
+  user_agent?: string | null;
+  before_data?: string | null;
+  after_data?: string | null;
+  error_message?: string | null;
+  created_at: string;
+}
+
+export interface PermissionMatrixRole {
+  role: string;
+  permissions: string[];
+  count: number;
+}
+
+export interface AdminSponsorConfig {
+  monthly_goal: number;
+  current_raised: number;
+  alipay_qr_url: string;
+  wechat_qr_url: string;
+  message: string;
+}
+
+export interface AdminSystemConfig {
+  server: {
+    mode: string;
+    port: number;
+    frontend_url: string;
+    allow_origins: string[];
+  };
+  ratelimit: {
+    unauthenticated: number;
+    authenticated: number;
+    admin: number;
+  };
+  sponsor: AdminSponsorConfig;
+  assistant: {
+    provider: string;
+    base_url: string;
+    model: string;
+    timeout_sec: number;
+    max_context_items: number;
+    persona_name: string;
+    configured: boolean;
+  };
+  oss: {
+    provider: string;
+    bucket: string;
+    endpoint: string;
+    region: string;
+    allowed_hosts: string[];
+  };
+  email: {
+    configured: boolean;
+    host: string;
+    from: string;
+  };
+  payment: {
+    alipay_configured: boolean;
+    wechat_configured: boolean;
+  };
+  grpc: {
+    stats_addr: string;
+    notification_addr: string;
+    moderation_addr: string;
+    stats_port: number;
+    notification_port: number;
+    moderation_port: number;
+  };
 }
 
 export interface GroupAnnouncement {
