@@ -8,6 +8,7 @@ interface AuthUser {
   username: string;
   email: string;
   role: string;
+  force_password_reset?: boolean;
   email_verified_at?: string | null;
 }
 
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         username: data.username,
         email: data.email,
         role: data.role,
+        force_password_reset: data.force_password_reset ?? false,
         email_verified_at: data.email_verified_at ?? null,
       });
     } catch {

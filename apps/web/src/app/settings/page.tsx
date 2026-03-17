@@ -1,18 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Lock } from 'lucide-react';
+import { Lock, ShieldAlert } from 'lucide-react';
 
 interface UserProfile {
   id: string
   username: string
   email?: string
   email_verified_at?: string
+  force_password_reset?: boolean
   bio?: string
   furry_name?: string
   species?: string
@@ -25,7 +28,16 @@ interface BlockedUser {
   species?: string
 }
 
-function ChangePasswordForm() {
+interface ChangePasswordResult {
+  user: UserProfile
+  access_token: string
+  refresh_token: string
+  expires_in: number
+}
+
+function ChangePasswordForm({ forcedReset, returnTo }: { forcedReset: boolean; returnTo: string }) {
+  const router = useRouter();
+  const { login } = useAuth();
   const [form, setForm] = useState({ old_password: '', new_password: '', confirm: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -45,12 +57,17 @@ function ChangePasswordForm() {
     }
     setLoading(true);
     try {
-      await apiClient.put('/auth/password', {
+      const data = await apiClient.put<ChangePasswordResult>('/auth/password', {
         old_password: form.old_password,
         new_password: form.new_password,
       });
-      setSuccess(true);
+      await login(data.access_token, data.refresh_token);
       setForm({ old_password: '', new_password: '', confirm: '' });
+      if (forcedReset) {
+        router.replace(returnTo || '/admin');
+        return;
+      }
+      setSuccess(true);
     } catch (err: any) {
       setError(err.message || '修改失败，请重试');
     } finally {
@@ -60,6 +77,15 @@ function ChangePasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {forcedReset && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-medium">首次进入管理员账号前需要先修改密码</p>
+            <p className="mt-1 text-amber-800">修改完成后会自动返回你原本要进入的页面。</p>
+          </div>
+        </div>
+      )}
       {error && (
         <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">{error}</div>
       )}
@@ -121,13 +147,26 @@ function ChangePasswordForm() {
   );
 }
 
-export default function SettingsPage() {
+function SettingsPageContent() {
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [blocked, setBlocked] = useState<BlockedUser[]>([]);
   const [loadingBlocked, setLoadingBlocked] = useState(false);
   const [unblockingId, setUnblockingId] = useState<string | null>(null);
   const [resendingVerification, setResendingVerification] = useState(false);
   const [verificationMessage, setVerificationMessage] = useState('');
+  const forcedReset = searchParams.get('force_password_reset') === '1';
+  const returnTo = searchParams.get('from') || '/admin';
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(
+    forcedReset
+      ? 'security'
+      : requestedTab === 'privacy'
+        ? 'privacy'
+        : requestedTab === 'security'
+          ? 'security'
+          : 'account'
+  );
 
   useEffect(() => {
     apiClient.getMe().then(setProfile).catch(() => {});
@@ -175,11 +214,17 @@ export default function SettingsPage() {
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
       <h1 className="text-2xl font-bold mb-6">设置</h1>
 
-      <Tabs defaultValue="account" onValueChange={(v) => { if (v === 'privacy') loadBlocked(); }}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => {
+          setActiveTab(v);
+          if (v === 'privacy') loadBlocked();
+        }}
+      >
         <TabsList className="w-full mb-6">
-          <TabsTrigger value="account" className="flex-1">账号</TabsTrigger>
+          <TabsTrigger value="account" className="flex-1" disabled={forcedReset}>账号</TabsTrigger>
           <TabsTrigger value="security" className="flex-1">安全</TabsTrigger>
-          <TabsTrigger value="privacy" className="flex-1">隐私</TabsTrigger>
+          <TabsTrigger value="privacy" className="flex-1" disabled={forcedReset}>隐私</TabsTrigger>
         </TabsList>
 
         {/* Account Tab */}
@@ -241,7 +286,7 @@ export default function SettingsPage() {
               <CardTitle>修改密码</CardTitle>
             </CardHeader>
             <CardContent>
-              <ChangePasswordForm />
+              <ChangePasswordForm forcedReset={forcedReset} returnTo={returnTo} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -293,5 +338,13 @@ export default function SettingsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

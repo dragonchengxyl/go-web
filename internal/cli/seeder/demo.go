@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/domain/user"
 	postgresinfra "github.com/studio/platform/internal/infra/postgres"
 	"github.com/studio/platform/internal/pkg/crypto"
 )
@@ -362,9 +363,9 @@ func upsertUser(ctx context.Context, tx pgx.Tx, seed userSeed, passwordHash stri
 	err := tx.QueryRow(ctx, `
 		INSERT INTO users (
 			id, username, email, password_hash, bio, location, website, furry_name, species,
-			role, status, email_verified_at, created_at, updated_at
+			role, status, force_password_reset, email_verified_at, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11, $12, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11, $12, $13, $13)
 		ON CONFLICT (email) DO UPDATE SET
 			username = EXCLUDED.username,
 			password_hash = EXCLUDED.password_hash,
@@ -374,6 +375,7 @@ func upsertUser(ctx context.Context, tx pgx.Tx, seed userSeed, passwordHash stri
 			furry_name = EXCLUDED.furry_name,
 			species = EXCLUDED.species,
 			role = EXCLUDED.role,
+			force_password_reset = EXCLUDED.force_password_reset,
 			status = 'active',
 			email_verified_at = EXCLUDED.email_verified_at,
 			updated_at = EXCLUDED.updated_at
@@ -389,6 +391,7 @@ func upsertUser(ctx context.Context, tx pgx.Tx, seed userSeed, passwordHash stri
 		furry,
 		species,
 		seed.Role,
+		user.NextForcePasswordReset(false, "", user.Role(seed.Role)),
 		now,
 		now,
 	).Scan(&id)

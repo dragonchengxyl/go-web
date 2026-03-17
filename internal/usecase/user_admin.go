@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/user"
@@ -93,7 +94,10 @@ func (s *UserService) UpdateUserRole(ctx context.Context, userID uuid.UUID, newR
 	}
 
 	// Update role
+	previousRole := u.Role
 	u.Role = newRole
+	u.ForcePasswordReset = user.NextForcePasswordReset(u.ForcePasswordReset, previousRole, newRole)
+	u.UpdatedAt = time.Now()
 
 	// Save to database
 	if err := s.userRepo.Update(ctx, u); err != nil {
@@ -136,6 +140,7 @@ func (s *UserService) UpdateUserStatus(ctx context.Context, userID uuid.UUID, ne
 
 	// Update status
 	u.Status = newStatus
+	u.UpdatedAt = time.Now()
 
 	// Save to database
 	if err := s.userRepo.Update(ctx, u); err != nil {

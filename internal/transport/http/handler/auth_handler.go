@@ -204,14 +204,22 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		response.Error(c, apperr.ErrValidationFailed.WithDetail(err.Error()))
 		return
 	}
-	if err := h.userService.ChangePassword(c.Request.Context(), uid, usecase.ChangePasswordInput{
+	output, err := h.userService.ChangePassword(c.Request.Context(), uid, usecase.ChangePasswordInput{
 		OldPassword: req.OldPassword,
 		NewPassword: req.NewPassword,
-	}); err != nil {
+		Device:      c.GetHeader("User-Agent"),
+		IP:          c.ClientIP(),
+	})
+	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"message": "密码修改成功"})
+	response.Success(c, dto.AuthResponse{
+		User:         toUserResponse(output.User),
+		AccessToken:  output.Tokens.AccessToken,
+		RefreshToken: output.Tokens.RefreshToken,
+		ExpiresIn:    output.Tokens.ExpiresIn,
+	})
 }
 
 // Logout handles user logout

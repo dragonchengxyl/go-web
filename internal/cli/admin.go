@@ -83,8 +83,10 @@ func runAdminEnsure(ctx context.Context, opts *Options, input adminEnsureInput) 
 	existing, err := repo.GetByEmail(ctx, email)
 	if err == nil && existing != nil {
 		now := time.Now()
+		previousRole := existing.Role
 		existing.Role = role
 		existing.Status = user.StatusActive
+		existing.ForcePasswordReset = user.NextForcePasswordReset(existing.ForcePasswordReset, previousRole, role)
 		if existing.EmailVerifiedAt == nil {
 			existing.EmailVerifiedAt = &now
 		}
@@ -133,15 +135,16 @@ func runAdminEnsure(ctx context.Context, opts *Options, input adminEnsureInput) 
 
 	now := time.Now()
 	newUser := &user.User{
-		ID:              uuid.New(),
-		Username:        username,
-		Email:           email,
-		PasswordHash:    passwordHash,
-		Role:            role,
-		Status:          user.StatusActive,
-		EmailVerifiedAt: &now,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:                 uuid.New(),
+		Username:           username,
+		Email:              email,
+		PasswordHash:       passwordHash,
+		Role:               role,
+		Status:             user.StatusActive,
+		ForcePasswordReset: user.NextForcePasswordReset(false, "", role),
+		EmailVerifiedAt:    &now,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 	if err := repo.Create(ctx, newUser); err != nil {
 		return fmt.Errorf("create admin user: %w", err)

@@ -135,6 +135,17 @@ function getCurrentItem(pathname: string) {
   );
 }
 
+function buildForcedResetHref(from: string) {
+  const params = new URLSearchParams({
+    tab: "security",
+    force_password_reset: "1",
+  });
+  if (from) {
+    params.set("from", from);
+  }
+  return `/settings?${params.toString()}`;
+}
+
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -152,11 +163,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         router.replace("/");
         return;
       }
+      if (payload.role === "admin" && payload.force_password_reset) {
+        router.replace(buildForcedResetHref(pathname));
+        return;
+      }
       setReady(true);
     } catch {
       router.replace("/login?from=/admin");
     }
-  }, [router]);
+  }, [pathname, router]);
 
   const current = useMemo(() => getCurrentItem(pathname), [pathname]);
 

@@ -54,3 +54,26 @@ type User struct {
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }
+
+// RoleRequiresForcedPasswordReset reports whether this role should be forced to
+// rotate its initial password before using privileged entry points.
+func RoleRequiresForcedPasswordReset(role Role) bool {
+	return role == RoleAdmin
+}
+
+// NextForcePasswordReset derives the next force-password-reset state from a role
+// transition. Super admins are always exempt. Regular admins are forced only
+// when they newly enter the role; otherwise the current flag is preserved.
+func NextForcePasswordReset(current bool, previousRole, nextRole Role) bool {
+	switch {
+	case nextRole == RoleSuperAdmin:
+		return false
+	case RoleRequiresForcedPasswordReset(nextRole):
+		if previousRole != nextRole {
+			return true
+		}
+		return current
+	default:
+		return false
+	}
+}

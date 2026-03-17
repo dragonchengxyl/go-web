@@ -11,6 +11,17 @@ import { Mail, Lock } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/contexts/auth-context';
 
+function buildForcedResetHref(from: string) {
+  const params = new URLSearchParams({
+    tab: 'security',
+    force_password_reset: '1',
+  });
+  if (from) {
+    params.set('from', from);
+  }
+  return `/settings?${params.toString()}`;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -25,6 +36,10 @@ function LoginForm() {
     mutationFn: () => apiClient.login(formData.email, formData.password),
     onSuccess: async (data) => {
       await login(data.access_token, data.refresh_token);
+      if (data.user?.force_password_reset) {
+        router.push(buildForcedResetHref(from));
+        return;
+      }
       router.push(from);
     },
     onError: (err: any) => {
