@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { GeistSans } from "geist/font/sans";
 import { Providers } from "@/components/providers";
-import { Header } from "@/components/layout/header";
-import { MusicPlayer } from "@/components/music-player";
-import { ModerationToast } from "@/components/moderation-toast";
-import { VerifyEmailBanner } from "@/components/verify-email-banner";
 import { LenisProvider } from "@/components/lenis-provider";
-import { FurryAssistant } from "@/components/assistant/furry-assistant";
+import { AppChrome } from "@/components/layout/app-chrome";
 
 export const metadata: Metadata = {
   title: "Furry 同好社区",
@@ -39,12 +35,7 @@ export default function RootLayout({
       <body className={GeistSans.className}>
         <LenisProvider>
           <Providers>
-            <Header />
-            <VerifyEmailBanner />
-            {children}
-            <MusicPlayer />
-            <ModerationToast />
-            <FurryAssistant />
+            <AppChrome>{children}</AppChrome>
           </Providers>
         </LenisProvider>
       </body>
