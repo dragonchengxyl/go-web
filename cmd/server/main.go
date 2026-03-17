@@ -193,6 +193,8 @@ func main() {
 	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService)
 	auditRepo := postgres.NewAuditRepository(pool)
 	auditService := usecase.NewAuditService(auditRepo)
+	sponsorRepo := postgres.NewSponsorRepository(pool)
+	sponsorSettingsService := usecase.NewSponsorSettingsService(sponsorRepo, cfg)
 	assistantLLM := llm.NewOpenAICompatibleClient(
 		cfg.Assistant.BaseURL,
 		cfg.Assistant.APIKey,
@@ -215,34 +217,35 @@ func main() {
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
-		Config:                cfg,
-		Logger:                logger,
-		Pool:                  pool,
-		RedisClient:           redisClient,
-		UserService:           userService,
-		MusicService:          musicService,
-		CommentService:        commentService,
-		PaymentService:        paymentService,
-		SearchService:         searchService,
-		StatsService:          statsService,
-		AchievementService:    achievementService,
-		AuditService:          auditService,
-		PostService:           postService,
-		FollowService:         followService,
-		ChatService:           chatService,
-		TipService:            tipService,
-		NotificationService:   notificationService,
-		BookmarkService:       bookmarkService,
-		OSSService:            ossService,
-		EventService:          eventService,
-		GroupService:          groupService,
-		RecommendationService: recommendationService,
-		AssistantService:      assistantService,
-		Hub:                   hub,
-		TokenStore:            tokenStore,
-		ReportRepo:            reportRepo,
-		BlockRepo:             blockRepo,
-		OrderRepo:             orderRepo,
+		Config:                 cfg,
+		Logger:                 logger,
+		Pool:                   pool,
+		RedisClient:            redisClient,
+		UserService:            userService,
+		MusicService:           musicService,
+		CommentService:         commentService,
+		PaymentService:         paymentService,
+		SearchService:          searchService,
+		StatsService:           statsService,
+		AchievementService:     achievementService,
+		AuditService:           auditService,
+		PostService:            postService,
+		SponsorSettingsService: sponsorSettingsService,
+		FollowService:          followService,
+		ChatService:            chatService,
+		TipService:             tipService,
+		NotificationService:    notificationService,
+		BookmarkService:        bookmarkService,
+		OSSService:             ossService,
+		EventService:           eventService,
+		GroupService:           groupService,
+		RecommendationService:  recommendationService,
+		AssistantService:       assistantService,
+		Hub:                    hub,
+		TokenStore:             tokenStore,
+		ReportRepo:             reportRepo,
+		BlockRepo:              blockRepo,
+		OrderRepo:              orderRepo,
 	})
 
 	// Start server

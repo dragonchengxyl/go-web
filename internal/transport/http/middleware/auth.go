@@ -74,6 +74,13 @@ func (a *Auth) Authenticate() gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("role", claims.Role)
 		c.Set("permissions", claims.Permissions)
+		c.Set("force_password_reset", claims.ForcePasswordReset)
+
+		if claims.ForcePasswordReset && strings.HasPrefix(c.Request.URL.Path, "/api/v1/admin") {
+			response.Error(c, apperr.New(apperr.CodeForbidden, "请先修改初始密码后再访问后台"))
+			c.Abort()
+			return
+		}
 
 		c.Next()
 	}
@@ -110,6 +117,7 @@ func (a *Auth) OptionalAuthenticate() gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("role", claims.Role)
 		c.Set("permissions", claims.Permissions)
+		c.Set("force_password_reset", claims.ForcePasswordReset)
 		c.Next()
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	assistantdomain "github.com/studio/platform/internal/domain/assistant"
+	"github.com/studio/platform/internal/domain/audit"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -18,16 +19,17 @@ import (
 
 // AssistantHandler serves the lightweight site AI assistant.
 type AssistantHandler struct {
-	service *usecase.AssistantService
-	timeout time.Duration
+	service      *usecase.AssistantService
+	auditService *usecase.AuditService
+	timeout      time.Duration
 }
 
 // NewAssistantHandler creates a handler for SSE chat responses.
-func NewAssistantHandler(service *usecase.AssistantService, timeout time.Duration) *AssistantHandler {
+func NewAssistantHandler(service *usecase.AssistantService, auditService *usecase.AuditService, timeout time.Duration) *AssistantHandler {
 	if timeout <= 0 {
 		timeout = 90 * time.Second
 	}
-	return &AssistantHandler{service: service, timeout: timeout}
+	return &AssistantHandler{service: service, auditService: auditService, timeout: timeout}
 }
 
 // StreamChat handles POST /api/v1/assistant/chat/stream.
@@ -236,6 +238,7 @@ func (h *AssistantHandler) UpdateSettings(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.logSettingsUpdate(c, adminID, settings)
 	response.Success(c, settings)
 }
 
@@ -246,4 +249,23 @@ func latestAssistantUserMessage(messages []usecase.AssistantChatMessage) string 
 		}
 	}
 	return ""
+}
+
+func (h *AssistantHandler) logSettingsUpdate(c *gin.Context, adminID uuid.UUID, settings *assistantdomain.Settings) {
+	if h.auditService == nil || settings == nil {
+		return
+	}
+	username := "admin"
+	if value := c.GetString("username"); value != "" {
+		username = value
+	}
+	_ = h.auditService.Log(c.Request.Context(), usecase.LogInput{
+		UserID:    &adminID,
+		Username:  username,
+		Action:    audit.ActionUpdate,
+		Resource:  audit.ResourceAssistant,
+		IPAddress: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+		AfterData: settings,
+	})
 }

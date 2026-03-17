@@ -42,15 +42,16 @@ type VerifyEmailRequest struct {
 
 // UserResponse represents user response
 type UserResponse struct {
-	ID              string  `json:"id"`
-	Username        string  `json:"username"`
-	Email           string  `json:"email"`
-	Avatar          *string `json:"avatar,omitempty"`
-	Bio             *string `json:"bio,omitempty"`
-	Location        *string `json:"location,omitempty"`
-	Role            string  `json:"role"`
-	Status          string  `json:"status"`
-	EmailVerifiedAt *string `json:"email_verified_at,omitempty"`
+	ID                 string  `json:"id"`
+	Username           string  `json:"username"`
+	Email              string  `json:"email"`
+	Avatar             *string `json:"avatar,omitempty"`
+	Bio                *string `json:"bio,omitempty"`
+	Location           *string `json:"location,omitempty"`
+	Role               string  `json:"role"`
+	Status             string  `json:"status"`
+	ForcePasswordReset bool    `json:"force_password_reset"`
+	EmailVerifiedAt    *string `json:"email_verified_at,omitempty"`
 }
 
 // AuthResponse represents authentication response

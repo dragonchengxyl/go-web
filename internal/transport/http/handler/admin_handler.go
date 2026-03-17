@@ -33,6 +33,7 @@ type AdminHandler struct {
 	eventService   *usecase.EventService
 	auditService   *usecase.AuditService
 	config         *configs.Config
+	sponsorService *usecase.SponsorSettingsService
 	orderRepo      order.Repository
 	reportRepo     report.Repository
 	notifyService  *usecase.NotificationService
@@ -49,6 +50,7 @@ func NewAdminHandler(
 	eventService *usecase.EventService,
 	auditService *usecase.AuditService,
 	config *configs.Config,
+	sponsorService *usecase.SponsorSettingsService,
 	orderRepo order.Repository,
 	reportRepo report.Repository,
 	notifyService *usecase.NotificationService,
@@ -62,6 +64,7 @@ func NewAdminHandler(
 		eventService:   eventService,
 		auditService:   auditService,
 		config:         config,
+		sponsorService: sponsorService,
 		orderRepo:      orderRepo,
 		reportRepo:     reportRepo,
 		notifyService:  notifyService,
@@ -784,6 +787,13 @@ func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
 		return
 	}
 
+	sponsorCfg := h.config.Sponsor
+	if h.sponsorService != nil {
+		if cfg, err := h.sponsorService.Get(c.Request.Context()); err == nil {
+			sponsorCfg = cfg
+		}
+	}
+
 	response.Success(c, gin.H{
 		"server": gin.H{
 			"mode":          h.config.Server.Mode,
@@ -797,11 +807,11 @@ func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
 			"admin":           h.config.RateLimit.Admin,
 		},
 		"sponsor": gin.H{
-			"monthly_goal":   h.config.Sponsor.MonthlyGoal,
-			"current_raised": h.config.Sponsor.CurrentRaised,
-			"alipay_qr_url":  h.config.Sponsor.AlipayQRURL,
-			"wechat_qr_url":  h.config.Sponsor.WechatQRURL,
-			"message":        h.config.Sponsor.Message,
+			"monthly_goal":   sponsorCfg.MonthlyGoal,
+			"current_raised": sponsorCfg.CurrentRaised,
+			"alipay_qr_url":  sponsorCfg.AlipayQRURL,
+			"wechat_qr_url":  sponsorCfg.WechatQRURL,
+			"message":        sponsorCfg.Message,
 		},
 		"assistant": gin.H{
 			"provider":          h.config.Assistant.Provider,
@@ -841,7 +851,7 @@ func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
 
 // UpdateSponsorConfig updates runtime sponsor display config.
 func (h *AdminHandler) UpdateSponsorConfig(c *gin.Context) {
-	if h.config == nil {
+	if h.config == nil || h.sponsorService == nil {
 		response.Error(c, apperr.ErrNotFound)
 		return
 	}
@@ -862,11 +872,22 @@ func (h *AdminHandler) UpdateSponsorConfig(c *gin.Context) {
 		return
 	}
 
-	h.config.Sponsor.MonthlyGoal = req.MonthlyGoal
-	h.config.Sponsor.CurrentRaised = req.CurrentRaised
-	h.config.Sponsor.AlipayQRURL = req.AlipayQRURL
-	h.config.Sponsor.WechatQRURL = req.WechatQRURL
-	h.config.Sponsor.Message = req.Message
+	var updatedBy *uuid.UUID
+	if uid, ok := getUserID(c); ok {
+		updatedBy = &uid
+	}
+
+	cfg, err := h.sponsorService.Update(c.Request.Context(), configs.SponsorConfig{
+		MonthlyGoal:   req.MonthlyGoal,
+		CurrentRaised: req.CurrentRaised,
+		AlipayQRURL:   req.AlipayQRURL,
+		WechatQRURL:   req.WechatQRURL,
+		Message:       req.Message,
+	}, updatedBy)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
 
 	h.logAudit(c, audit.ActionUpdate, audit.ResourceSystem, nil, gin.H{
 		"monthly_goal":   req.MonthlyGoal,
@@ -875,11 +896,11 @@ func (h *AdminHandler) UpdateSponsorConfig(c *gin.Context) {
 	})
 
 	response.Success(c, gin.H{
-		"monthly_goal":   h.config.Sponsor.MonthlyGoal,
-		"current_raised": h.config.Sponsor.CurrentRaised,
-		"alipay_qr_url":  h.config.Sponsor.AlipayQRURL,
-		"wechat_qr_url":  h.config.Sponsor.WechatQRURL,
-		"message":        h.config.Sponsor.Message,
+		"monthly_goal":   cfg.MonthlyGoal,
+		"current_raised": cfg.CurrentRaised,
+		"alipay_qr_url":  cfg.AlipayQRURL,
+		"wechat_qr_url":  cfg.WechatQRURL,
+		"message":        cfg.Message,
 	})
 }
 

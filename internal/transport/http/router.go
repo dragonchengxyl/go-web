@@ -23,34 +23,35 @@ import (
 
 // RouterConfig holds router dependencies
 type RouterConfig struct {
-	Config                *configs.Config
-	Logger                *zap.Logger
-	Pool                  *pgxpool.Pool
-	RedisClient           *redisClient.Client
-	UserService           *usecase.UserService
-	MusicService          *usecase.MusicService
-	CommentService        *usecase.CommentService
-	PaymentService        *usecase.PaymentService
-	SearchService         *usecase.SearchService
-	StatsService          usecase.StatsProvider
-	AchievementService    *usecase.AchievementService
-	AuditService          *usecase.AuditService
-	PostService           *usecase.PostService
-	FollowService         *usecase.FollowService
-	ChatService           *usecase.ChatService
-	TipService            *usecase.TipService
-	NotificationService   *usecase.NotificationService
-	BookmarkService       *usecase.BookmarkService
-	OSSService            *usecase.OSSService
-	EventService          *usecase.EventService
-	GroupService          *usecase.GroupService
-	RecommendationService *usecase.RecommendationService
-	AssistantService      *usecase.AssistantService
-	Hub                   ws.HubInterface
-	TokenStore            *redis.TokenStore
-	ReportRepo            report.Repository
-	BlockRepo             block.Repository
-	OrderRepo             order.Repository
+	Config                 *configs.Config
+	Logger                 *zap.Logger
+	Pool                   *pgxpool.Pool
+	RedisClient            *redisClient.Client
+	UserService            *usecase.UserService
+	MusicService           *usecase.MusicService
+	CommentService         *usecase.CommentService
+	PaymentService         *usecase.PaymentService
+	SearchService          *usecase.SearchService
+	StatsService           usecase.StatsProvider
+	AchievementService     *usecase.AchievementService
+	AuditService           *usecase.AuditService
+	PostService            *usecase.PostService
+	SponsorSettingsService *usecase.SponsorSettingsService
+	FollowService          *usecase.FollowService
+	ChatService            *usecase.ChatService
+	TipService             *usecase.TipService
+	NotificationService    *usecase.NotificationService
+	BookmarkService        *usecase.BookmarkService
+	OSSService             *usecase.OSSService
+	EventService           *usecase.EventService
+	GroupService           *usecase.GroupService
+	RecommendationService  *usecase.RecommendationService
+	AssistantService       *usecase.AssistantService
+	Hub                    ws.HubInterface
+	TokenStore             *redis.TokenStore
+	ReportRepo             report.Repository
+	BlockRepo              block.Repository
+	OrderRepo              order.Repository
 }
 
 // NewRouter creates a new HTTP router
@@ -90,7 +91,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	v1 := r.Group("/api/v1")
 	{
 		// Initialize handlers
-		authHandler := handler.NewAuthHandler(cfg.UserService, cfg.RedisClient)
+		authHandler := handler.NewAuthHandler(cfg.UserService, cfg.AuditService, cfg.RedisClient)
 		userHandler := handler.NewUserHandler(cfg.UserService)
 		musicHandler := handler.NewMusicHandler(cfg.MusicService)
 		commentHandler := handler.NewCommentHandler(cfg.CommentService, cfg.PostService)
@@ -107,7 +108,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		}
 		var assistantHandler *handler.AssistantHandler
 		if cfg.AssistantService != nil {
-			assistantHandler = handler.NewAssistantHandler(cfg.AssistantService, time.Duration(cfg.Config.Assistant.TimeoutSec)*time.Second)
+			assistantHandler = handler.NewAssistantHandler(cfg.AssistantService, cfg.AuditService, time.Duration(cfg.Config.Assistant.TimeoutSec)*time.Second)
 		}
 
 		// ── Public routes ──────────────────────────────────────────────
@@ -136,7 +137,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		v1.GET("/explore/tags", postHandler.GetHotTags)
 
 		// Sponsor dashboard (public)
-		sponsorHandler := handler.NewSponsorHandler(cfg.Config)
+		sponsorHandler := handler.NewSponsorHandler(cfg.SponsorSettingsService)
 		v1.GET("/sponsor", sponsorHandler.GetSponsorInfo)
 
 		// AI assistant (public stream with optional auth context)
@@ -367,6 +368,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 					cfg.EventService,
 					cfg.AuditService,
 					cfg.Config,
+					cfg.SponsorSettingsService,
 					cfg.OrderRepo,
 					cfg.ReportRepo,
 					cfg.NotificationService,

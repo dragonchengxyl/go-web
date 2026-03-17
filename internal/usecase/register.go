@@ -59,14 +59,15 @@ func (s *UserService) Register(ctx context.Context, input RegisterInput) (*AuthO
 	// Create user
 	now := time.Now()
 	u := &user.User{
-		ID:           uuid.New(),
-		Username:     input.Username,
-		Email:        input.Email,
-		PasswordHash: passwordHash,
-		Role:         user.RoleMember,
-		Status:       user.StatusActive,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                 uuid.New(),
+		Username:           input.Username,
+		Email:              input.Email,
+		PasswordHash:       passwordHash,
+		Role:               user.RoleMember,
+		Status:             user.StatusActive,
+		ForcePasswordReset: false,
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 
 	if err := s.userRepo.Create(ctx, u); err != nil {

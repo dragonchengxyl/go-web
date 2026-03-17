@@ -20,13 +20,13 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 }
 
 const createUserSQL = `
-	INSERT INTO users (id, username, email, password_hash, role, status, created_at, updated_at)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	INSERT INTO users (id, username, email, password_hash, role, status, force_password_reset, created_at, updated_at)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 	_, err := r.pool.Exec(ctx, createUserSQL,
-		u.ID, u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.CreatedAt, u.UpdatedAt,
+		u.ID, u.Username, u.Email, u.PasswordHash, u.Role, u.Status, u.ForcePasswordReset, u.CreatedAt, u.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
@@ -36,7 +36,7 @@ func (r *UserRepository) Create(ctx context.Context, u *user.User) error {
 
 const getUserByIDSQL = `
 	SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
-	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
+	       force_password_reset, email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE id = $1
 `
 
@@ -45,7 +45,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 	err := r.pool.QueryRow(ctx, getUserByIDSQL, id).Scan(
 		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
 		&u.FurryName, &u.Species,
-		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
+		&u.Role, &u.Status, &u.ForcePasswordReset, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -59,7 +59,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*user.User,
 
 const getUserByEmailSQL = `
 	SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
-	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
+	       force_password_reset, email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE email = $1
 `
 
@@ -68,7 +68,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 	err := r.pool.QueryRow(ctx, getUserByEmailSQL, email).Scan(
 		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
 		&u.FurryName, &u.Species,
-		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
+		&u.Role, &u.Status, &u.ForcePasswordReset, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -82,7 +82,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*user.Us
 
 const getUserByUsernameSQL = `
 	SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
-	       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
+	       force_password_reset, email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 	FROM users WHERE username = $1
 `
 
@@ -91,7 +91,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*u
 	err := r.pool.QueryRow(ctx, getUserByUsernameSQL, username).Scan(
 		&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
 		&u.FurryName, &u.Species,
-		&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
+		&u.Role, &u.Status, &u.ForcePasswordReset, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -106,14 +106,14 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*u
 const updateUserSQL = `
 	UPDATE users
 	SET username = $2, email = $3, password_hash = $4, avatar_key = $5, bio = $6, website = $7, location = $8,
-	    furry_name = $9, species = $10, role = $11, status = $12, email_verified_at = $13, updated_at = $14
+	    furry_name = $9, species = $10, role = $11, status = $12, force_password_reset = $13, email_verified_at = $14, updated_at = $15
 	WHERE id = $1
 `
 
 func (r *UserRepository) Update(ctx context.Context, u *user.User) error {
 	_, err := r.pool.Exec(ctx, updateUserSQL,
 		u.ID, u.Username, u.Email, u.PasswordHash, u.AvatarKey, u.Bio, u.Website, u.Location,
-		u.FurryName, u.Species, u.Role, u.Status, u.EmailVerifiedAt, u.UpdatedAt,
+		u.FurryName, u.Species, u.Role, u.Status, u.ForcePasswordReset, u.EmailVerifiedAt, u.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
@@ -162,7 +162,7 @@ func (r *UserRepository) List(ctx context.Context, filter user.ListFilter) ([]*u
 	// Build query
 	query := `
 		SELECT id, username, email, password_hash, avatar_key, bio, website, location, furry_name, species, role, status,
-		       email_verified_at, last_login_at, last_login_ip, created_at, updated_at
+		       force_password_reset, email_verified_at, last_login_at, last_login_ip, created_at, updated_at
 		FROM users
 		WHERE 1=1
 	`
@@ -221,7 +221,7 @@ func (r *UserRepository) List(ctx context.Context, filter user.ListFilter) ([]*u
 		err := rows.Scan(
 			&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.AvatarKey, &u.Bio, &u.Website, &u.Location,
 			&u.FurryName, &u.Species,
-			&u.Role, &u.Status, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
+			&u.Role, &u.Status, &u.ForcePasswordReset, &u.EmailVerifiedAt, &u.LastLoginAt, &u.LastLoginIP,
 			&u.CreatedAt, &u.UpdatedAt,
 		)
 		if err != nil {

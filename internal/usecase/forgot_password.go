@@ -69,6 +69,7 @@ func (s *UserService) ResetPassword(ctx context.Context, token, newPassword stri
 		return apperr.Wrap(apperr.CodeInternalError, "密码加密失败", err)
 	}
 	u.PasswordHash = newHash
+	u.ForcePasswordReset = false
 	u.UpdatedAt = time.Now()
 
 	if err := s.userRepo.Update(ctx, u); err != nil {

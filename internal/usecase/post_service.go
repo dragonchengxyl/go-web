@@ -129,64 +129,29 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 		_ = s.groupRepo.IncrementPostCount(ctx, *input.GroupID)
 	}
 
-	// Publish post.created event if publisher is configured (moderation-svc consumes it).
-	if s.publisher != nil {
-		go func() {
-			_ = s.publisher.Publish(context.Background(), streams.EventPostCreated, streams.PostCreatedPayload{
+	// If moderation is configured, keep the post in pending state and push it
+	// through either the async stream pipeline or the in-process fallback.
+	if s.moderator != nil {
+		if s.publisher != nil {
+			err := s.publisher.Publish(ctx, streams.EventPostCreated, streams.PostCreatedPayload{
 				PostID:    p.ID.String(),
 				AuthorID:  p.AuthorID.String(),
 				Content:   p.Content,
 				MediaURLs: p.MediaURLs,
 			})
-		}()
-	}
-
-	// Trigger async content moderation if moderator is configured (in-process fallback).
-	if s.publisher == nil && s.moderator != nil {
-		postID := p.ID
-		content := p.Content
-		mediaURLs := p.MediaURLs
-		moderator := s.moderator
-		repo := s.postRepo
-		logger := s.logger
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					if logger != nil {
-						logger.Error("moderation goroutine panic", zap.Any("recover", r))
-					}
-				}
-			}()
-			bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-
-			// Check text content
-			decision, _, err := moderator.ReviewText(bgCtx, content)
-			if err != nil && logger != nil {
-				logger.Error("moderation text review failed", zap.Error(err), zap.String("post_id", postID.String()))
+			if err == nil {
+				return p, nil
 			}
-
-			// If text passes, check first image (if any)
-			if decision == moderation.DecisionPass && len(mediaURLs) > 0 {
-				imgDecision, _, imgErr := moderator.ReviewImage(bgCtx, mediaURLs[0])
-				if imgErr != nil && logger != nil {
-					logger.Error("moderation image review failed", zap.Error(imgErr), zap.String("post_id", postID.String()))
-				}
-				if imgDecision == moderation.DecisionBlock {
-					decision = moderation.DecisionBlock
-				}
+			if s.logger != nil {
+				s.logger.Error("publish post.created failed, falling back to local moderation",
+					zap.Error(err),
+					zap.String("post_id", p.ID.String()),
+				)
 			}
-
-			status := post.ModerationApproved
-			if decision == moderation.DecisionBlock {
-				status = post.ModerationBlocked
-			}
-			if err := repo.UpdateModerationStatus(bgCtx, postID, status); err != nil && logger != nil {
-				logger.Error("failed to update moderation_status", zap.Error(err), zap.String("post_id", postID.String()))
-			}
-		}()
+		}
+		s.moderatePostAsync(p)
 	} else {
-		// No moderator: auto-approve immediately
+		// No moderation backend configured: approve immediately.
 		p.ModerationStatus = post.ModerationApproved
 		if err := s.postRepo.UpdateModerationStatus(ctx, p.ID, post.ModerationApproved); err != nil {
 			return nil, apperr.Wrap(apperr.CodeInternalError, "更新帖子状态失败", err)
@@ -194,6 +159,75 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 	}
 
 	return p, nil
+}
+
+func (s *PostService) moderatePostAsync(p *post.Post) {
+	if s.moderator == nil {
+		return
+	}
+
+	postID := p.ID
+	content := p.Content
+	mediaURLs := append([]string(nil), p.MediaURLs...)
+	authorID := p.AuthorID
+	moderator := s.moderator
+	repo := s.postRepo
+	logger := s.logger
+	publisher := s.publisher
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil && logger != nil {
+				logger.Error("moderation goroutine panic", zap.Any("recover", r))
+			}
+		}()
+
+		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		decision, _, err := moderator.ReviewText(bgCtx, content)
+		if err != nil {
+			if logger != nil {
+				logger.Error("moderation text review failed", zap.Error(err), zap.String("post_id", postID.String()))
+			}
+			decision = moderation.DecisionPass
+		}
+
+		if decision == moderation.DecisionPass && len(mediaURLs) > 0 {
+			imgDecision, _, imgErr := moderator.ReviewImage(bgCtx, mediaURLs[0])
+			if imgErr != nil {
+				if logger != nil {
+					logger.Error("moderation image review failed", zap.Error(imgErr), zap.String("post_id", postID.String()))
+				}
+			} else if imgDecision == moderation.DecisionBlock {
+				decision = moderation.DecisionBlock
+			}
+		}
+
+		status := post.ModerationApproved
+		pubStatus := "approved"
+		if decision == moderation.DecisionBlock {
+			status = post.ModerationBlocked
+			pubStatus = "blocked"
+		}
+
+		if err := repo.UpdateModerationStatus(bgCtx, postID, status); err != nil {
+			if logger != nil {
+				logger.Error("failed to update moderation_status", zap.Error(err), zap.String("post_id", postID.String()))
+			}
+			return
+		}
+
+		if publisher != nil {
+			if err := publisher.Publish(bgCtx, streams.EventPostModerated, streams.PostModeratedPayload{
+				PostID:   postID.String(),
+				AuthorID: authorID.String(),
+				Status:   pubStatus,
+			}); err != nil && logger != nil {
+				logger.Error("publish post.moderated failed", zap.Error(err), zap.String("post_id", postID.String()))
+			}
+		}
+	}()
 }
 
 // UpdatePostInput represents input for updating a post

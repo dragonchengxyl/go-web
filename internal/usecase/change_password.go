@@ -41,6 +41,7 @@ func (s *UserService) ChangePassword(ctx context.Context, userID uuid.UUID, inpu
 	}
 
 	u.PasswordHash = newHash
+	u.ForcePasswordReset = false
 	u.UpdatedAt = time.Now()
 	if err := s.userRepo.Update(ctx, u); err != nil {
 		return apperr.Wrap(apperr.CodeInternalError, "更新密码失败", err)

@@ -10,23 +10,25 @@ import (
 
 // Claims represents JWT claims
 type Claims struct {
-	UserID      string   `json:"user_id"`
-	Role        string   `json:"role"`
-	Permissions []string `json:"permissions"`
-	JTI         string   `json:"jti"`
+	UserID             string   `json:"user_id"`
+	Role               string   `json:"role"`
+	Permissions        []string `json:"permissions"`
+	JTI                string   `json:"jti"`
+	ForcePasswordReset bool     `json:"force_password_reset"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken generates a JWT token
-func GenerateToken(userID, role string, permissions []string, secret string, expiry time.Duration) (string, string, error) {
+func GenerateToken(userID, role string, permissions []string, forcePasswordReset bool, secret string, expiry time.Duration) (string, string, error) {
 	jti := uuid.New().String()
 	now := time.Now()
 
 	claims := &Claims{
-		UserID:      userID,
-		Role:        role,
-		Permissions: permissions,
-		JTI:         jti,
+		UserID:             userID,
+		Role:               role,
+		Permissions:        permissions,
+		JTI:                jti,
+		ForcePasswordReset: forcePasswordReset,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
