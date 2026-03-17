@@ -25,6 +25,7 @@ import {
   GroupMember,
   Post,
 } from "@/lib/api-client";
+import { useAssistantPageContext } from "@/contexts/assistant-page-context";
 import { Button } from "@/components/ui/button";
 import { PostCard } from "@/components/post/post-card";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,8 +54,15 @@ function hashGradient(str: string): string {
   return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
 }
 
+function truncateForAssistant(value: string, limit: number) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit).trim()}...`;
+}
+
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { setPageContext, clearPageContext } = useAssistantPageContext();
   const [sortMode, setSortMode] = useState<"latest" | "hot">("latest");
   const [activeTag, setActiveTag] = useState("");
   const [group, setGroup] = useState<Group | null>(null);
@@ -150,6 +158,61 @@ export default function GroupDetailPage() {
       .then(setFeaturedPost)
       .catch(() => setFeaturedPost(null));
   }, [group?.featured_post_id]);
+
+  useEffect(() => {
+    if (!group) return;
+
+    const fields: Record<string, string> = {
+      group_privacy: group.privacy === "private" ? "私密" : "公开",
+      member_count: String(group.member_count),
+      post_count: String(group.post_count),
+      is_member: isMember ? "已加入" : "未加入",
+    };
+    if (group.tags?.length) {
+      fields.group_tags = group.tags.join("、");
+    }
+    if (group.description?.trim()) {
+      fields.group_description = truncateForAssistant(group.description, 200);
+    }
+    if (group.rules?.trim()) {
+      fields.group_rules = truncateForAssistant(group.rules, 160);
+    }
+    if (group.announcement?.trim()) {
+      fields.group_announcement = truncateForAssistant(group.announcement, 160);
+    }
+    if (featuredPost) {
+      fields.featured_post = truncateForAssistant(
+        featuredPost.title || featuredPost.content || "",
+        80,
+      );
+    }
+    if (highlights.length > 0) {
+      fields.highlights_count = String(highlights.length);
+    }
+
+    setPageContext({
+      path: `/groups/${group.id}`,
+      kind: "group_detail",
+      title: `圈子详情：${group.name}`,
+      summary: isMember
+        ? "用户当前正在浏览一个已加入的圈子，适合提供圈内互动、发帖和继续探索建议。"
+        : "用户当前正在浏览一个圈子详情页，适合帮助判断是否加入、该先看什么、发什么内容更合适。",
+      prompt_hints: isMember
+        ? [
+            "这个圈子最近适合我发什么内容？",
+            "帮我总结一下这个圈子的氛围和规则",
+            "如果我想在这里发帖，标题和标签该怎么写？",
+          ]
+        : [
+            "这个圈子适合我加入吗？",
+            "加入前我应该先看这个圈子的哪些内容？",
+            "帮我快速总结一下这个圈子的氛围和规则",
+          ],
+      fields,
+    });
+  }, [clearPageContext, featuredPost, group, highlights.length, isMember, setPageContext]);
+
+  useEffect(() => () => clearPageContext(), [clearPageContext]);
 
   const handleJoin = async () => {
     if (!id) return;

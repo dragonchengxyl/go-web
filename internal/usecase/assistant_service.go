@@ -1215,6 +1215,16 @@ func detectAssistantIntent(query string, pageContext *AssistantPageContext) assi
 			if strings.Contains(query, "润色") || strings.Contains(query, "改写") || strings.Contains(query, "标题") || strings.Contains(query, "标签") || strings.Contains(query, "公开") {
 				scores[assistantIntentPosting] += 2
 			}
+		case "group_detail":
+			scores[assistantIntentGroups] += 4
+			if strings.Contains(query, "加入") || strings.Contains(query, "适合") || strings.Contains(query, "圈子") || strings.Contains(query, "群规") || strings.Contains(query, "发什么") {
+				scores[assistantIntentGroups] += 2
+			}
+		case "event_detail":
+			scores[assistantIntentEvents] += 4
+			if strings.Contains(query, "参加") || strings.Contains(query, "报名") || strings.Contains(query, "适合") || strings.Contains(query, "准备") || strings.Contains(query, "注意") {
+				scores[assistantIntentEvents] += 2
+			}
 		}
 	}
 
@@ -1588,10 +1598,44 @@ func assistantPageFieldLabel(key string) string {
 		return "当前草稿标签"
 	case "group_name":
 		return "目标圈子"
+	case "group_privacy":
+		return "圈子可见性"
+	case "member_count":
+		return "圈子成员数"
+	case "post_count":
+		return "圈子帖子数"
+	case "group_tags":
+		return "圈子标签"
+	case "group_description":
+		return "圈子简介"
+	case "group_rules":
+		return "圈子规则"
+	case "group_announcement":
+		return "圈子公告"
+	case "featured_post":
+		return "圈子精选内容"
+	case "highlights_count":
+		return "圈子精选数量"
+	case "is_member":
+		return "当前用户是否已加入"
 	case "visibility":
 		return "当前可见性"
 	case "ai_generated":
 		return "是否勾选 AI 生成标记"
+	case "event_status":
+		return "活动状态"
+	case "event_time":
+		return "活动时间"
+	case "event_location":
+		return "活动地点"
+	case "event_attendees":
+		return "活动参与人数"
+	case "event_tags":
+		return "活动标签"
+	case "event_description":
+		return "活动简介"
+	case "has_attended":
+		return "当前用户是否已报名"
 	default:
 		return key
 	}

@@ -14,10 +14,18 @@ import {
   Bookmark,
 } from "lucide-react";
 import { apiClient, Event, EventAttendee } from "@/lib/api-client";
+import { useAssistantPageContext } from "@/contexts/assistant-page-context";
 import { Button } from "@/components/ui/button";
+
+function truncateForAssistant(value: string, limit: number) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit).trim()}...`;
+}
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { setPageContext, clearPageContext } = useAssistantPageContext();
   const [event, setEvent] = useState<Event | null>(null);
   const [attendees, setAttendees] = useState<EventAttendee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,6 +105,67 @@ export default function EventDetailPage() {
       setBookmarkLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!event) return;
+
+    const start = new Date(event.start_time);
+    const end = new Date(event.end_time);
+    const timeText = `${start.toLocaleDateString("zh-CN")} ${start.toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })} - ${end.toLocaleTimeString("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}`;
+
+    const fields: Record<string, string> = {
+      event_status:
+        event.status === "published"
+          ? "报名中"
+          : event.status === "cancelled"
+            ? "已取消"
+            : event.status === "completed"
+              ? "已结束"
+              : "草稿",
+      event_time: timeText,
+      event_location: event.is_online ? "线上活动" : event.location || "未填写地点",
+      event_attendees:
+        event.max_capacity > 0
+          ? `${event.attendee_count} / ${event.max_capacity}`
+          : String(event.attendee_count),
+      has_attended: hasAttended ? "已报名" : "未报名",
+    };
+    if (event.tags?.length) {
+      fields.event_tags = event.tags.join("、");
+    }
+    if (event.description?.trim()) {
+      fields.event_description = truncateForAssistant(event.description, 220);
+    }
+
+    setPageContext({
+      path: `/events/${event.id}`,
+      kind: "event_detail",
+      title: `活动详情：${event.title}`,
+      summary: hasAttended
+        ? "用户当前正在查看一个自己已经报名的活动，适合提供行前准备、注意事项和快速总结。"
+        : "用户当前正在查看活动详情，适合帮助判断是否参加、总结关键信息和提示注意事项。",
+      prompt_hints: hasAttended
+        ? [
+            "帮我快速总结一下这个活动的关键信息",
+            "参加这个活动前我需要准备什么？",
+            "根据活动信息，帮我列一个注意事项清单",
+          ]
+        : [
+            "这个活动适合新手参加吗？",
+            "帮我快速总结一下这个活动值不值得去",
+            "如果我报名参加，需要提前注意什么？",
+          ],
+      fields,
+    });
+  }, [event, hasAttended, setPageContext]);
+
+  useEffect(() => () => clearPageContext(), [clearPageContext]);
 
   if (loading) {
     return (

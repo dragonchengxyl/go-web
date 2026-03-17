@@ -92,4 +92,20 @@ func TestDetectAssistantIntentWithPageContext(t *testing.T) {
 	if got := detectAssistantIntent("帮我润色一下", pageContext); got != assistantIntentPosting {
 		t.Fatalf("detectAssistantIntent with post_create context = %q, want %q", got, assistantIntentPosting)
 	}
+
+	groupContext := &AssistantPageContext{
+		Kind:  "group_detail",
+		Title: "兽设灵感交流局",
+	}
+	if got := detectAssistantIntent("这个适合我加入吗", groupContext); got != assistantIntentGroups {
+		t.Fatalf("detectAssistantIntent with group_detail context = %q, want %q", got, assistantIntentGroups)
+	}
+
+	eventContext := &AssistantPageContext{
+		Kind:  "event_detail",
+		Title: "周末线下聚会",
+	}
+	if got := detectAssistantIntent("我要不要参加", eventContext); got != assistantIntentEvents {
+		t.Fatalf("detectAssistantIntent with event_detail context = %q, want %q", got, assistantIntentEvents)
+	}
 }
