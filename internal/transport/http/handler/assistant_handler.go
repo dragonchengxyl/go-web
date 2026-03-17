@@ -42,6 +42,7 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 	var req struct {
 		ConversationID string                         `json:"conversation_id"`
 		Messages       []usecase.AssistantChatMessage `json:"messages" binding:"required"`
+		PageContext    *usecase.AssistantPageContext  `json:"page_context"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
@@ -109,6 +110,7 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 		ctx,
 		userID,
 		streamMessages,
+		req.PageContext,
 		func(meta usecase.AssistantMeta) error {
 			if persistedConversationID != uuid.Nil {
 				meta.ConversationID = persistedConversationID.String()

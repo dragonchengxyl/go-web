@@ -142,10 +142,22 @@ export interface AssistantChatMessage {
   created_at?: string;
 }
 
+export interface AssistantPageContextPayload {
+  path?: string;
+  kind: string;
+  title: string;
+  summary?: string;
+  prompt_hints?: string[];
+  fields?: Record<string, string>;
+}
+
 export interface AssistantMeta {
   query: string;
   provider: string;
   fallback: boolean;
+  intent?: string;
+  intent_label?: string;
+  source_counts?: Record<string, number>;
   conversation_id?: string;
   cards: AssistantCard[];
 }
@@ -1042,6 +1054,7 @@ class ApiClient {
     messages: AssistantChatMessage[],
     handlers: AssistantStreamHandlers = {},
     conversationId?: string,
+    pageContext?: AssistantPageContextPayload,
   ) {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -1057,6 +1070,7 @@ class ApiClient {
       body: JSON.stringify({
         conversation_id: conversationId,
         messages: messages.map(({ role, content }) => ({ role, content })),
+        page_context: pageContext,
       }),
       signal: handlers.signal,
     });

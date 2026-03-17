@@ -28,6 +28,16 @@ type AssistantChatMessage struct {
 	CreatedAt time.Time       `json:"created_at,omitempty"`
 }
 
+// AssistantPageContext carries non-persisted page-level hints for the current request.
+type AssistantPageContext struct {
+	Path        string            `json:"path,omitempty"`
+	Kind        string            `json:"kind"`
+	Title       string            `json:"title"`
+	Summary     string            `json:"summary,omitempty"`
+	PromptHints []string          `json:"prompt_hints,omitempty"`
+	Fields      map[string]string `json:"fields,omitempty"`
+}
+
 // AssistantCard is a structured recommendation displayed next to the assistant reply.
 type AssistantCard = assistantdomain.Card
 
@@ -36,9 +46,24 @@ type AssistantMeta struct {
 	Query          string          `json:"query"`
 	Provider       string          `json:"provider"`
 	Fallback       bool            `json:"fallback"`
+	Intent         string          `json:"intent,omitempty"`
+	IntentLabel    string          `json:"intent_label,omitempty"`
+	SourceCounts   map[string]int  `json:"source_counts,omitempty"`
 	ConversationID string          `json:"conversation_id,omitempty"`
 	Cards          []AssistantCard `json:"cards"`
 }
+
+type assistantIntent string
+
+const (
+	assistantIntentGeneral    assistantIntent = "general"
+	assistantIntentOnboarding assistantIntent = "onboarding"
+	assistantIntentGroups     assistantIntent = "groups"
+	assistantIntentEvents     assistantIntent = "events"
+	assistantIntentPosting    assistantIntent = "posting"
+	assistantIntentUsers      assistantIntent = "users"
+	assistantIntentContent    assistantIntent = "content"
+)
 
 // AssistantService powers the site AI helper.
 type AssistantService struct {
@@ -95,6 +120,7 @@ func (s *AssistantService) StreamReply(
 	ctx context.Context,
 	userID uuid.UUID,
 	messages []AssistantChatMessage,
+	pageContext *AssistantPageContext,
 	onMeta func(AssistantMeta) error,
 	onToken func(string) error,
 ) error {
@@ -112,7 +138,7 @@ func (s *AssistantService) StreamReply(
 		return apperr.BadRequest("请输入你想咨询的问题")
 	}
 
-	meta, contextText, fallbackAnswer := s.buildPromptContext(ctx, userID, latestUser, settings)
+	meta, contextText, fallbackAnswer := s.buildPromptContext(ctx, userID, latestUser, pageContext, settings)
 	if onMeta != nil {
 		if err := onMeta(meta); err != nil {
 			return err
@@ -309,18 +335,26 @@ func (s *AssistantService) GetConversation(ctx context.Context, userID, conversa
 	return conv, items, total, nil
 }
 
-func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.UUID, query string, settings *assistantdomain.Settings) (AssistantMeta, string, string) {
-	cards := s.collectCards(ctx, query, settings)
+func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.UUID, query string, pageContext *AssistantPageContext, settings *assistantdomain.Settings) (AssistantMeta, string, string) {
+	intent := detectAssistantIntent(query, pageContext)
+	cards := s.collectCards(ctx, query, intent, settings)
 	meta := AssistantMeta{
-		Query:    query,
-		Provider: s.cfg.Provider,
-		Fallback: s.llmClient == nil || !s.llmClient.Configured(),
-		Cards:    cards,
+		Query:        query,
+		Provider:     s.cfg.Provider,
+		Fallback:     s.llmClient == nil || !s.llmClient.Configured(),
+		Intent:       string(intent),
+		IntentLabel:  assistantIntentDisplayLabel(intent),
+		SourceCounts: assistantSourceCounts(cards),
+		Cards:        cards,
 	}
 
 	var contextParts []string
 	contextParts = append(contextParts, fmt.Sprintf("当前日期: %s", time.Now().Format("2006-01-02")))
+	contextParts = append(contextParts, fmt.Sprintf("用户当前问题类型: %s", assistantIntentPromptLabel(intent)))
 	contextParts = append(contextParts, siteOverviewContext())
+	if pageContextText := buildAssistantPageContext(pageContext); pageContextText != "" {
+		contextParts = append(contextParts, pageContextText)
+	}
 	if bookmarkContext := s.buildBookmarkContext(ctx, userID); bookmarkContext != "" {
 		contextParts = append(contextParts, bookmarkContext)
 	}
@@ -349,7 +383,7 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.U
 	return meta, strings.Join(contextParts, "\n\n"), buildFallbackAnswer(settings.PersonaName, query, cards)
 }
 
-func (s *AssistantService) collectCards(ctx context.Context, query string, settings *assistantdomain.Settings) []AssistantCard {
+func (s *AssistantService) collectCards(ctx context.Context, query string, intent assistantIntent, settings *assistantdomain.Settings) []AssistantCard {
 	maxItems := settings.MaxContextItems
 	if maxItems <= 0 {
 		maxItems = 6
@@ -374,28 +408,28 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, setti
 			seen[item.Href] = struct{}{}
 			scored = append(scored, scoredCard{
 				card:  item,
-				score: scoreAssistantCard(item, query),
+				score: scoreAssistantCard(item, query, intent),
 			})
 		}
 	}
 
 	if settings.IncludePages {
-		appendUnique(recommendPageCards(query)...)
+		appendUnique(recommendPageCards()...)
 	}
 	if settings.IncludePosts {
-		appendUnique(s.collectPostCards(ctx, query)...)
+		appendUnique(s.collectPostCards(ctx, query, assistantCandidateLimit(intent, "post", maxItems))...)
 	}
 	if settings.IncludeUsers {
-		appendUnique(s.collectUserCards(ctx, query)...)
+		appendUnique(s.collectUserCards(ctx, query, assistantCandidateLimit(intent, "user", maxItems))...)
 	}
 	if settings.IncludeTags {
-		appendUnique(s.collectTagCards(ctx, query)...)
+		appendUnique(s.collectTagCards(ctx, query, assistantCandidateLimit(intent, "tag", maxItems))...)
 	}
 	if settings.IncludeGroups {
-		appendUnique(s.collectGroupCards(ctx, query)...)
+		appendUnique(s.collectGroupCards(ctx, query, assistantCandidateLimit(intent, "group", maxItems))...)
 	}
 	if settings.IncludeEvents {
-		appendUnique(s.collectEventCards(ctx, query)...)
+		appendUnique(s.collectEventCards(ctx, query, assistantCandidateLimit(intent, "event", maxItems))...)
 	}
 
 	sort.SliceStable(scored, func(i, j int) bool {
@@ -405,11 +439,17 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, setti
 		return scored[i].score > scored[j].score
 	})
 
+	selectedByKind := make(map[string]int, len(scored))
 	for _, item := range scored {
 		if len(cards) >= maxItems {
 			break
 		}
+		kindLimit := assistantFinalKindLimit(intent, item.card.Kind, maxItems)
+		if kindLimit > 0 && selectedByKind[item.card.Kind] >= kindLimit {
+			continue
+		}
 		cards = append(cards, item.card)
+		selectedByKind[item.card.Kind]++
 	}
 
 	for i := range cards {
@@ -419,12 +459,15 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, setti
 	return cards
 }
 
-func (s *AssistantService) collectUserCards(ctx context.Context, query string) []AssistantCard {
+func (s *AssistantService) collectUserCards(ctx context.Context, query string, limit int) []AssistantCard {
 	if s.userService == nil {
 		return nil
 	}
+	if limit <= 0 {
+		limit = 2
+	}
 
-	users, err := s.userService.SearchUsers(ctx, query, 2)
+	users, err := s.userService.SearchUsers(ctx, query, limit)
 	if err != nil || len(users) == 0 {
 		return nil
 	}
@@ -470,20 +513,23 @@ func (s *AssistantService) collectUserCards(ctx context.Context, query string) [
 	return cards
 }
 
-func (s *AssistantService) collectTagCards(ctx context.Context, query string) []AssistantCard {
+func (s *AssistantService) collectTagCards(ctx context.Context, query string, limit int) []AssistantCard {
 	if s.postService == nil {
 		return nil
 	}
+	if limit <= 0 {
+		limit = 2
+	}
 
-	tags, err := s.postService.GetHotTags(ctx, 12)
+	tags, err := s.postService.GetHotTags(ctx, max(12, limit*4))
 	if err != nil || len(tags) == 0 {
 		return nil
 	}
 
 	query = strings.TrimSpace(strings.ToLower(query))
-	cards := make([]AssistantCard, 0, 2)
+	cards := make([]AssistantCard, 0, limit)
 	for _, tag := range tags {
-		if len(cards) >= 2 {
+		if len(cards) >= limit {
 			break
 		}
 		if query != "" && !strings.Contains(strings.ToLower(tag), query) && !strings.Contains(query, strings.ToLower(tag)) {
@@ -501,7 +547,7 @@ func (s *AssistantService) collectTagCards(ctx context.Context, query string) []
 	}
 
 	if len(cards) == 0 {
-		for _, tag := range tags[:min(2, len(tags))] {
+		for _, tag := range tags[:min(limit, len(tags))] {
 			cards = append(cards, AssistantCard{
 				Kind:    "tag",
 				Title:   "#" + tag,
@@ -516,14 +562,17 @@ func (s *AssistantService) collectTagCards(ctx context.Context, query string) []
 	return cards
 }
 
-func (s *AssistantService) collectPostCards(ctx context.Context, query string) []AssistantCard {
+func (s *AssistantService) collectPostCards(ctx context.Context, query string, limit int) []AssistantCard {
 	if s.postService == nil {
 		return nil
 	}
+	if limit <= 0 {
+		limit = 2
+	}
 
-	posts, err := s.postService.SearchPosts(ctx, query, 2)
+	posts, err := s.postService.SearchPosts(ctx, query, limit)
 	if err != nil || len(posts) == 0 {
-		posts, _, _ = s.postService.ListExplore(ctx, 1, 2, "")
+		posts, _, _ = s.postService.ListExplore(ctx, 1, limit, "")
 	}
 
 	cards := make([]AssistantCard, 0, len(posts))
@@ -553,9 +602,12 @@ func (s *AssistantService) collectPostCards(ctx context.Context, query string) [
 	return cards
 }
 
-func (s *AssistantService) collectGroupCards(ctx context.Context, query string) []AssistantCard {
+func (s *AssistantService) collectGroupCards(ctx context.Context, query string, limit int) []AssistantCard {
 	if s.groupService == nil {
 		return nil
+	}
+	if limit <= 0 {
+		limit = 2
 	}
 
 	privacy := group.GroupPrivacyPublic
@@ -563,13 +615,13 @@ func (s *AssistantService) collectGroupCards(ctx context.Context, query string) 
 		Privacy:  &privacy,
 		Search:   strings.TrimSpace(query),
 		Page:     1,
-		PageSize: 2,
+		PageSize: limit,
 	})
 	if err != nil || len(groups) == 0 {
 		groups, _, _ = s.groupService.ListGroups(ctx, ListGroupsInput{
 			Privacy:  &privacy,
 			Page:     1,
-			PageSize: 2,
+			PageSize: limit,
 		})
 	}
 
@@ -588,16 +640,19 @@ func (s *AssistantService) collectGroupCards(ctx context.Context, query string) 
 	return cards
 }
 
-func (s *AssistantService) collectEventCards(ctx context.Context, query string) []AssistantCard {
+func (s *AssistantService) collectEventCards(ctx context.Context, query string, limit int) []AssistantCard {
 	if s.eventService == nil {
 		return nil
+	}
+	if limit <= 0 {
+		limit = 2
 	}
 
 	status := event.EventStatusPublished
 	events, _, err := s.eventService.ListEvents(ctx, ListEventsInput{
 		Status:   &status,
 		Page:     1,
-		PageSize: 6,
+		PageSize: max(limit*2, 6),
 	})
 	if err != nil || len(events) == 0 {
 		return nil
@@ -607,8 +662,8 @@ func (s *AssistantService) collectEventCards(ctx context.Context, query string) 
 	if len(filtered) == 0 {
 		filtered = events
 	}
-	if len(filtered) > 2 {
-		filtered = filtered[:2]
+	if len(filtered) > limit {
+		filtered = filtered[:limit]
 	}
 
 	cards := make([]AssistantCard, 0, len(filtered))
@@ -793,8 +848,8 @@ func filterEvents(items []*event.Event, query string) []*event.Event {
 	return filtered
 }
 
-func recommendPageCards(query string) []AssistantCard {
-	pages := []AssistantCard{
+func recommendPageCards() []AssistantCard {
+	return []AssistantCard{
 		{
 			Kind:    "page",
 			Title:   "发现页",
@@ -850,54 +905,6 @@ func recommendPageCards(query string) []AssistantCard {
 			Source:  "站内固定导航",
 		},
 	}
-
-	type keywordRule struct {
-		keywords []string
-		indexes  []int
-	}
-	rules := []keywordRule{
-		{keywords: []string{"发帖", "发布", "创作", "作品", "动态"}, indexes: []int{2, 5}},
-		{keywords: []string{"圈子", "社群", "同好", "群组"}, indexes: []int{3, 0}},
-		{keywords: []string{"活动", "聚会", "线下", "线上"}, indexes: []int{4, 0}},
-		{keywords: []string{"第一次", "新手", "怎么逛", "先看"}, indexes: []int{0, 1}},
-		{keywords: []string{"数据", "创作者", "收益", "打赏"}, indexes: []int{5, 2}},
-	}
-
-	query = strings.ToLower(strings.TrimSpace(query))
-	selected := make([]AssistantCard, 0, 2)
-	seen := map[int]struct{}{}
-	appendPage := func(idx int) {
-		if len(selected) >= 2 {
-			return
-		}
-		if _, ok := seen[idx]; ok {
-			return
-		}
-		seen[idx] = struct{}{}
-		selected = append(selected, pages[idx])
-	}
-
-	for _, rule := range rules {
-		matched := false
-		for _, keyword := range rule.keywords {
-			if strings.Contains(query, keyword) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			continue
-		}
-		for _, idx := range rule.indexes {
-			appendPage(idx)
-		}
-	}
-
-	if len(selected) == 0 {
-		appendPage(0)
-		appendPage(3)
-	}
-	return selected
 }
 
 func (s *AssistantService) defaultSettings() *assistantdomain.Settings {
@@ -1065,8 +1072,10 @@ func eventRecommendationReason(e *event.Event, query string) string {
 	return "这是近期可参加的公开活动"
 }
 
-func scoreAssistantCard(card AssistantCard, query string) int {
+func scoreAssistantCard(card AssistantCard, query string, intent assistantIntent) int {
 	score := kindBaseScore(card.Kind)
+	score += assistantIntentKindBoost(intent, card.Kind)
+	score += pageIntentBoost(intent, card)
 
 	fullQuery := strings.TrimSpace(strings.ToLower(query))
 	if fullQuery == "" {
@@ -1104,7 +1113,7 @@ func scoreAssistantCard(card AssistantCard, query string) int {
 		}
 	}
 
-	score += kindIntentBoost(card.Kind, fullQuery)
+	score += kindKeywordBoost(card.Kind, fullQuery)
 	return score
 }
 
@@ -1127,7 +1136,7 @@ func kindBaseScore(kind string) int {
 	}
 }
 
-func kindIntentBoost(kind, query string) int {
+func kindKeywordBoost(kind, query string) int {
 	type rule struct {
 		kind     string
 		keywords []string
@@ -1156,6 +1165,436 @@ func kindIntentBoost(kind, query string) int {
 		}
 	}
 	return boost
+}
+
+func detectAssistantIntent(query string, pageContext *AssistantPageContext) assistantIntent {
+	query = strings.TrimSpace(strings.ToLower(query))
+	if query == "" {
+		if pageContext != nil && pageContext.Kind == "post_create" {
+			return assistantIntentPosting
+		}
+		return assistantIntentGeneral
+	}
+
+	type rule struct {
+		intent   assistantIntent
+		score    int
+		keywords []string
+	}
+
+	rules := []rule{
+		{intent: assistantIntentOnboarding, score: 4, keywords: []string{"第一次", "新手", "刚来", "先逛", "先看", "怎么玩", "怎么逛", "从哪里开始", "上手"}},
+		{intent: assistantIntentGroups, score: 5, keywords: []string{"圈子", "社群", "群组", "同好群", "加群", "社区"}},
+		{intent: assistantIntentEvents, score: 5, keywords: []string{"活动", "聚会", "报名", "线下", "线上活动", "漫展"}},
+		{intent: assistantIntentPosting, score: 5, keywords: []string{"发帖", "发布", "发动态", "创作", "写帖子", "发作品", "上传图片", "标题", "标签怎么选"}},
+		{intent: assistantIntentUsers, score: 5, keywords: []string{"用户", "创作者", "关注谁", "关注什么人", "作者", "找人", "推荐关注"}},
+		{intent: assistantIntentContent, score: 4, keywords: []string{"帖子", "动态", "内容", "热门", "有什么可看", "推荐内容", "标签", "话题"}},
+	}
+
+	scores := map[assistantIntent]int{
+		assistantIntentGeneral: 1,
+	}
+	for _, rule := range rules {
+		for _, keyword := range rule.keywords {
+			if strings.Contains(query, keyword) {
+				scores[rule.intent] += rule.score
+			}
+		}
+	}
+
+	if strings.Contains(query, "推荐") {
+		scores[assistantIntentContent]++
+	}
+	if strings.Contains(query, "哪里") || strings.Contains(query, "入口") {
+		scores[assistantIntentOnboarding]++
+	}
+	if pageContext != nil {
+		switch pageContext.Kind {
+		case "post_create":
+			scores[assistantIntentPosting] += 4
+			if strings.Contains(query, "润色") || strings.Contains(query, "改写") || strings.Contains(query, "标题") || strings.Contains(query, "标签") || strings.Contains(query, "公开") {
+				scores[assistantIntentPosting] += 2
+			}
+		}
+	}
+
+	order := []assistantIntent{
+		assistantIntentOnboarding,
+		assistantIntentGroups,
+		assistantIntentEvents,
+		assistantIntentPosting,
+		assistantIntentUsers,
+		assistantIntentContent,
+		assistantIntentGeneral,
+	}
+
+	best := assistantIntentGeneral
+	bestScore := 0
+	for _, intent := range order {
+		if scores[intent] > bestScore {
+			best = intent
+			bestScore = scores[intent]
+		}
+	}
+	return best
+}
+
+func assistantIntentPromptLabel(intent assistantIntent) string {
+	switch intent {
+	case assistantIntentOnboarding:
+		return "新用户导览，优先推荐上手入口和适合先逛的内容"
+	case assistantIntentGroups:
+		return "圈子探索，优先推荐相关圈子和对应入口"
+	case assistantIntentEvents:
+		return "活动探索，优先推荐近期相关活动和报名入口"
+	case assistantIntentPosting:
+		return "发帖或创作帮助，优先推荐发布入口、相关帖子和标签"
+	case assistantIntentUsers:
+		return "找人或关注建议，优先推荐用户主页和相关内容"
+	case assistantIntentContent:
+		return "内容发现，优先推荐帖子、标签和可继续扩展浏览的入口"
+	default:
+		return "综合导览，优先给出最值得访问的站内入口和内容"
+	}
+}
+
+func assistantIntentDisplayLabel(intent assistantIntent) string {
+	switch intent {
+	case assistantIntentOnboarding:
+		return "新手导览"
+	case assistantIntentGroups:
+		return "圈子探索"
+	case assistantIntentEvents:
+		return "活动探索"
+	case assistantIntentPosting:
+		return "发帖帮助"
+	case assistantIntentUsers:
+		return "找人推荐"
+	case assistantIntentContent:
+		return "内容发现"
+	default:
+		return "综合导览"
+	}
+}
+
+func assistantCandidateLimit(intent assistantIntent, kind string, maxItems int) int {
+	base := max(3, maxItems)
+	switch intent {
+	case assistantIntentOnboarding:
+		switch kind {
+		case "page":
+			return max(base, 6)
+		case "group", "event":
+			return max(base, 4)
+		default:
+			return 2
+		}
+	case assistantIntentGroups:
+		switch kind {
+		case "group":
+			return max(base, 5)
+		case "user", "page":
+			return 3
+		default:
+			return 2
+		}
+	case assistantIntentEvents:
+		switch kind {
+		case "event":
+			return max(base, 5)
+		case "group", "page":
+			return 3
+		default:
+			return 2
+		}
+	case assistantIntentPosting:
+		switch kind {
+		case "page", "post", "tag":
+			return max(base, 4)
+		case "user":
+			return 3
+		default:
+			return 2
+		}
+	case assistantIntentUsers:
+		switch kind {
+		case "user":
+			return max(base, 5)
+		case "post", "group":
+			return 3
+		default:
+			return 2
+		}
+	case assistantIntentContent:
+		switch kind {
+		case "post":
+			return max(base, 5)
+		case "tag", "user":
+			return 3
+		default:
+			return 2
+		}
+	default:
+		switch kind {
+		case "page", "post", "group", "event":
+			return 3
+		default:
+			return 2
+		}
+	}
+}
+
+func assistantFinalKindLimit(intent assistantIntent, kind string, maxItems int) int {
+	switch intent {
+	case assistantIntentOnboarding:
+		switch kind {
+		case "page":
+			return min(3, maxItems)
+		case "group", "event":
+			return 2
+		default:
+			return 1
+		}
+	case assistantIntentGroups:
+		switch kind {
+		case "group":
+			return min(3, maxItems)
+		case "page", "user":
+			return 2
+		default:
+			return 1
+		}
+	case assistantIntentEvents:
+		switch kind {
+		case "event":
+			return min(3, maxItems)
+		case "page", "group":
+			return 2
+		default:
+			return 1
+		}
+	case assistantIntentPosting:
+		switch kind {
+		case "page", "post":
+			return min(3, maxItems)
+		case "tag":
+			return 2
+		default:
+			return 1
+		}
+	case assistantIntentUsers:
+		switch kind {
+		case "user":
+			return min(3, maxItems)
+		case "post", "group":
+			return 2
+		default:
+			return 1
+		}
+	case assistantIntentContent:
+		switch kind {
+		case "post":
+			return min(3, maxItems)
+		case "tag", "user":
+			return 2
+		default:
+			return 1
+		}
+	default:
+		switch kind {
+		case "post", "group", "event", "user":
+			return 2
+		case "page", "tag":
+			return 1
+		default:
+			return 1
+		}
+	}
+}
+
+func assistantIntentKindBoost(intent assistantIntent, kind string) int {
+	switch intent {
+	case assistantIntentOnboarding:
+		switch kind {
+		case "page":
+			return 90
+		case "group", "event":
+			return 60
+		case "tag":
+			return 25
+		default:
+			return 0
+		}
+	case assistantIntentGroups:
+		switch kind {
+		case "group":
+			return 100
+		case "user":
+			return 35
+		case "page":
+			return 25
+		default:
+			return 0
+		}
+	case assistantIntentEvents:
+		switch kind {
+		case "event":
+			return 100
+		case "group":
+			return 30
+		case "page":
+			return 25
+		default:
+			return 0
+		}
+	case assistantIntentPosting:
+		switch kind {
+		case "page":
+			return 80
+		case "post":
+			return 70
+		case "tag":
+			return 55
+		case "user":
+			return 20
+		default:
+			return 0
+		}
+	case assistantIntentUsers:
+		switch kind {
+		case "user":
+			return 95
+		case "post":
+			return 45
+		case "group":
+			return 25
+		default:
+			return 0
+		}
+	case assistantIntentContent:
+		switch kind {
+		case "post":
+			return 95
+		case "tag":
+			return 55
+		case "user":
+			return 35
+		default:
+			return 0
+		}
+	default:
+		return 0
+	}
+}
+
+func pageIntentBoost(intent assistantIntent, card AssistantCard) int {
+	if card.Kind != "page" {
+		return 0
+	}
+	switch intent {
+	case assistantIntentOnboarding:
+		switch card.Href {
+		case "/explore", "/groups", "/events":
+			return 60
+		case "/feed":
+			return 35
+		default:
+			return 0
+		}
+	case assistantIntentPosting:
+		switch card.Href {
+		case "/posts/create":
+			return 80
+		case "/creator":
+			return 35
+		default:
+			return 0
+		}
+	case assistantIntentGroups:
+		if card.Href == "/groups" {
+			return 70
+		}
+	case assistantIntentEvents:
+		if card.Href == "/events" {
+			return 70
+		}
+	}
+	return 0
+}
+
+func assistantSourceCounts(cards []AssistantCard) map[string]int {
+	if len(cards) == 0 {
+		return nil
+	}
+	counts := make(map[string]int, len(cards))
+	for _, card := range cards {
+		if card.Kind == "" {
+			continue
+		}
+		counts[card.Kind]++
+	}
+	return counts
+}
+
+func buildAssistantPageContext(pageContext *AssistantPageContext) string {
+	if pageContext == nil {
+		return ""
+	}
+
+	var lines []string
+	if title := strings.TrimSpace(pageContext.Title); title != "" {
+		lines = append(lines, fmt.Sprintf("- 当前页面：%s", title))
+	}
+	if kind := strings.TrimSpace(pageContext.Kind); kind != "" {
+		lines = append(lines, fmt.Sprintf("- 页面场景：%s", kind))
+	}
+	if path := strings.TrimSpace(pageContext.Path); path != "" {
+		lines = append(lines, fmt.Sprintf("- 页面路径：%s", path))
+	}
+	if summary := strings.TrimSpace(pageContext.Summary); summary != "" {
+		lines = append(lines, fmt.Sprintf("- 页面说明：%s", summary))
+	}
+	if len(pageContext.PromptHints) > 0 {
+		lines = append(lines, fmt.Sprintf("- 当前页面适合的问题：%s", strings.Join(pageContext.PromptHints, "；")))
+	}
+	if len(pageContext.Fields) > 0 {
+		keys := make([]string, 0, len(pageContext.Fields))
+		for key := range pageContext.Fields {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			value := strings.TrimSpace(pageContext.Fields[key])
+			if value == "" {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("- %s：%s", assistantPageFieldLabel(key), value))
+		}
+	}
+
+	if len(lines) == 0 {
+		return ""
+	}
+	return "当前页面上下文：\n" + strings.Join(lines, "\n")
+}
+
+func assistantPageFieldLabel(key string) string {
+	switch key {
+	case "draft_title":
+		return "当前草稿标题"
+	case "draft_content":
+		return "当前草稿内容"
+	case "draft_tags":
+		return "当前草稿标签"
+	case "group_name":
+		return "目标圈子"
+	case "visibility":
+		return "当前可见性"
+	case "ai_generated":
+		return "是否勾选 AI 生成标记"
+	default:
+		return key
+	}
 }
 
 func queryTokens(query string) []string {

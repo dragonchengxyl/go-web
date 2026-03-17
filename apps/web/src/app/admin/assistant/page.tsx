@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Loader2, Save, Sparkles } from "lucide-react";
-import { apiClient, AssistantSettings } from "@/lib/api-client";
+import { apiClient, AssistantMeta, AssistantSettings } from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,43 @@ const defaultSettings: AssistantSettings = {
   include_groups: true,
   include_events: true,
 };
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+
+const SOURCE_KIND_LABELS: Record<string, string> = {
+  page: "页面",
+  post: "帖子",
+  user: "用户",
+  tag: "标签",
+  group: "圈子",
+  event: "活动",
+};
+
+function parseSSEBlock(block: string): { event: string; data: string } | null {
+  const lines = block.split("\n");
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trim());
+    }
+  }
+
+  if (dataLines.length === 0) return null;
+  return { event, data: dataLines.join("\n") };
+}
+
+function formatSourceCounts(counts?: Record<string, number>) {
+  if (!counts) return "";
+  return Object.entries(counts)
+    .sort(([kindA], [kindB]) => kindA.localeCompare(kindB))
+    .map(([kind, count]) => `${SOURCE_KIND_LABELS[kind] || kind}×${count}`)
+    .join(" · ");
+}
 
 function ToggleRow({
   label,
@@ -56,6 +93,11 @@ export default function AdminAssistantPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AssistantSettings>(defaultSettings);
   const [message, setMessage] = useState("");
+  const [diagnosticPrompt, setDiagnosticPrompt] = useState("我第一次来，先逛哪里？");
+  const [diagnosticMeta, setDiagnosticMeta] = useState<AssistantMeta | null>(null);
+  const [diagnosticReply, setDiagnosticReply] = useState("");
+  const [diagnosticError, setDiagnosticError] = useState("");
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
 
   const { data, isLoading } = useQuery<AssistantSettings>({
     queryKey: ["admin-assistant-settings"],
@@ -101,6 +143,70 @@ export default function AdminAssistantPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     saveMutation.mutate(form);
+  }
+
+  async function runDiagnostic() {
+    const prompt = diagnosticPrompt.trim();
+    if (!prompt || diagnosticLoading) return;
+
+    setDiagnosticLoading(true);
+    setDiagnosticMeta(null);
+    setDiagnosticReply("");
+    setDiagnosticError("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/assistant/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error("诊断请求失败，请检查助手是否已启用");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        let marker = buffer.indexOf("\n\n");
+        for (; marker !== -1; marker = buffer.indexOf("\n\n")) {
+          const block = buffer.slice(0, marker);
+          buffer = buffer.slice(marker + 2);
+
+          const parsed = parseSSEBlock(block);
+          if (!parsed) continue;
+
+          const payload = JSON.parse(parsed.data);
+          switch (parsed.event) {
+            case "meta":
+              setDiagnosticMeta(payload as AssistantMeta);
+              break;
+            case "token":
+              setDiagnosticReply((prev) => `${prev}${payload.content ?? ""}`);
+              break;
+            case "error":
+              setDiagnosticError(payload.message || "诊断请求失败");
+              break;
+            default:
+              break;
+          }
+        }
+      }
+    } catch (err) {
+      setDiagnosticError(err instanceof Error ? err.message : "诊断请求失败");
+    } finally {
+      setDiagnosticLoading(false);
+    }
   }
 
   return (
@@ -247,6 +353,72 @@ export default function AdminAssistantPage() {
                 checked={form.include_events}
                 onChange={(next) => update("include_events", next)}
               />
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border-slate-200 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+            <CardHeader>
+              <CardTitle className="text-lg">诊断测试</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">测试问题</label>
+                <Textarea
+                  value={diagnosticPrompt}
+                  onChange={(e) => setDiagnosticPrompt(e.target.value)}
+                  rows={4}
+                  placeholder="例如：推荐几个适合新人的圈子"
+                />
+                <p className="text-xs text-slate-500">
+                  这里会以匿名请求调用助手，不写入后台管理员自己的会话历史。
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void runDiagnostic()}
+                  disabled={diagnosticLoading || !diagnosticPrompt.trim()}
+                  className="bg-slate-950 text-white hover:bg-slate-800"
+                >
+                  {diagnosticLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  运行诊断
+                </Button>
+                {diagnosticMeta && (
+                  <>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                      意图：{diagnosticMeta.intent_label || diagnosticMeta.intent || "综合导览"}
+                    </span>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                      模式：{diagnosticMeta.fallback ? "站内检索 fallback" : `${diagnosticMeta.provider || "AI"} + 检索`}
+                    </span>
+                    {formatSourceCounts(diagnosticMeta.source_counts) && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                        召回：{formatSourceCounts(diagnosticMeta.source_counts)}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {diagnosticError && (
+                <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {diagnosticError}
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                  回复预览
+                </p>
+                <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                  {diagnosticReply || "运行诊断后，这里会显示当前问法下的实际回复。"}
+                </div>
+              </div>
             </CardContent>
           </Card>
 

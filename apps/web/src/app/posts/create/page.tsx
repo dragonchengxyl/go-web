@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { X, ImagePlus, Loader2, Users } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
+import { useAssistantPageContext } from "@/contexts/assistant-page-context";
 import { useOSSUpload } from "@/hooks/use-oss-upload";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,9 +21,16 @@ interface ImageItem {
   uploading: boolean;
 }
 
+function truncateForAssistant(value: string, limit: number) {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit).trim()}...`;
+}
+
 export default function CreatePostPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { setPageContext, clearPageContext } = useAssistantPageContext();
   const [groupId, setGroupId] = useState<string | null>(null);
   const [groupName, setGroupName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +84,65 @@ export default function CreatePostPage() {
     }, 2000);
     return () => clearTimeout(timer);
   }, [title, content, tags]);
+
+  useEffect(() => {
+    const fields: Record<string, string> = {};
+    if (title.trim()) {
+      fields.draft_title = truncateForAssistant(title, 60);
+    }
+    if (content.trim()) {
+      fields.draft_content = truncateForAssistant(content, 240);
+    }
+    if (tags.trim()) {
+      fields.draft_tags = truncateForAssistant(tags, 80);
+    }
+    if (groupName.trim()) {
+      fields.group_name = groupName.trim();
+    }
+    if (visibility) {
+      fields.visibility =
+        visibility === "followers_only"
+          ? "仅关注者可见"
+          : visibility === "private"
+            ? "私密"
+            : "公开";
+    }
+    if (isAIGenerated) {
+      fields.ai_generated = "已勾选";
+    }
+
+    setPageContext({
+      path: "/posts/create",
+      kind: "post_create",
+      title: groupName ? `发布到圈子：${groupName}` : "发布动态",
+      summary: groupName
+        ? "用户当前正在一个圈子里撰写动态，适合提供更贴合圈子氛围的发帖建议。"
+        : "用户当前正在撰写一条新动态，适合提供标题、正文、标签和可见性建议。",
+      prompt_hints: groupName
+        ? [
+            "帮我把这条动态改得更适合发在这个圈子",
+            "根据我现在的草稿，推荐 3 个更贴切的标签",
+            "帮我润色一下这段内容，但保留原本语气",
+          ]
+        : [
+            "帮我润色一下这条动态",
+            "根据我现在的草稿，推荐 3 个标签",
+            "这条动态更适合公开还是仅关注者可见？",
+          ],
+      fields,
+    });
+  }, [
+    clearPageContext,
+    content,
+    groupName,
+    isAIGenerated,
+    setPageContext,
+    tags,
+    title,
+    visibility,
+  ]);
+
+  useEffect(() => () => clearPageContext(), [clearPageContext]);
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {

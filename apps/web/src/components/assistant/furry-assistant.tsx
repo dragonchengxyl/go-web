@@ -11,6 +11,7 @@ import {
 } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
+import { useAssistantPageContext } from "@/contexts/assistant-page-context";
 
 const STORAGE_KEY = "furry_assistant_messages_v1";
 const CONVERSATION_KEY = "furry_assistant_current_conversation_v1";
@@ -52,6 +53,15 @@ const WELCOME_MESSAGE: AssistantChatMessage = {
   content:
     "我是霜牙，你的站内导览助手。你可以问我“先逛哪里”“推荐几个圈子”“最近有什么活动”“怎么发第一条动态”。",
   cards: WELCOME_CARDS,
+};
+
+const SOURCE_KIND_LABELS: Record<string, string> = {
+  page: "页面",
+  post: "帖子",
+  user: "用户",
+  tag: "标签",
+  group: "圈子",
+  event: "活动",
 };
 
 function MascotAvatar({ compact = false }: { compact?: boolean }) {
@@ -300,6 +310,7 @@ function AssistantMarkdown({ text }: { text: string }) {
 
 export function FurryAssistant() {
   const { isLoggedIn } = useAuth();
+  const { pageContext } = useAssistantPageContext();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantChatMessage[]>([
     WELCOME_MESSAGE,
@@ -314,6 +325,8 @@ export function FurryAssistant() {
   const [error, setError] = useState("");
   const [providerLabel, setProviderLabel] = useState("AI");
   const [fallbackMode, setFallbackMode] = useState(false);
+  const [intentLabel, setIntentLabel] = useState("综合导览");
+  const [sourceCounts, setSourceCounts] = useState<Record<string, number>>({});
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -334,6 +347,10 @@ export function FurryAssistant() {
     setLoading(false);
     setHistoryLoading(true);
     setError("");
+    setFallbackMode(false);
+    setProviderLabel("AI");
+    setIntentLabel("综合导览");
+    setSourceCounts({});
     try {
       const data = await apiClient.getAssistantConversation(id);
       setConversationId(data.conversation.id);
@@ -372,6 +389,10 @@ export function FurryAssistant() {
           }
           setConversationId(null);
           setMessages([WELCOME_MESSAGE]);
+          setFallbackMode(false);
+          setProviderLabel("AI");
+          setIntentLabel("综合导览");
+          setSourceCounts({});
         } finally {
           setHistoryLoading(false);
         }
@@ -382,6 +403,10 @@ export function FurryAssistant() {
     setConversations([]);
     setConversationId(null);
     setHistoryLoading(false);
+    setFallbackMode(false);
+    setProviderLabel("AI");
+    setIntentLabel("综合导览");
+    setSourceCounts({});
     localStorage.removeItem(CONVERSATION_KEY);
 
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -435,6 +460,8 @@ export function FurryAssistant() {
     setInput("");
     setError("");
     setLoading(true);
+    setIntentLabel("综合导览");
+    setSourceCounts({});
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -449,6 +476,8 @@ export function FurryAssistant() {
               meta.provider === "deepseek" ? "DeepSeek" : meta.provider || "AI",
             );
             setFallbackMode(meta.fallback);
+            setIntentLabel(meta.intent_label || "综合导览");
+            setSourceCounts(meta.source_counts ?? {});
             if (meta.conversation_id) {
               setConversationId(meta.conversation_id);
               localStorage.setItem(CONVERSATION_KEY, meta.conversation_id);
@@ -481,6 +510,7 @@ export function FurryAssistant() {
           },
         },
         conversationId ?? undefined,
+        pageContext ?? undefined,
       );
     } catch (err) {
       if (controller.signal.aborted) {
@@ -538,6 +568,10 @@ export function FurryAssistant() {
     setMessages([WELCOME_MESSAGE]);
     setError("");
     setLoading(false);
+    setFallbackMode(false);
+    setProviderLabel("AI");
+    setIntentLabel("综合导览");
+    setSourceCounts({});
     if (isLoggedIn) {
       setConversationId(null);
       localStorage.removeItem(CONVERSATION_KEY);
@@ -547,6 +581,11 @@ export function FurryAssistant() {
   }
 
   const userMessageCount = messages.filter((msg) => msg.role === "user").length;
+  const sourceSummary = Object.entries(sourceCounts)
+    .sort(([kindA], [kindB]) => kindA.localeCompare(kindB))
+    .map(([kind, count]) => `${SOURCE_KIND_LABELS[kind] || kind}×${count}`)
+    .join(" · ");
+  const contextualPrompts = pageContext?.prompt_hints ?? [];
 
   return (
     <div className="pointer-events-none fixed bottom-5 right-4 z-[60] sm:bottom-6 sm:right-6">
@@ -588,6 +627,21 @@ export function FurryAssistant() {
                   >
                     {isLoggedIn ? "新建对话" : "清空对话"}
                   </button>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  {pageContext && (
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+                      场景：{pageContext.title}
+                    </span>
+                  )}
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+                    意图：{intentLabel}
+                  </span>
+                  {sourceSummary && (
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
+                      召回：{sourceSummary}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -683,6 +737,16 @@ export function FurryAssistant() {
 
             {!loading && userMessageCount === 0 && (
               <div className="flex flex-wrap gap-2">
+                {contextualPrompts.map((prompt) => (
+                  <button
+                    key={`context-${prompt}`}
+                    type="button"
+                    onClick={() => void askAssistant(prompt)}
+                    className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    {prompt}
+                  </button>
+                ))}
                 {QUICK_PROMPTS.map((prompt) => (
                   <button
                     key={prompt}
