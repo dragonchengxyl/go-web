@@ -33,6 +33,7 @@ type RouterConfig struct {
 	PaymentService         *usecase.PaymentService
 	SearchService          *usecase.SearchService
 	StatsService           usecase.StatsProvider
+	AudioJobService        *usecase.AudioJobService
 	AchievementService     *usecase.AchievementService
 	AuditService           *usecase.AuditService
 	PostService            *usecase.PostService
@@ -115,6 +116,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		var multimodalHandler *handler.MultimodalHandler
 		if cfg.MultimodalService != nil {
 			multimodalHandler = handler.NewMultimodalHandler(cfg.MultimodalService, cfg.AuditService)
+		}
+		var audioJobHandler *handler.AudioJobHandler
+		if cfg.AudioJobService != nil {
+			audioJobHandler = handler.NewAudioJobHandler(cfg.AudioJobService)
 		}
 
 		// ── Public routes ──────────────────────────────────────────────
@@ -335,11 +340,19 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Upload
 			uploadHandler := handler.NewUploadHandler("./uploads", 10*1024*1024)
 			protected.POST("/upload/image", uploadHandler.UploadImage)
+			protected.POST("/upload/audio", uploadHandler.UploadAudioFile)
 
 			// OSS direct upload policy
 			if cfg.OSSService != nil {
 				ossHandler := handler.NewOSSHandler(cfg.OSSService)
 				protected.POST("/upload/oss-policy", ossHandler.GetUploadToken)
+			}
+
+			if audioJobHandler != nil {
+				protected.POST("/audio/jobs", audioJobHandler.CreateJob)
+				protected.GET("/audio/jobs", audioJobHandler.ListJobs)
+				protected.GET("/audio/jobs/:id", audioJobHandler.GetJob)
+				protected.POST("/audio/jobs/:id/retry", audioJobHandler.RetryJob)
 			}
 
 			// Creator dashboard

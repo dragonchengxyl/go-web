@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -55,10 +56,14 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 
 	// Generate unique filename
 	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
-	filepath := filepath.Join(h.uploadDir, "images", filename)
+	dstPath := filepath.Join(h.uploadDir, "images", filename)
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		response.Error(c, fmt.Errorf("创建目录失败: %w", err))
+		return
+	}
 
 	// Save file
-	if err := c.SaveUploadedFile(file, filepath); err != nil {
+	if err := c.SaveUploadedFile(file, dstPath); err != nil {
 		response.Error(c, fmt.Errorf("保存文件失败: %w", err))
 		return
 	}
@@ -104,10 +109,14 @@ func (h *UploadHandler) UploadAudioFile(c *gin.Context) {
 
 	// Generate unique filename
 	filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
-	filepath := filepath.Join(h.uploadDir, "audio", filename)
+	dstPath := filepath.Join(h.uploadDir, "audio", filename)
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		response.Error(c, fmt.Errorf("创建目录失败: %w", err))
+		return
+	}
 
 	// Save file
-	if err := c.SaveUploadedFile(file, filepath); err != nil {
+	if err := c.SaveUploadedFile(file, dstPath); err != nil {
 		response.Error(c, fmt.Errorf("保存文件失败: %w", err))
 		return
 	}

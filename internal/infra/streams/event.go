@@ -4,12 +4,13 @@ import "encoding/json"
 
 // Event type constants for the furry:events Redis stream.
 const (
-	EventPostCreated    = "post.created"
-	EventPostModerated  = "post.moderated"
-	EventPostLiked      = "post.liked"
-	EventUserFollowed   = "user.followed"
-	EventTipSent        = "tip.sent"
-	EventCommentCreated = "comment.created"
+	EventPostCreated     = "post.created"
+	EventPostModerated   = "post.moderated"
+	EventPostLiked       = "post.liked"
+	EventUserFollowed    = "user.followed"
+	EventTipSent         = "tip.sent"
+	EventCommentCreated  = "comment.created"
+	EventAudioJobCreated = "audio.job.created"
 )
 
 // StreamKey is the Redis stream key used for all platform events.
@@ -19,6 +20,7 @@ const StreamKey = "furry:events"
 const (
 	GroupModeration   = "moderation-group"
 	GroupNotification = "notification-group"
+	GroupAudioJobs    = "audio-job-group"
 )
 
 // StreamEvent is the envelope for all platform events.
@@ -70,4 +72,9 @@ type CommentCreatedPayload struct {
 	CommentableID string `json:"commentable_id"`
 	AuthorID      string `json:"author_id"`
 	TargetUserID  string `json:"target_user_id"`
+}
+
+// AudioJobCreatedPayload is published when a new audio job is queued.
+type AudioJobCreatedPayload struct {
+	JobID string `json:"job_id"`
 }

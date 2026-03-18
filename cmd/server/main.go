@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/infra/embedding"
 	"github.com/studio/platform/internal/infra/grpcclient"
@@ -89,6 +91,7 @@ func main() {
 	notificationRepo := postgres.NewNotificationRepository(pool)
 	eventRepo := postgres.NewEventRepository(pool)
 	groupRepo := postgres.NewGroupRepository(pool)
+	audioJobRepo := postgres.NewAudioJobRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
@@ -186,6 +189,12 @@ func main() {
 
 	eventService := usecase.NewEventService(eventRepo)
 	groupService := usecase.NewGroupService(groupRepo)
+	audioJobService := usecase.NewAudioJobService(
+		audioJobRepo,
+		usecase.WithAudioJobPublisher(publisher),
+		usecase.WithAudioJobLogger(logger),
+		usecase.WithAudioJobAllowedHosts(cfg.OSS.AllowedHosts),
+	)
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
 	assistantRepo := postgres.NewAssistantRepository(pool)
@@ -252,6 +261,26 @@ func main() {
 	defer hubCancel()
 	go hub.Run(hubCtx)
 
+	audioJobConsumer := streams.NewConsumer(redisClient, logger, "audio-job-local-1")
+	go func() {
+		logger.Info("Starting audio job stream consumer")
+		_ = audioJobConsumer.Start(hubCtx, streams.GroupAudioJobs, func(ctx context.Context, ev streams.StreamEvent) error {
+			if ev.Type != streams.EventAudioJobCreated {
+				return nil
+			}
+
+			var payload streams.AudioJobCreatedPayload
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				return fmt.Errorf("audio-job consumer: unmarshal payload: %w", err)
+			}
+			jobID, err := uuid.Parse(payload.JobID)
+			if err != nil {
+				return fmt.Errorf("audio-job consumer: invalid job_id: %w", err)
+			}
+			return audioJobService.ProcessJob(ctx, jobID)
+		})
+	}()
+
 	notificationService := usecase.NewNotificationService(notificationRepo, hub)
 
 	// Initialize HTTP router
@@ -266,6 +295,7 @@ func main() {
 		PaymentService:         paymentService,
 		SearchService:          searchService,
 		StatsService:           statsService,
+		AudioJobService:        audioJobService,
 		AchievementService:     achievementService,
 		AuditService:           auditService,
 		PostService:            postService,

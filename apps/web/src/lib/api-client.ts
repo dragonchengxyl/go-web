@@ -292,6 +292,36 @@ export interface MediaAnalysisResult {
   circuit_state?: string;
 }
 
+export type AudioJobTaskType =
+  | "ai_music"
+  | "voice_convert"
+  | "voice_enhance"
+  | "audio_master";
+
+export type AudioJobStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed";
+
+export interface AudioJob {
+  id: string;
+  user_id: string;
+  title: string;
+  task_type: AudioJobTaskType;
+  status: AudioJobStatus;
+  source_audio_url?: string;
+  reference_audio_url?: string;
+  prompt?: string;
+  params?: Record<string, unknown>;
+  result?: Record<string, unknown>;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  finished_at?: string;
+}
+
 export interface AdminAIToolSection {
   title: string;
   bullets?: string[];
@@ -935,6 +965,50 @@ class ApiClient {
       throw new Error(data.message || "Upload failed");
     }
     return data.data;
+  }
+
+  async uploadAudio(file: File): Promise<{ url: string }> {
+    return this.uploadFile("/upload/audio", file);
+  }
+
+  // ── Audio Jobs ────────────────────────────────────────────────────────
+
+  async createAudioJob(data: {
+    title: string;
+    task_type: AudioJobTaskType;
+    source_audio_url?: string;
+    reference_audio_url?: string;
+    prompt?: string;
+    params?: Record<string, unknown>;
+  }) {
+    return this.post<AudioJob>("/audio/jobs", data);
+  }
+
+  async listAudioJobs(options?: {
+    page?: number;
+    page_size?: number;
+    status?: AudioJobStatus;
+    task_type?: AudioJobTaskType;
+  }) {
+    const q = new URLSearchParams();
+    if (options?.page) q.set("page", String(options.page));
+    if (options?.page_size) q.set("page_size", String(options.page_size));
+    if (options?.status) q.set("status", options.status);
+    if (options?.task_type) q.set("task_type", options.task_type);
+    return this.get<{
+      items: AudioJob[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/audio/jobs?${q.toString()}`);
+  }
+
+  async getAudioJob(id: string) {
+    return this.get<AudioJob>(`/audio/jobs/${id}`);
+  }
+
+  async retryAudioJob(id: string) {
+    return this.post<AudioJob>(`/audio/jobs/${id}/retry`);
   }
 
   // ── Events ───────────────────────────────────────────────────────────────

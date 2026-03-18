@@ -72,6 +72,21 @@
 - `GET /api/v1/events`
 - `POST /api/v1/events`
 
+### AI 音频任务
+
+- `POST /api/v1/upload/audio`
+- `POST /api/v1/audio/jobs`
+- `GET /api/v1/audio/jobs`
+- `GET /api/v1/audio/jobs/:id`
+- `POST /api/v1/audio/jobs/:id/retry`
+
+当前这条链路是一个可跑的 MVP：
+
+- 任务类型支持 `ai_music` / `voice_convert` / `voice_enhance` / `audio_master`
+- 状态流转为 `queued -> running -> succeeded / failed`
+- 主服务会发布 `audio.job.created` 到 Redis Streams，并由本地 consumer 自动走 mock 处理流程
+- 处理结果统一回写到任务 `result` JSON，后续可以继续接真实 AI 音频引擎、转码服务和商业化流程
+
 ## WebSocket 事件
 
 - `chat`

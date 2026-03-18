@@ -1,174 +1,217 @@
 # Furry 同好社区平台
 
-一个面向 Furry 爱好者的垂直社区平台，支持图文发帖、关注动态、即时通信、OSS 直传、WebSocket 实时推送、内容审核等功能。
+一个以 Furry 社区为核心的全栈 monorepo。当前代码已经实现了社区内容、群组、活动、私信、创作者打赏、AI 助手和管理后台；默认开发模式是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，并预留了通知、审核、统计三个可选扩展服务。
 
-## 项目架构
+## 项目一句话
 
-### 后端 (Go)
-- **框架**: Gin Web Framework
-- **数据库**: PostgreSQL + Redis
-- **架构**: Clean Architecture（Domain → Usecase → Transport → Infra）
-- **认证**: JWT + RBAC（7 个角色级别），注册 IP 限流（Redis）
-- **存储**: Cloudflare R2 / 阿里云 OSS（支持前端直传 Policy）
-- **实时通信**: WebSocket Hub（分布式 Redis Pub/Sub 多节点路由）
-- **内容审核**: 阿里云内容安全异步审核管线
+这不是一个单页 demo，而是一个已经具备完整后端分层、前端页面矩阵、数据库迁移、运维脚本和部署清单的中型工程。主线业务是社区平台，仓库内还保留了音乐内容域、成就体系和排行榜等辅助模块。
 
-### 前端 (Next.js)
-- **框架**: Next.js 14 App Router
-- **语言**: TypeScript 5.x
-- **样式**: Tailwind CSS
-- **数据获取**: TanStack Query（含乐观更新）
-- **实时**: 全局 WSContext（单连接 + 指数退避重连）
-- **Monorepo**: Turborepo + pnpm workspace
+## 当前已经做了什么
+
+### 社区主线
+
+- 用户注册、登录、刷新 Token、退出登录、找回密码、邮箱验证
+- 用户资料编辑，包含 `furry_name`、`species` 等社区字段
+- 帖子发布、编辑、删除、点赞、书签、举报、屏蔽
+- 评论和嵌套回复，关注关系与关注流 `feed`
+- 探索页、热门标签、全文搜索、个性化推荐
+
+### 群组与活动
+
+- 群组列表、详情、创建、加入/退出、成员管理
+- 群组帖子、公告、标签、高亮帖、置顶帖、管理面板
+- 活动列表、详情、创建、报名、我的活动 / 我参与的活动
+
+### 实时与消息
+
+- 私信会话、消息发送、已读状态
+- `WebSocket` 单连接实时推送
+- Redis Pub/Sub 分布式 WS Hub，支持多节点广播
+
+### 创作者与商业化
+
+- 打赏订单创建
+- 支付宝 / 微信支付接口接线，未配置时可回退到 mock 网关
+- 赞助页、创作者统计页、赞助配置
+
+### AI 与管理后台
+
+- AI 助手流式对话（SSE）
+- 助手会话持久化、知识检索、媒体分析
+- 管理后台仪表盘、用户管理、评论管理、帖子审核、举报处理、审计日志、AI 助手设置
+
+### 保留 / 辅助模块
+
+- 音乐专辑与曲目接口
+- 成就系统与排行榜
+- `studio-cli` 健康检查、性能诊断、播种和 smoke 测试
+
+## 运行形态
+
+| 模式 | 组成 | 说明 |
+| --- | --- | --- |
+| 默认本地开发 | `apps/web` + `cmd/server` + PostgreSQL + Redis + MailHog | `./dev.sh` 一键拉起 |
+| 事件驱动扩展 | 再加 `cmd/notification-svc` / `cmd/moderation-svc` / `cmd/stats-svc` | 用于验证异步通知、审核和 gRPC 拆分 |
+| 部署 | Docker Compose / Kubernetes | 仓库内提供 `docker-compose.full.yml`、`docker-compose.ha.yml`、`k8s/` |
+
+默认情况下，主 API 已经可以独立工作；其中统计服务支持本地 fallback，通知和审核则更适合在独立服务模式下验证完整事件链路。
+
+## 技术栈
+
+### 后端
+
+- Go 1.22
+- Gin
+- PostgreSQL + pgx
+- Redis
+- JWT + RBAC
+- gRPC + Proto
+- Prometheus 指标、`pprof`
+
+### 前端
+
+- Next.js 14 App Router
+- React 18
+- TypeScript
+- TanStack Query
+- Tailwind CSS
+- pnpm workspace + Turborepo
+
+### 基础能力
+
+- Cloudflare R2 / 阿里云 OSS
+- Redis Streams 事件总线
+- WebSocket 实时推送
+- OpenAI-compatible / DeepSeek 风格 LLM 接口
+
+## 关键目录
+
+| 目录 | 作用 |
+| --- | --- |
+| `cmd/server` | 主 API 入口，承载 HTTP、WebSocket、SSE、指标和大部分业务逻辑 |
+| `cmd/notification-svc` | 消费 Redis Streams 事件并生成通知 |
+| `cmd/moderation-svc` | 消费帖子事件并执行内容审核 |
+| `cmd/stats-svc` | 统计 gRPC 服务 |
+| `cmd/studio-cli` | 运维 / QA 辅助工具 |
+| `apps/web` | Next.js 前端 |
+| `internal/domain` | 领域实体、仓储接口、权限模型 |
+| `internal/usecase` | 用例层，负责业务编排 |
+| `internal/infra` | PostgreSQL、Redis、OSS、支付、LLM、Streams 等基础设施实现 |
+| `internal/transport` | HTTP、gRPC、WebSocket 传输层 |
+| `migrations` | 数据库迁移 |
+| `docs` | 架构、接口与工程说明 |
+| `k8s` | Kubernetes 部署清单 |
 
 ## 快速启动
+
+### 依赖
+
+- Docker / Docker Compose
+- Go 1.22+
+- pnpm 8+
+- `golang-migrate`
+
+### 一键启动
 
 ```bash
 ./dev.sh
 ```
 
-脚本自动完成：Docker 基础设施 → 数据库迁移 → 后端 → 前端。
+脚本会完成：
+
+- 检查依赖
+- 启动 PostgreSQL、Redis、MailHog
+- 执行数据库迁移
+- 启动 Go API
+- 启动 Next.js 前端
+
+默认地址：
 
 | 服务 | 地址 |
-|------|------|
+| --- | --- |
 | 前端 | http://localhost:3000 |
-| 后端 API | http://localhost:8080/api/v1 |
+| API | http://localhost:8080/api/v1 |
+| 健康检查 | http://localhost:8080/health |
 | WebSocket | ws://localhost:8080/ws/chat |
 | MailHog | http://localhost:8025 |
+| Prometheus Metrics | http://localhost:8080/metrics |
 
-**可选参数：**
+常用参数：
 
 ```bash
-./dev.sh --no-docker     # 跳过 Docker（已有本地 PG/Redis）
-./dev.sh --backend-only  # 只启动后端
-./dev.sh --stop          # 停止 Docker 基础设施
+./dev.sh --no-docker
+./dev.sh --backend-only
+./dev.sh --frontend-only
+./dev.sh --stop
+./dev.sh --logs
 ```
 
-## 已实现功能
+## 手动开发流程
 
-### 基础设施
-- PostgreSQL 连接池 + Redis 缓存
-- 全局中间件（JWT 认证、限流、CORS、结构化日志）
-- Cloudflare R2 / 阿里云 OSS 文件存储，支持前端 OSS 直传签名 Policy
-- WebSocket 分布式 Hub（Redis Pub/Sub，支持多节点部署）
-- 每连接 Token Bucket 限流 + 单用户最多 5 路并发连接
-- 数据库迁移管理（043 个迁移）
-
-### 用户系统
-- 注册 / 登录（JWT，Access + Refresh Token）
-- RBAC 权限控制：`super_admin` / `admin` / `moderator` / `creator` / `supporter` / `member` / `guest`
-- Token 黑名单（Redis）
-- 注册 IP 限流（Redis，5 次/小时/IP）
-- Furry 专属字段：`furry_name`（兽名）、`species`（物种）
-
-### 社区核心
-- **帖子**：图文发布（OSS 直传）、点赞（乐观更新）、可见性控制（public / followers_only / private）
-- **内容标签**：`content_labels` JSONB，支持 `is_ai_generated` 等标注
-- **内容审核**：发帖后异步调用阿里云内容安全，状态流转 `pending → approved / blocked`，前端实时展示审核遮罩
-- **评论**：嵌套评论，多态关联（帖子等）
-- **关注**：关注 / 取关，关注流 Feed
-- **探索页**：按参与度评分排序（`like_count + comment_count×3 / 时间衰减`），支持标签过滤与 AI 内容过滤
-- **即时通信**：私信会话，WebSocket 实时消息
-- **通知**：点赞 / 评论 / 关注 / 打赏触发，WebSocket 实时推送，未读角标实时更新
-
-### 创作者工具
-- **打赏系统**：用户向创作者打赏，订单流转
-- **赞助页**：月度目标进度、鸣谢名录、支付宝/微信收款码展示
-- **创作者仪表盘**：帖子数、点赞数、评论数、粉丝数、打赏统计
-
-### 社区运营
-- **举报系统**：举报帖子 / 评论 / 用户，后端存储
-- **屏蔽用户**：双向屏蔽，Feed 过滤
-- **内容搜索**：PostgreSQL 全文搜索（帖子 + 用户）
-
-### 前端页面
-| 路由 | 功能 |
-|------|------|
-| `/` | 首页（热门帖子 + 社区特色展示） |
-| `/feed` | 关注流（实时无限滚动） |
-| `/explore` | 发现页（评分排序 + 标签/AI 过滤） |
-| `/search` | 全文搜索（帖子 + 用户） |
-| `/tags/[tag]` | 标签聚合页 |
-| `/posts/create` | 发帖（OSS 直传 + AI 标签 + 草稿自动保存） |
-| `/posts/[id]` | 帖子详情（乐观点赞） |
-| `/users/[id]` | 用户主页 |
-| `/users/[id]/followers` | 粉丝列表 |
-| `/users/[id]/following` | 关注列表 |
-| `/messages` | 会话列表（实时更新） |
-| `/messages/[id]` | 聊天界面 |
-| `/notifications` | 通知中心 |
-| `/sponsor` | 赞助页 |
-| `/creator` | 创作者仪表盘 |
-| `/profile` | 个人资料 |
-| `/settings` | 账号与隐私设置 |
-| `/admin` | 管理后台入口 |
-
-## 技术特性
-
-- Clean Architecture，层间依赖倒置
-- 参数化 SQL 查询（防 SQL 注入）
-- 幂等性保证（点赞、关注去重）
-- 统一错误响应（`response.Success` / `response.Error`）
-- 请求限流（未认证 60/min，认证 200/min，管理员 1000/min）
-- OSS 媒体 URL 白名单校验（服务端拒绝非授权域名）
-- WebSocket 指数退避重连（1→2→4→8→16→30s），页面隐藏时暂停
-- XSS 防御：帖子内容纯文本渲染，禁用 `dangerouslySetInnerHTML`
-- OSS Policy/Signature 不写入 localStorage，不打印到 console
-
-## 数据库迁移
+如果你想拆开启动：
 
 ```bash
-# 执行所有迁移
-migrate -path migrations -database "postgres://studio:password@localhost:5432/studio_db?sslmode=disable" up
-
-# 或通过 Makefile
+make dev-setup
+make infra-up
 make migrate-up
+make dev-backend
+make dev-frontend
 ```
 
-迁移文件位于 `migrations/`，共 043 个，覆盖：用户、帖子（含 `moderation_status`、`content_labels`）、评论、点赞、关注、会话、通知、举报、屏蔽、群组、活动、AI 助手等表。
+可选扩展服务：
 
-## 质量门禁
+```bash
+go run ./cmd/stats-svc -config configs/config.local.yaml
+go run ./cmd/notification-svc -config configs/config.local.yaml
+go run ./cmd/moderation-svc -config configs/config.local.yaml
+```
+
+## 配置说明
+
+- 主 API 默认读取 `configs/config.local.yaml`
+- 前端使用 `apps/web/.env.local` 或 `apps/web/.env`
+- `./dev.sh` 会自动补齐根目录 `.env` 和 `apps/web/.env`
+- OSS 直传需要配置 `oss.*`
+- AI 助手需要配置 `assistant.*`
+- `moderation-svc` 需要有效的阿里云内容审核凭据
+
+## 常用命令
 
 ```bash
 # 后端
 go test ./...
 go test -race ./...
+make build-all
 
 # 前端
 pnpm --filter web lint
 pnpm --filter web type-check
 pnpm --filter web build
 
-# 一次性跑完本地门禁
+# 全量本地门禁
 make ci
-```
 
-## 辅助工具
-
-仓库内置了一个 Go 编写的运维/QA 辅助工具 `studio-cli`：
-
-```bash
-# 构建
+# 构建并使用 studio-cli
 make build-studio-cli
-
-# 健康检查
 ./bin/studio-cli health
-
-# 数据库性能分析
-./bin/studio-cli perf db
-
-# 抓取 pprof
-./bin/studio-cli pprof cpu --seconds 30
-./bin/studio-cli pprof heap
-
-# 播种演示数据
-./bin/studio-cli seed demo
-
-# 运行 smoke test
 ./bin/studio-cli smoke
+./bin/studio-cli perf db
+./bin/studio-cli pprof cpu --seconds 30
 ```
+
+## 文档与部署
+
+- 架构说明：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- API 摘要：[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
+- Go 工程说明：[`docs/GO_ENGINEERING_NOTES.md`](docs/GO_ENGINEERING_NOTES.md)
+- Kubernetes 部署：[`k8s/README.md`](k8s/README.md)
+
+部署相关文件：
+
+- `docker-compose.yml`：本地基础设施
+- `docker-compose.full.yml`：完整前后端容器编排
+- `docker-compose.ha.yml`：偏高可用部署样例
 
 ## 许可证
 
 MIT License
-# deploy test
