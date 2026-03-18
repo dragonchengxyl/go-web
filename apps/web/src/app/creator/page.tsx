@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
-import { Heart, MessageCircle, Users, FileText, Gift, TrendingUp } from 'lucide-react';
+import { Heart, MessageCircle, Users, FileText, Gift, TrendingUp, AudioLines, ArrowRight } from 'lucide-react';
 
 interface CreatorStats {
   post_count: number;
@@ -103,6 +103,25 @@ export default function CreatorDashboard() {
           </p>
         </div>
       )}
+
+      <div className="mt-6 rounded-2xl border border-cyan-200/70 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(168,85,247,0.08))] p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-cyan-700">
+              <AudioLines className="h-4 w-4" />
+              <span className="text-xs font-semibold uppercase tracking-[0.18em]">Audio Lab</span>
+            </div>
+            <h2 className="text-lg font-semibold">音频任务台</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              上传音频、提交 AI 作曲 / 音色转换 / 人声增强 / 母带任务，并实时查看队列状态。
+            </p>
+          </div>
+          <Link href="/creator/audio" className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors">
+            打开任务台
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

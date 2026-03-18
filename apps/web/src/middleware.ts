@@ -40,6 +40,6 @@ export const config = {
     '/notifications',
     '/profile',
     '/settings',
-    '/creator',
+    '/creator/:path*',
   ],
 };
