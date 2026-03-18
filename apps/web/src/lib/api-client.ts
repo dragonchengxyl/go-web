@@ -258,6 +258,28 @@ export interface AssistantOverviewData {
   };
 }
 
+export interface AdminAIToolSection {
+  title: string;
+  bullets?: string[];
+}
+
+export interface AdminAIToolDraft {
+  label: string;
+  content: string;
+}
+
+export interface AdminAIToolResult {
+  run_id: string;
+  tool: string;
+  title: string;
+  summary: string;
+  sections?: AdminAIToolSection[];
+  drafts?: AdminAIToolDraft[];
+  fallback: boolean;
+  provider: string;
+  generated_at: string;
+}
+
 interface AssistantStreamHandlers {
   signal?: AbortSignal;
   onMeta?: (meta: AssistantMeta) => void;
@@ -1290,6 +1312,44 @@ class ApiClient {
     }>(`/admin/groups?${q.toString()}`);
   }
 
+  async getAdminUsers(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    role?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.search) q.set("search", params.search);
+    if (params?.status) q.set("status", params.status);
+    if (params?.role) q.set("role", params.role);
+    return this.get<{
+      users: AdminUser[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/admin/users?${q.toString()}`);
+  }
+
+  async getAdminReports(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.status) q.set("status", params.status);
+    return this.get<{
+      reports: AdminReport[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/admin/reports?${q.toString()}`);
+  }
+
   async updateAdminGroup(id: string, data: { privacy: "public" | "private" }) {
     return this.put<Group>(`/admin/groups/${id}`, data);
   }
@@ -1313,6 +1373,30 @@ class ApiClient {
 
   async updateAdminEventStatus(id: string, status: Event["status"]) {
     return this.put<Event>(`/admin/events/${id}/status`, { status });
+  }
+
+  async generateAdminReportSummary(reportId: string) {
+    return this.post<AdminAIToolResult>("/admin/assistant/tools/report-summary", {
+      report_id: reportId,
+    });
+  }
+
+  async generateAdminWeeklyReport(days = 7) {
+    return this.post<AdminAIToolResult>("/admin/assistant/tools/weekly-report", {
+      days,
+    });
+  }
+
+  async generateAdminCreatorRecommendation(userId: string) {
+    return this.post<AdminAIToolResult>("/admin/assistant/tools/creator-recommendation", {
+      user_id: userId,
+    });
+  }
+
+  async generateAdminEventCopy(eventId: string) {
+    return this.post<AdminAIToolResult>("/admin/assistant/tools/event-copy", {
+      event_id: eventId,
+    });
   }
 
   async getAdminAuditLogs(params?: {
@@ -1415,6 +1499,17 @@ export interface AdminEvent extends Event {
   organizer_email?: string;
 }
 
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  nickname?: string;
+  furry_name?: string;
+  role: string;
+  status: string;
+  created_at: string;
+}
+
 export interface EventAttendee {
   event_id: string;
   user_id: string;
@@ -1474,6 +1569,21 @@ export interface AdminOrder {
   payer_email?: string;
   recipient_username?: string;
   recipient_email?: string;
+}
+
+export interface AdminReport {
+  id: string;
+  reporter_id: string;
+  reporter_username?: string;
+  target_type: "post" | "comment" | "user";
+  target_id: string;
+  reason: string;
+  description?: string;
+  status: "pending" | "reviewed" | "dismissed";
+  action_taken?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
 }
 
 export interface AuditLog {

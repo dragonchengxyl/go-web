@@ -32,6 +32,7 @@ type AdminHandler struct {
 	groupService   *usecase.GroupService
 	eventService   *usecase.EventService
 	auditService   *usecase.AuditService
+	aiToolService  *usecase.AdminAIToolService
 	config         *configs.Config
 	sponsorService *usecase.SponsorSettingsService
 	orderRepo      order.Repository
@@ -49,6 +50,7 @@ func NewAdminHandler(
 	groupService *usecase.GroupService,
 	eventService *usecase.EventService,
 	auditService *usecase.AuditService,
+	aiToolService *usecase.AdminAIToolService,
 	config *configs.Config,
 	sponsorService *usecase.SponsorSettingsService,
 	orderRepo order.Repository,
@@ -63,6 +65,7 @@ func NewAdminHandler(
 		groupService:   groupService,
 		eventService:   eventService,
 		auditService:   auditService,
+		aiToolService:  aiToolService,
 		config:         config,
 		sponsorService: sponsorService,
 		orderRepo:      orderRepo,
@@ -107,6 +110,10 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	if statusStr := c.Query("status"); statusStr != "" {
 		s := user.Status(statusStr)
 		input.Status = &s
+	}
+	if roleStr := c.Query("role"); roleStr != "" {
+		r := user.Role(roleStr)
+		input.Role = &r
 	}
 
 	result, err := h.userService.ListUsers(c.Request.Context(), input)

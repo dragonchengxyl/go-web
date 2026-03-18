@@ -193,6 +193,8 @@ func main() {
 	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService)
 	auditRepo := postgres.NewAuditRepository(pool)
 	auditService := usecase.NewAuditService(auditRepo)
+	reportRepo := postgres.NewReportRepository(pool)
+	blockRepo := postgres.NewBlockRepository(pool)
 	sponsorRepo := postgres.NewSponsorRepository(pool)
 	sponsorSettingsService := usecase.NewSponsorSettingsService(sponsorRepo, cfg)
 	assistantLLM := llm.NewOpenAICompatibleClient(
@@ -216,6 +218,19 @@ func main() {
 		logger.Info("Assistant embedding provider not configured, using local fallback embedder")
 	}
 	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantEmbedder, assistantRepo, bookmarkService, postService, groupService, eventService, userService)
+	adminAIToolService := usecase.NewAdminAIToolService(
+		cfg.Assistant,
+		assistantLLM,
+		statsService,
+		reportRepo,
+		postService,
+		commentService,
+		userService,
+		followService,
+		tipService,
+		groupService,
+		eventService,
+	)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)
@@ -224,9 +239,6 @@ func main() {
 	go hub.Run(hubCtx)
 
 	notificationService := usecase.NewNotificationService(notificationRepo, hub)
-
-	reportRepo := postgres.NewReportRepository(pool)
-	blockRepo := postgres.NewBlockRepository(pool)
 
 	// Initialize HTTP router
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
@@ -254,6 +266,7 @@ func main() {
 		GroupService:           groupService,
 		RecommendationService:  recommendationService,
 		AssistantService:       assistantService,
+		AdminAIToolService:     adminAIToolService,
 		Hub:                    hub,
 		TokenStore:             tokenStore,
 		ReportRepo:             reportRepo,

@@ -2,9 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Loader2, Save, Sparkles } from "lucide-react";
 import {
+  Bot,
+  Copy,
+  FileText,
+  Loader2,
+  Megaphone,
+  Save,
+  ShieldAlert,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
+import {
+  AdminAIToolResult,
+  AdminEvent,
   apiClient,
+  AdminReport,
+  AdminUser,
   AssistantMeta,
   AssistantOverviewData,
   AssistantSettings,
@@ -101,6 +115,92 @@ function ToggleRow({
   );
 }
 
+function ToolResultCard({
+  result,
+  loading,
+  empty,
+  onCopy,
+}: {
+  result?: AdminAIToolResult;
+  loading?: boolean;
+  empty: string;
+  onCopy: (text: string) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+        <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
+        正在生成内容...
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+        {empty}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <span className="rounded-full bg-slate-900 px-2.5 py-1 font-medium text-white">
+          {result.fallback ? "Fallback" : result.provider || "AI"}
+        </span>
+        <span>Run ID: {result.run_id}</span>
+        <span>{new Date(result.generated_at).toLocaleString("zh-CN")}</span>
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{result.title}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{result.summary}</p>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {(result.sections || []).map((section) => (
+          <div
+            key={section.title}
+            className="rounded-2xl border border-white bg-white px-4 py-3"
+          >
+            <p className="text-sm font-semibold text-slate-900">{section.title}</p>
+            <ul className="mt-2 space-y-1.5 pl-4 text-sm leading-6 text-slate-600">
+              {(section.bullets || []).map((bullet, index) => (
+                <li key={`${section.title}-${index}`} className="list-disc">
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-3">
+        {(result.drafts || []).map((draft) => (
+          <div
+            key={draft.label}
+            className="rounded-2xl border border-white bg-white px-4 py-3"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm font-semibold text-slate-900">{draft.label}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onCopy(draft.content)}
+              >
+                <Copy className="mr-1 h-4 w-4" />
+                复制
+              </Button>
+            </div>
+            <div className="mt-3 whitespace-pre-wrap rounded-2xl bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700">
+              {draft.content}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminAssistantPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AssistantSettings>(defaultSettings);
@@ -110,6 +210,10 @@ export default function AdminAssistantPage() {
   const [diagnosticReply, setDiagnosticReply] = useState("");
   const [diagnosticError, setDiagnosticError] = useState("");
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [selectedReportId, setSelectedReportId] = useState("");
+  const [selectedCreatorId, setSelectedCreatorId] = useState("");
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [weeklyDays, setWeeklyDays] = useState(7);
 
   const { data, isLoading } = useQuery<AssistantSettings>({
     queryKey: ["admin-assistant-settings"],
@@ -119,6 +223,18 @@ export default function AdminAssistantPage() {
     queryKey: ["admin-assistant-overview"],
     queryFn: () => apiClient.getAssistantOverview(),
     refetchInterval: 30000,
+  });
+  const { data: reportOptions } = useQuery({
+    queryKey: ["admin-assistant-tool-reports"],
+    queryFn: () => apiClient.getAdminReports({ page: 1, page_size: 20, status: "pending" }),
+  });
+  const { data: creatorOptions } = useQuery({
+    queryKey: ["admin-assistant-tool-creators"],
+    queryFn: () => apiClient.getAdminUsers({ page: 1, page_size: 20, role: "creator", status: "active" }),
+  });
+  const { data: eventOptions } = useQuery({
+    queryKey: ["admin-assistant-tool-events"],
+    queryFn: () => apiClient.getAdminEvents({ page: 1, page_size: 20, status: "published" }),
   });
 
   useEffect(() => {
@@ -148,6 +264,30 @@ export default function AdminAssistantPage() {
       showAdminToast(nextMessage, "error");
     },
   });
+  const reportSummaryMutation = useMutation({
+    mutationFn: (reportId: string) => apiClient.generateAdminReportSummary(reportId),
+    onError: (err: unknown) => {
+      showAdminToast(err instanceof Error ? err.message : "生成失败", "error");
+    },
+  });
+  const weeklyReportMutation = useMutation({
+    mutationFn: (days: number) => apiClient.generateAdminWeeklyReport(days),
+    onError: (err: unknown) => {
+      showAdminToast(err instanceof Error ? err.message : "生成失败", "error");
+    },
+  });
+  const creatorRecommendationMutation = useMutation({
+    mutationFn: (userId: string) => apiClient.generateAdminCreatorRecommendation(userId),
+    onError: (err: unknown) => {
+      showAdminToast(err instanceof Error ? err.message : "生成失败", "error");
+    },
+  });
+  const eventCopyMutation = useMutation({
+    mutationFn: (eventId: string) => apiClient.generateAdminEventCopy(eventId),
+    onError: (err: unknown) => {
+      showAdminToast(err instanceof Error ? err.message : "生成失败", "error");
+    },
+  });
 
   function update<K extends keyof AssistantSettings>(
     key: K,
@@ -170,6 +310,15 @@ export default function AdminAssistantPage() {
         ((overview?.overview.feedback_helpful || 0) / helpfulTotal) * 100,
       )}%`
     : "—";
+
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showAdminToast("已复制到剪贴板", "success");
+    } catch {
+      showAdminToast("复制失败，请手动复制", "error");
+    }
+  }
 
   async function runDiagnostic() {
     const prompt = diagnosticPrompt.trim();
@@ -239,8 +388,8 @@ export default function AdminAssistantPage() {
     <div className="space-y-6">
       <AdminPageHeader
         eyebrow="AI Operations"
-        title="AI 助手设置"
-        description="在这里管理站内 AI 助手的人设、检索来源和系统提示词，让助手输出更贴合业务。"
+        title="AI 助手与内部工具"
+        description="在这里管理站内 AI 助手的人设、检索来源，并为产品和运营团队生成可直接复用的 AI 内容。"
         actions={
           <Button
             type="submit"
@@ -396,6 +545,174 @@ export default function AdminAssistantPage() {
                 {overview?.metrics.last_index_error || "无"}
               </p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl border-slate-200 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+        <CardHeader>
+          <CardTitle className="text-lg">内部 AI 工具</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-6 xl:grid-cols-2">
+          <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <ShieldAlert className="h-5 w-5 text-rose-500" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">举报摘要与处理建议</p>
+                <p className="text-xs text-slate-500">面向审核和治理场景，输出风险判断、建议动作和回复草稿。</p>
+              </div>
+            </div>
+            <select
+              value={selectedReportId}
+              onChange={(e) => setSelectedReportId(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              <option value="">选择待处理举报</option>
+              {(reportOptions?.reports || []).map((item: AdminReport) => (
+                <option key={item.id} value={item.id}>
+                  [{item.target_type}] {item.reason} · {item.reporter_username || item.reporter_id}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              disabled={!selectedReportId || reportSummaryMutation.isPending}
+              onClick={() => reportSummaryMutation.mutate(selectedReportId)}
+              className="bg-slate-950 text-white hover:bg-slate-800"
+            >
+              {reportSummaryMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="mr-2 h-4 w-4" />
+              )}
+              生成举报摘要
+            </Button>
+            <ToolResultCard
+              result={reportSummaryMutation.data}
+              loading={reportSummaryMutation.isPending}
+              empty="选择一条待处理举报后，这里会生成结构化摘要和说明文案。"
+              onCopy={copyText}
+            />
+          </div>
+
+          <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5 text-cyan-500" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">社区运营周报生成</p>
+                <p className="text-xs text-slate-500">汇总指标、热门内容、圈子活动观察与跟进建议。</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Input
+                type="number"
+                min={3}
+                max={30}
+                value={weeklyDays}
+                onChange={(e) => setWeeklyDays(Number(e.target.value) || 7)}
+              />
+              <Button
+                type="button"
+                disabled={weeklyReportMutation.isPending}
+                onClick={() => weeklyReportMutation.mutate(weeklyDays)}
+                className="bg-slate-950 text-white hover:bg-slate-800"
+              >
+                {weeklyReportMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                生成周报
+              </Button>
+            </div>
+            <ToolResultCard
+              result={weeklyReportMutation.data}
+              loading={weeklyReportMutation.isPending}
+              empty="输入统计周期后，这里会生成可直接发给产品或运营同事的周报正文。"
+              onCopy={copyText}
+            />
+          </div>
+
+          <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <Bot className="h-5 w-5 text-amber-500" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">创作者推荐理由生成</p>
+                <p className="text-xs text-slate-500">为首页推荐位、专题或活动联动生成创作者推荐理由。</p>
+              </div>
+            </div>
+            <select
+              value={selectedCreatorId}
+              onChange={(e) => setSelectedCreatorId(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              <option value="">选择创作者</option>
+              {(creatorOptions?.users || []).map((item: AdminUser) => (
+                <option key={item.id} value={item.id}>
+                  @{item.username} · {item.furry_name || item.nickname || item.email}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              disabled={!selectedCreatorId || creatorRecommendationMutation.isPending}
+              onClick={() => creatorRecommendationMutation.mutate(selectedCreatorId)}
+              className="bg-slate-950 text-white hover:bg-slate-800"
+            >
+              {creatorRecommendationMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="mr-2 h-4 w-4" />
+              )}
+              生成推荐理由
+            </Button>
+            <ToolResultCard
+              result={creatorRecommendationMutation.data}
+              loading={creatorRecommendationMutation.isPending}
+              empty="选择一个创作者后，这里会生成推荐理由和两版推荐文案。"
+              onCopy={copyText}
+            />
+          </div>
+
+          <div className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
+            <div className="flex items-center gap-3">
+              <Megaphone className="h-5 w-5 text-emerald-500" />
+              <div>
+                <p className="text-sm font-semibold text-slate-900">活动文案生成</p>
+                <p className="text-xs text-slate-500">为活动卡片、详情页或推送生成短文案和长文案。</p>
+              </div>
+            </div>
+            <select
+              value={selectedEventId}
+              onChange={(e) => setSelectedEventId(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              <option value="">选择活动</option>
+              {(eventOptions?.events || []).map((item: AdminEvent) => (
+                <option key={item.id} value={item.id}>
+                  {item.title} · {new Date(item.start_time).toLocaleDateString("zh-CN")}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              disabled={!selectedEventId || eventCopyMutation.isPending}
+              onClick={() => eventCopyMutation.mutate(selectedEventId)}
+              className="bg-slate-950 text-white hover:bg-slate-800"
+            >
+              {eventCopyMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="mr-2 h-4 w-4" />
+              )}
+              生成活动文案
+            </Button>
+            <ToolResultCard
+              result={eventCopyMutation.data}
+              loading={eventCopyMutation.isPending}
+              empty="选择一个活动后，这里会生成宣传卖点、检查清单和两版活动文案。"
+              onCopy={copyText}
+            />
           </div>
         </CardContent>
       </Card>

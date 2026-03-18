@@ -47,6 +47,7 @@ type RouterConfig struct {
 	GroupService           *usecase.GroupService
 	RecommendationService  *usecase.RecommendationService
 	AssistantService       *usecase.AssistantService
+	AdminAIToolService     *usecase.AdminAIToolService
 	Hub                    ws.HubInterface
 	TokenStore             *redis.TokenStore
 	ReportRepo             report.Repository
@@ -368,6 +369,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 					cfg.GroupService,
 					cfg.EventService,
 					cfg.AuditService,
+					cfg.AdminAIToolService,
 					cfg.Config,
 					cfg.SponsorSettingsService,
 					cfg.OrderRepo,
@@ -421,6 +423,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 					admin.PUT("/assistant/settings", assistantHandler.UpdateSettings)
 					admin.GET("/assistant/overview", assistantHandler.GetOverview)
 				}
+				admin.POST("/assistant/tools/report-summary", adminHandler.GenerateReportSummary)
+				admin.POST("/assistant/tools/weekly-report", adminHandler.GenerateWeeklyReport)
+				admin.POST("/assistant/tools/creator-recommendation", adminHandler.GenerateCreatorRecommendation)
+				admin.POST("/assistant/tools/event-copy", adminHandler.GenerateEventCopy)
 
 				// Admin achievements
 				admin.POST("/users/:id/achievements", achievementHandler.AdminUnlockAchievement)
