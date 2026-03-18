@@ -25,11 +25,12 @@ import (
 
 // AssistantChatMessage is the user/assistant message payload exchanged with the frontend.
 type AssistantChatMessage struct {
-	ID        string          `json:"id,omitempty"`
-	Role      string          `json:"role"`
-	Content   string          `json:"content"`
-	Cards     []AssistantCard `json:"cards,omitempty"`
-	CreatedAt time.Time       `json:"created_at,omitempty"`
+	ID        string             `json:"id,omitempty"`
+	Role      string             `json:"role"`
+	Content   string             `json:"content"`
+	Cards     []AssistantCard    `json:"cards,omitempty"`
+	Insights  []AssistantInsight `json:"insights,omitempty"`
+	CreatedAt time.Time          `json:"created_at,omitempty"`
 }
 
 // AssistantPageContext carries non-persisted page-level hints for the current request.
@@ -45,17 +46,21 @@ type AssistantPageContext struct {
 // AssistantCard is a structured recommendation displayed next to the assistant reply.
 type AssistantCard = assistantdomain.Card
 
+// AssistantInsight is a structured copilot output displayed with the reply.
+type AssistantInsight = assistantdomain.Insight
+
 // AssistantMeta is sent before the streamed answer so the UI can render recommendations early.
 type AssistantMeta struct {
-	Query          string          `json:"query"`
-	Provider       string          `json:"provider"`
-	Fallback       bool            `json:"fallback"`
-	Intent         string          `json:"intent,omitempty"`
-	IntentLabel    string          `json:"intent_label,omitempty"`
-	SourceCounts   map[string]int  `json:"source_counts,omitempty"`
-	ConversationID string          `json:"conversation_id,omitempty"`
-	ResponseID     string          `json:"response_id,omitempty"`
-	Cards          []AssistantCard `json:"cards"`
+	Query          string             `json:"query"`
+	Provider       string             `json:"provider"`
+	Fallback       bool               `json:"fallback"`
+	Intent         string             `json:"intent,omitempty"`
+	IntentLabel    string             `json:"intent_label,omitempty"`
+	SourceCounts   map[string]int     `json:"source_counts,omitempty"`
+	ConversationID string             `json:"conversation_id,omitempty"`
+	ResponseID     string             `json:"response_id,omitempty"`
+	Cards          []AssistantCard    `json:"cards"`
+	Insights       []AssistantInsight `json:"insights,omitempty"`
 }
 
 type assistantIntent string
@@ -290,16 +295,17 @@ func (s *AssistantService) PrepareConversation(
 	messages := make([]AssistantChatMessage, 0, len(recent))
 	for _, msg := range recent {
 		messages = append(messages, AssistantChatMessage{
-			Role:    string(msg.Role),
-			Content: msg.Content,
-			Cards:   msg.Cards,
+			Role:     string(msg.Role),
+			Content:  msg.Content,
+			Cards:    msg.Cards,
+			Insights: msg.Insights,
 		})
 	}
 	return conv, messages, nil
 }
 
 // SaveAssistantReply persists the assistant answer for a conversation.
-func (s *AssistantService) SaveAssistantReply(ctx context.Context, responseID, conversationID uuid.UUID, content string, cards []AssistantCard) error {
+func (s *AssistantService) SaveAssistantReply(ctx context.Context, responseID, conversationID uuid.UUID, content string, cards []AssistantCard, insights []AssistantInsight) error {
 	if !s.HistoryEnabled() || conversationID == uuid.Nil || strings.TrimSpace(content) == "" {
 		return nil
 	}
@@ -312,6 +318,7 @@ func (s *AssistantService) SaveAssistantReply(ctx context.Context, responseID, c
 		Role:           assistantdomain.RoleAssistant,
 		Content:        content,
 		Cards:          cards,
+		Insights:       insights,
 		CreatedAt:      time.Now(),
 	}); err != nil {
 		return apperr.Wrap(apperr.CodeInternalError, "保存 AI 回复失败", err)
@@ -362,6 +369,7 @@ func (s *AssistantService) GetConversation(ctx context.Context, userID, conversa
 func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.UUID, query string, pageContext *AssistantPageContext, settings *assistantdomain.Settings) (AssistantMeta, string, string) {
 	intent := detectAssistantIntent(query, pageContext)
 	cards := s.collectCards(ctx, query, intent, settings)
+	copilot := s.buildCopilotBundle(ctx, query, pageContext)
 	meta := AssistantMeta{
 		Query:        query,
 		Provider:     s.cfg.Provider,
@@ -370,6 +378,7 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.U
 		IntentLabel:  assistantIntentDisplayLabel(intent),
 		SourceCounts: assistantSourceCounts(cards),
 		Cards:        cards,
+		Insights:     copilot.Insights,
 	}
 
 	var contextParts []string
@@ -378,6 +387,9 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.U
 	contextParts = append(contextParts, siteOverviewContext())
 	if pageContextText := buildAssistantPageContext(pageContext); pageContextText != "" {
 		contextParts = append(contextParts, pageContextText)
+	}
+	if copilot.ContextText != "" {
+		contextParts = append(contextParts, copilot.ContextText)
 	}
 	if bookmarkContext := s.buildBookmarkContext(ctx, userID); bookmarkContext != "" {
 		contextParts = append(contextParts, bookmarkContext)
@@ -404,7 +416,7 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.U
 		contextParts = append(contextParts, "可引用的站内信息:\n"+strings.Join(itemLines, "\n"))
 	}
 
-	return meta, strings.Join(contextParts, "\n\n"), buildFallbackAnswer(settings.PersonaName, query, cards)
+	return meta, strings.Join(contextParts, "\n\n"), buildFallbackAnswer(settings.PersonaName, query, cards, copilot.FallbackText)
 }
 
 func (s *AssistantService) collectCards(ctx context.Context, query string, intent assistantIntent, settings *assistantdomain.Settings) []AssistantCard {
@@ -730,6 +742,8 @@ func (s *AssistantService) buildSystemPrompt(contextText string, settings *assis
 8. 只要使用了给定来源中的具体内容或做出具体推荐，就在对应句末附上来源引用，例如 [R1]、[R2]。
 9. 不要伪造引用编号；只能使用给定上下文里出现的引用编号。
 10. 如果给定上下文里存在“用户最近收藏偏好”，优先结合这些偏好做个性化推荐。
+11. 如果上下文里存在“当前页面 Copilot 工具结果”，优先把这些结果转成直接可执行的建议，例如标题备选、标签建议、规则摘要、准备清单。
+12. 这些 Copilot 工具只提供只读分析和草稿建议；不要承诺替用户自动发帖、自动加入圈子或自动报名。
 
 以下是你可用的站内信息：
 %s
@@ -763,16 +777,27 @@ func siteOverviewContext() string {
 `)
 }
 
-func buildFallbackAnswer(personaName, query string, cards []AssistantCard) string {
+func buildFallbackAnswer(personaName, query string, cards []AssistantCard, copilotText string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s 在这。你刚才问的是“%s”。\n\n", personaName, query)
 
+	if strings.TrimSpace(copilotText) != "" {
+		b.WriteString(copilotText)
+		if len(cards) > 0 {
+			b.WriteString("\n\n另外，我再补几个可以直接点开的站内入口：\n")
+		}
+	}
+
 	if len(cards) == 0 {
-		b.WriteString("我先给你一个站内导航建议：如果你是第一次来，建议先看“发现页 /explore”、再逛“圈子 /groups”和“活动 /events”，想发内容就去“/posts/create”。")
+		if strings.TrimSpace(copilotText) == "" {
+			b.WriteString("我先给你一个站内导航建议：如果你是第一次来，建议先看“发现页 /explore”、再逛“圈子 /groups”和“活动 /events”，想发内容就去“/posts/create”。")
+		}
 		return b.String()
 	}
 
-	b.WriteString("我先根据站内信息帮你整理了几个值得直接点开的入口：\n")
+	if strings.TrimSpace(copilotText) == "" {
+		b.WriteString("我先根据站内信息帮你整理了几个值得直接点开的入口：\n")
+	}
 	for i, card := range cards {
 		ref := card.Ref
 		if ref == "" {
@@ -806,8 +831,9 @@ func sanitizeAssistantMessages(messages []AssistantChatMessage) []AssistantChatM
 			continue
 		}
 		out = append(out, AssistantChatMessage{
-			Role:    role,
-			Content: truncateText(content, 1200),
+			Role:     role,
+			Content:  truncateText(content, 1200),
+			Insights: msg.Insights,
 		})
 	}
 	if len(out) > 12 {

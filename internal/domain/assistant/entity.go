@@ -27,6 +27,14 @@ type Card struct {
 	Source  string `json:"source,omitempty"`
 }
 
+// Insight is a structured copilot output for page-specific assistance.
+type Insight struct {
+	Kind    string   `json:"kind"`
+	Title   string   `json:"title"`
+	Summary string   `json:"summary,omitempty"`
+	Bullets []string `json:"bullets,omitempty"`
+}
+
 const (
 	KnowledgeSourcePage  = "page"
 	KnowledgeSourcePost  = "post"
@@ -52,6 +60,7 @@ type Message struct {
 	Role           MessageRole `json:"role"`
 	Content        string      `json:"content"`
 	Cards          []Card      `json:"cards,omitempty"`
+	Insights       []Insight   `json:"insights,omitempty"`
 	CreatedAt      time.Time   `json:"created_at"`
 }
 

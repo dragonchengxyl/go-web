@@ -134,11 +134,31 @@ export interface AssistantCard {
   source?: string;
 }
 
+export interface AssistantInsight {
+  kind:
+    | "draft_polish"
+    | "title_options"
+    | "tag_suggestions"
+    | "visibility_suggestion"
+    | "group_atmosphere"
+    | "rules_summary"
+    | "join_suggestion"
+    | "posting_ideas"
+    | "event_summary"
+    | "fit_assessment"
+    | "signup_notes"
+    | "preparation_checklist";
+  title: string;
+  summary?: string;
+  bullets?: string[];
+}
+
 export interface AssistantChatMessage {
   id?: string;
   role: "user" | "assistant";
   content: string;
   cards?: AssistantCard[];
+  insights?: AssistantInsight[];
   created_at?: string;
   provider?: string;
   fallback?: boolean;
@@ -166,6 +186,7 @@ export interface AssistantMeta {
   conversation_id?: string;
   response_id?: string;
   cards: AssistantCard[];
+  insights?: AssistantInsight[];
 }
 
 export interface AssistantConversation {

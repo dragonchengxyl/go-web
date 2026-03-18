@@ -8,6 +8,7 @@ import {
   AssistantCard,
   AssistantChatMessage,
   AssistantConversation,
+  AssistantInsight,
 } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
@@ -62,6 +63,21 @@ const SOURCE_KIND_LABELS: Record<string, string> = {
   tag: "标签",
   group: "圈子",
   event: "活动",
+};
+
+const INSIGHT_KIND_LABELS: Record<string, string> = {
+  draft_polish: "正文润色",
+  title_options: "标题备选",
+  tag_suggestions: "标签建议",
+  visibility_suggestion: "可见性",
+  group_atmosphere: "圈子氛围",
+  rules_summary: "规则摘要",
+  join_suggestion: "加入建议",
+  posting_ideas: "发帖方向",
+  event_summary: "活动概览",
+  fit_assessment: "适配判断",
+  signup_notes: "参与提示",
+  preparation_checklist: "准备清单",
 };
 
 function MascotAvatar({ compact = false }: { compact?: boolean }) {
@@ -178,6 +194,44 @@ function ReferenceList({ cards }: { cards?: AssistantCard[] }) {
           </Link>
         ))}
       </div>
+    </div>
+  );
+}
+
+function InsightList({ insights }: { insights?: AssistantInsight[] }) {
+  if (!insights || insights.length === 0) return null;
+
+  return (
+    <div className="mt-3 grid gap-2">
+      {insights.map((insight, index) => (
+        <div
+          key={`${insight.kind}-${index}`}
+          className="rounded-2xl border border-cyan-200/80 bg-cyan-50/70 p-3 dark:border-cyan-900/40 dark:bg-cyan-950/10"
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200">
+              {INSIGHT_KIND_LABELS[insight.kind] || insight.kind}
+            </span>
+            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {insight.title}
+            </span>
+          </div>
+          {insight.summary && (
+            <p className="text-xs leading-5 text-slate-700 dark:text-slate-300">
+              {insight.summary}
+            </p>
+          )}
+          {insight.bullets?.length ? (
+            <ul className="mt-2 space-y-1.5 pl-4 text-xs leading-5 text-slate-600 dark:text-slate-300">
+              {insight.bullets.map((bullet, bulletIndex) => (
+                <li key={`${insight.kind}-${bulletIndex}`} className="list-disc">
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
@@ -491,6 +545,7 @@ export function FurryAssistant() {
                 ...last,
                 id: meta.response_id || last.id,
                 cards: meta.cards,
+                insights: meta.insights,
                 provider: meta.provider,
                 fallback: meta.fallback,
                 intent: meta.intent,
@@ -771,6 +826,9 @@ export function FurryAssistant() {
                     <p className="whitespace-pre-wrap break-words">
                       {message.content}
                     </p>
+                  )}
+                  {message.role === "assistant" && (
+                    <InsightList insights={message.insights} />
                   )}
                   {message.role === "assistant" && (
                     <ReferenceList cards={message.cards} />

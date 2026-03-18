@@ -108,6 +108,7 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 
 	var reply strings.Builder
 	var cards []usecase.AssistantCard
+	var insights []usecase.AssistantInsight
 	provider := "assistant"
 	fallback := false
 	firstTokenSeen := false
@@ -127,6 +128,7 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 			}
 			fallback = meta.Fallback
 			cards = meta.Cards
+			insights = meta.Insights
 			return writeEvent("meta", meta)
 		},
 		func(token string) error {
@@ -143,7 +145,7 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 	}
 
 	if persistedConversationID != uuid.Nil {
-		if err := h.service.SaveAssistantReply(ctx, responseID, persistedConversationID, reply.String(), cards); err != nil {
+		if err := h.service.SaveAssistantReply(ctx, responseID, persistedConversationID, reply.String(), cards, insights); err != nil {
 			_ = writeEvent("error", gin.H{"message": err.Error()})
 			return
 		}

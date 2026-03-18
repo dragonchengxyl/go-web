@@ -113,6 +113,10 @@ func (r *AssistantRepository) CreateMessage(ctx context.Context, m *assistantdom
 	if err != nil {
 		return fmt.Errorf("marshal assistant cards: %w", err)
 	}
+	insightsJSON, err := json.Marshal(m.Insights)
+	if err != nil {
+		return fmt.Errorf("marshal assistant insights: %w", err)
+	}
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -121,9 +125,9 @@ func (r *AssistantRepository) CreateMessage(ctx context.Context, m *assistantdom
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO assistant_messages (id, conversation_id, role, content, cards, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, m.ID, m.ConversationID, string(m.Role), m.Content, cardsJSON, m.CreatedAt)
+		INSERT INTO assistant_messages (id, conversation_id, role, content, cards, insights, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, m.ID, m.ConversationID, string(m.Role), m.Content, cardsJSON, insightsJSON, m.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -157,7 +161,7 @@ func (r *AssistantRepository) ListMessages(ctx context.Context, conversationID u
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, conversation_id, role, content, cards, created_at
+		SELECT id, conversation_id, role, content, cards, insights, created_at
 		FROM assistant_messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC
@@ -185,9 +189,9 @@ func (r *AssistantRepository) ListRecentMessages(ctx context.Context, conversati
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, conversation_id, role, content, cards, created_at
+		SELECT id, conversation_id, role, content, cards, insights, created_at
 		FROM (
-			SELECT id, conversation_id, role, content, cards, created_at
+			SELECT id, conversation_id, role, content, cards, insights, created_at
 			FROM assistant_messages
 			WHERE conversation_id = $1
 			ORDER BY created_at DESC
@@ -552,12 +556,16 @@ func scanAssistantMessage(row pgx.Row) (*assistantdomain.Message, error) {
 	var msg assistantdomain.Message
 	var role string
 	var cardsJSON []byte
-	if err := row.Scan(&msg.ID, &msg.ConversationID, &role, &msg.Content, &cardsJSON, &msg.CreatedAt); err != nil {
+	var insightsJSON []byte
+	if err := row.Scan(&msg.ID, &msg.ConversationID, &role, &msg.Content, &cardsJSON, &insightsJSON, &msg.CreatedAt); err != nil {
 		return nil, err
 	}
 	msg.Role = assistantdomain.MessageRole(role)
 	if len(cardsJSON) > 0 {
 		_ = json.Unmarshal(cardsJSON, &msg.Cards)
+	}
+	if len(insightsJSON) > 0 {
+		_ = json.Unmarshal(insightsJSON, &msg.Insights)
 	}
 	return &msg, nil
 }
