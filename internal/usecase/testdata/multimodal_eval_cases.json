@@ -1,0 +1,14 @@
+[
+  {
+    "name": "safe-artwork",
+    "raw": "{\"alt_text\":\"一张角色立绘，主体站立在浅色背景前。\",\"tags\":[\"角色立绘\",\"插画\",\"原创设定\"],\"image_summary\":\"画面主体清晰，属于常规角色设定展示。\",\"moderation_summary\":\"未见明显违规元素，主要是常规插画展示。\",\"risk_level\":\"low\",\"safety_notes\":[]}",
+    "expect_alt_contains": "角色立绘",
+    "expect_risk_level": "low"
+  },
+  {
+    "name": "ambiguous-risk",
+    "raw": "{\"alt_text\":\"一张带武器元素的角色海报。\",\"tags\":[\"海报\",\"角色\",\"武器元素\"],\"image_summary\":\"画面包含角色和明显武器道具。\",\"moderation_summary\":\"武器元素较突出，建议人工确认是否属于正常设定展示。\",\"risk_level\":\"medium\",\"safety_notes\":[\"需要结合上下文判断\"]}",
+    "expect_alt_contains": "武器",
+    "expect_risk_level": "medium"
+  }
+]

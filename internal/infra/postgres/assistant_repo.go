@@ -490,7 +490,109 @@ func (r *AssistantRepository) GetKnowledgeOverview(ctx context.Context) (*assist
 		return nil, err
 	}
 
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM assistant_media_analysis_cache
+		WHERE expires_at >= NOW()
+	`).Scan(&overview.MediaCacheEntries); err != nil {
+		return nil, err
+	}
+
 	return overview, nil
+}
+
+func (r *AssistantRepository) GetMediaAnalysis(ctx context.Context, mediaURL string) (*assistantdomain.MediaAnalysis, error) {
+	var item assistantdomain.MediaAnalysis
+	var tagsJSON []byte
+	var notesJSON []byte
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, media_url, alt_text, tags, image_summary, moderation_summary,
+		       risk_level, safety_notes, provider, model, fallback, cached_at, expires_at
+		FROM assistant_media_analysis_cache
+		WHERE media_url = $1
+		  AND expires_at >= NOW()
+	`, mediaURL).Scan(
+		&item.ID,
+		&item.MediaURL,
+		&item.AltText,
+		&tagsJSON,
+		&item.ImageSummary,
+		&item.ModerationSummary,
+		&item.RiskLevel,
+		&notesJSON,
+		&item.Provider,
+		&item.Model,
+		&item.Fallback,
+		&item.CachedAt,
+		&item.ExpiresAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(tagsJSON) > 0 {
+		_ = json.Unmarshal(tagsJSON, &item.Tags)
+	}
+	if len(notesJSON) > 0 {
+		_ = json.Unmarshal(notesJSON, &item.SafetyNotes)
+	}
+	return &item, nil
+}
+
+func (r *AssistantRepository) UpsertMediaAnalysis(ctx context.Context, item *assistantdomain.MediaAnalysis) error {
+	if item == nil {
+		return nil
+	}
+	if item.ID == uuid.Nil {
+		item.ID = uuid.New()
+	}
+	tagsJSON, err := json.Marshal(item.Tags)
+	if err != nil {
+		return fmt.Errorf("marshal media analysis tags: %w", err)
+	}
+	notesJSON, err := json.Marshal(item.SafetyNotes)
+	if err != nil {
+		return fmt.Errorf("marshal media analysis notes: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, `
+		INSERT INTO assistant_media_analysis_cache (
+			id, media_url, alt_text, tags, image_summary, moderation_summary,
+			risk_level, safety_notes, provider, model, fallback, cached_at, expires_at
+		)
+		VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12, $13
+		)
+		ON CONFLICT (media_url) DO UPDATE SET
+			alt_text = EXCLUDED.alt_text,
+			tags = EXCLUDED.tags,
+			image_summary = EXCLUDED.image_summary,
+			moderation_summary = EXCLUDED.moderation_summary,
+			risk_level = EXCLUDED.risk_level,
+			safety_notes = EXCLUDED.safety_notes,
+			provider = EXCLUDED.provider,
+			model = EXCLUDED.model,
+			fallback = EXCLUDED.fallback,
+			cached_at = EXCLUDED.cached_at,
+			expires_at = EXCLUDED.expires_at
+	`,
+		item.ID,
+		item.MediaURL,
+		item.AltText,
+		tagsJSON,
+		item.ImageSummary,
+		item.ModerationSummary,
+		item.RiskLevel,
+		notesJSON,
+		item.Provider,
+		item.Model,
+		item.Fallback,
+		item.CachedAt,
+		item.ExpiresAt,
+	)
+	return err
 }
 
 func (r *AssistantRepository) UpsertFeedback(ctx context.Context, item *assistantdomain.Feedback) error {

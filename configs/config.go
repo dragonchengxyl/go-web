@@ -127,11 +127,20 @@ type AssistantConfig struct {
 	EmbeddingAPIKey  string  `mapstructure:"embedding_api_key"`
 	EmbeddingModel   string  `mapstructure:"embedding_model"`
 	EmbeddingDims    int     `mapstructure:"embedding_dims"`
+	VisionBaseURL    string  `mapstructure:"vision_base_url"`
+	VisionAPIKey     string  `mapstructure:"vision_api_key"`
+	VisionModel      string  `mapstructure:"vision_model"`
 	Temperature      float64 `mapstructure:"temperature"`
 	TimeoutSec       int     `mapstructure:"timeout_sec"`
+	VisionTimeoutSec int     `mapstructure:"vision_timeout_sec"`
 	MaxContextItems  int     `mapstructure:"max_context_items"` // cards shown to the user / injected into prompt
 	PersonaName      string  `mapstructure:"persona_name"`
 	RetrievalLimit   int     `mapstructure:"retrieval_limit"`
 	VectorScanLimit  int     `mapstructure:"vector_scan_limit"`
 	SyncIntervalSec  int     `mapstructure:"sync_interval_sec"`
+	LLMRetryMax      int     `mapstructure:"llm_retry_max"`
+	VisionRetryMax   int     `mapstructure:"vision_retry_max"`
+	CircuitFailures  int     `mapstructure:"circuit_failures"`
+	CircuitOpenSec   int     `mapstructure:"circuit_open_sec"`
+	MediaCacheTTLSec int     `mapstructure:"media_cache_ttl_sec"`
 }

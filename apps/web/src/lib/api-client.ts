@@ -233,10 +233,13 @@ export interface AssistantOverviewData {
     indexed_documents: number;
     documents_by_source: Record<string, number>;
     last_indexed_at?: string;
+    media_cache_entries: number;
     feedback_helpful: number;
     feedback_unhelpful: number;
     embedding_configured: boolean;
     embedding_model?: string;
+    vision_configured: boolean;
+    vision_model?: string;
     retrieval_limit: number;
     vector_scan_limit: number;
     sync_interval_sec: number;
@@ -255,7 +258,38 @@ export interface AssistantOverviewData {
     last_indexed_documents: number;
     last_index_synced_at?: string;
     last_index_error?: string;
+    multimodal_requests_total: number;
+    multimodal_cache_hits: number;
+    multimodal_retry_total: number;
+    multimodal_fallback_total: number;
+    last_multimodal_latency_ms: number;
+    last_multimodal_error?: string;
+    chat_circuit_state?: string;
+    vision_circuit_state?: string;
   };
+}
+
+export interface MediaAnalysisItem {
+  id: string;
+  media_url: string;
+  alt_text: string;
+  tags?: string[];
+  image_summary?: string;
+  moderation_summary?: string;
+  risk_level?: "low" | "medium" | "high" | string;
+  safety_notes?: string[];
+  provider?: string;
+  model?: string;
+  fallback: boolean;
+  cached_at: string;
+  expires_at: string;
+}
+
+export interface MediaAnalysisResult {
+  items: MediaAnalysisItem[];
+  fallback: boolean;
+  provider: string;
+  circuit_state?: string;
 }
 
 export interface AdminAIToolSection {
@@ -1266,6 +1300,13 @@ class ApiClient {
     return this.get<AssistantOverviewData>("/admin/assistant/overview");
   }
 
+  async analyzeAssistantMedia(mediaUrls: string[], purpose = "post_create") {
+    return this.post<MediaAnalysisResult>("/assistant/media/analyze", {
+      media_urls: mediaUrls,
+      purpose,
+    });
+  }
+
   async getAdminOrders(params?: {
     page?: number;
     page_size?: number;
@@ -1396,6 +1437,12 @@ class ApiClient {
   async generateAdminEventCopy(eventId: string) {
     return this.post<AdminAIToolResult>("/admin/assistant/tools/event-copy", {
       event_id: eventId,
+    });
+  }
+
+  async generateAdminModerationExplanation(postId: string) {
+    return this.post<AdminAIToolResult>("/admin/assistant/tools/moderation-explanation", {
+      post_id: postId,
     });
   }
 
@@ -1635,11 +1682,15 @@ export interface AdminSystemConfig {
     embedding_base_url?: string;
     embedding_model?: string;
     embedding_dims?: number;
+    vision_base_url?: string;
+    vision_model?: string;
     timeout_sec: number;
+    vision_timeout_sec?: number;
     max_context_items: number;
     persona_name: string;
     configured: boolean;
     embedding_configured?: boolean;
+    vision_configured?: boolean;
     retrieval_limit?: number;
     vector_scan_limit?: number;
     sync_interval_sec?: number;

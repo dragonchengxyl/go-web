@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ShieldCheck, Tag, XCircle } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { CheckCircle2, Loader2, ShieldCheck, Sparkles, Tag, XCircle } from 'lucide-react'
+import { AdminAIToolResult, apiClient } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { AdminDataTable, type AdminColumn } from '@/components/admin/admin-data-table'
 import { AdminEmptyState } from '@/components/admin/admin-empty-state'
@@ -40,6 +40,7 @@ export default function AdminModerationPage() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('pending')
   const [page, setPage] = useState(1)
+  const [selectedExplainPostId, setSelectedExplainPostId] = useState('')
   const pageSize = 20
 
   const { data, isLoading } = useQuery<ListPostsOutput>({
@@ -58,6 +59,12 @@ export default function AdminModerationPage() {
     },
     onError: () => {
       showAdminToast('审核操作失败，请重试', 'error')
+    },
+  })
+  const explainMutation = useMutation<AdminAIToolResult, Error, string>({
+    mutationFn: (postId: string) => apiClient.generateAdminModerationExplanation(postId),
+    onError: () => {
+      showAdminToast('生成审核解释失败，请重试', 'error')
     },
   })
 
@@ -116,7 +123,7 @@ export default function AdminModerationPage() {
     {
       key: 'actions',
       header: '处理',
-      className: 'w-[220px]',
+      className: 'w-[320px]',
       render: (post) =>
         tab === 'pending' ? (
           <div className="flex flex-wrap gap-2">
@@ -140,13 +147,47 @@ export default function AdminModerationPage() {
               <XCircle className="mr-1 h-4 w-4" />
               封禁
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={explainMutation.isPending}
+              onClick={() => {
+                setSelectedExplainPostId(post.id)
+                explainMutation.mutate(post.id)
+              }}
+            >
+              {explainMutation.isPending && selectedExplainPostId === post.id ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1 h-4 w-4" />
+              )}
+              AI解释
+            </Button>
           </div>
         ) : (
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/posts/${post.id}`} target="_blank">
-              查看原帖
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/posts/${post.id}`} target="_blank">
+                查看原帖
+              </Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={explainMutation.isPending}
+              onClick={() => {
+                setSelectedExplainPostId(post.id)
+                explainMutation.mutate(post.id)
+              }}
+            >
+              {explainMutation.isPending && selectedExplainPostId === post.id ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1 h-4 w-4" />
+              )}
+              AI解释
+            </Button>
+          </div>
         ),
     },
   ]
@@ -214,6 +255,54 @@ export default function AdminModerationPage() {
           />
         }
       />
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+        <div className="flex items-center gap-3">
+          <Sparkles className="h-5 w-5 text-cyan-500" />
+          <div>
+            <p className="text-sm font-semibold text-slate-900">AI 审核解释</p>
+            <p className="text-xs text-slate-500">给图片内容和帖子文本生成解释性摘要，辅助人工判断。</p>
+          </div>
+        </div>
+
+        {explainMutation.isPending ? (
+          <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            正在生成审核解释...
+          </div>
+        ) : explainMutation.data ? (
+          <div className="mt-4 space-y-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{explainMutation.data.title}</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{explainMutation.data.summary}</p>
+            </div>
+            {(explainMutation.data.sections || []).map((section) => (
+              <div key={section.title} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-medium text-slate-900">{section.title}</p>
+                <ul className="mt-2 space-y-1.5 pl-4 text-sm leading-6 text-slate-600">
+                  {(section.bullets || []).map((bullet, index) => (
+                    <li key={`${section.title}-${index}`} className="list-disc">
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            {(explainMutation.data.drafts || []).map((draft) => (
+              <div key={draft.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-medium text-slate-900">{draft.label}</p>
+                <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                  {draft.content}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+            点击任一帖子行的“AI解释”后，这里会显示图片审核解释摘要。
+          </div>
+        )}
+      </div>
 
       <AdminPagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>

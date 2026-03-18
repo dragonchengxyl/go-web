@@ -28,6 +28,15 @@ var (
 		Name: "assistant_feedback_total",
 		Help: "Total number of assistant feedback submissions.",
 	}, []string{"value"})
+	multimodalDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "assistant_multimodal_duration_seconds",
+		Help:    "Assistant multimodal analysis latency in seconds.",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"purpose", "cache_hit", "fallback"})
+	multimodalRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "assistant_multimodal_requests_total",
+		Help: "Total number of assistant multimodal analysis requests.",
+	}, []string{"purpose"})
 )
 
 // Snapshot is an in-memory runtime view used by the admin console.
@@ -45,6 +54,14 @@ type Snapshot struct {
 	LastIndexedDocuments    int               `json:"last_indexed_documents"`
 	LastIndexSyncedAt       *time.Time        `json:"last_index_synced_at,omitempty"`
 	LastIndexError          string            `json:"last_index_error,omitempty"`
+	MultimodalRequestsTotal uint64            `json:"multimodal_requests_total"`
+	MultimodalCacheHits     uint64            `json:"multimodal_cache_hits"`
+	MultimodalRetryTotal    uint64            `json:"multimodal_retry_total"`
+	MultimodalFallbackTotal uint64            `json:"multimodal_fallback_total"`
+	LastMultimodalLatencyMs float64           `json:"last_multimodal_latency_ms"`
+	LastMultimodalError     string            `json:"last_multimodal_error,omitempty"`
+	ChatCircuitState        string            `json:"chat_circuit_state,omitempty"`
+	VisionCircuitState      string            `json:"vision_circuit_state,omitempty"`
 }
 
 type runtimeState struct {
@@ -57,11 +74,19 @@ type runtimeState struct {
 	lastFirstTokenNs        atomic.Int64
 	lastIndexSyncNs         atomic.Int64
 	lastIndexedDocuments    atomic.Int64
+	multimodalRequests      atomic.Uint64
+	multimodalCacheHits     atomic.Uint64
+	multimodalRetryTotal    atomic.Uint64
+	multimodalFallbackTotal atomic.Uint64
+	lastMultimodalNs        atomic.Int64
 	mu                      sync.Mutex
 	fallbackByReason        map[string]uint64
 	feedbackByValue         map[string]uint64
 	lastIndexSyncedAt       *time.Time
 	lastIndexError          string
+	lastMultimodalError     string
+	chatCircuitState        string
+	visionCircuitState      string
 }
 
 var state = runtimeState{
@@ -122,6 +147,47 @@ func RecordIndexSync(duration time.Duration, indexedDocuments int, err error) {
 	state.mu.Unlock()
 }
 
+// RecordMultimodal records multimodal latency and resilience metadata.
+func RecordMultimodal(purpose string, duration time.Duration, cacheHit, fallback bool, retries int, err error) {
+	cacheLabel := "false"
+	if cacheHit {
+		cacheLabel = "true"
+		state.multimodalCacheHits.Add(1)
+	}
+	fallbackLabel := "false"
+	if fallback {
+		fallbackLabel = "true"
+		state.multimodalFallbackTotal.Add(1)
+	}
+	if retries > 0 {
+		state.multimodalRetryTotal.Add(uint64(retries))
+	}
+	multimodalRequestsTotal.WithLabelValues(purpose).Inc()
+	multimodalDuration.WithLabelValues(purpose, cacheLabel, fallbackLabel).Observe(duration.Seconds())
+	state.multimodalRequests.Add(1)
+	state.lastMultimodalNs.Store(duration.Nanoseconds())
+
+	state.mu.Lock()
+	if err != nil {
+		state.lastMultimodalError = err.Error()
+	} else {
+		state.lastMultimodalError = ""
+	}
+	state.mu.Unlock()
+}
+
+// RecordCircuitState captures latest circuit breaker states for admin visibility.
+func RecordCircuitState(kind, circuitState string) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	switch kind {
+	case "chat":
+		state.chatCircuitState = circuitState
+	case "vision":
+		state.visionCircuitState = circuitState
+	}
+}
+
 // GetSnapshot returns the current runtime snapshot.
 func GetSnapshot() Snapshot {
 	state.mu.Lock()
@@ -156,6 +222,14 @@ func GetSnapshot() Snapshot {
 		LastIndexedDocuments:    int(state.lastIndexedDocuments.Load()),
 		LastIndexSyncedAt:       lastSyncedAt,
 		LastIndexError:          state.lastIndexError,
+		MultimodalRequestsTotal: state.multimodalRequests.Load(),
+		MultimodalCacheHits:     state.multimodalCacheHits.Load(),
+		MultimodalRetryTotal:    state.multimodalRetryTotal.Load(),
+		MultimodalFallbackTotal: state.multimodalFallbackTotal.Load(),
+		LastMultimodalLatencyMs: nsToMs(state.lastMultimodalNs.Load()),
+		LastMultimodalError:     state.lastMultimodalError,
+		ChatCircuitState:        state.chatCircuitState,
+		VisionCircuitState:      state.visionCircuitState,
 	}
 }
 

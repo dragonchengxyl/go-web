@@ -48,6 +48,7 @@ type RouterConfig struct {
 	RecommendationService  *usecase.RecommendationService
 	AssistantService       *usecase.AssistantService
 	AdminAIToolService     *usecase.AdminAIToolService
+	MultimodalService      *usecase.MultimodalService
 	Hub                    ws.HubInterface
 	TokenStore             *redis.TokenStore
 	ReportRepo             report.Repository
@@ -110,6 +111,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		var assistantHandler *handler.AssistantHandler
 		if cfg.AssistantService != nil {
 			assistantHandler = handler.NewAssistantHandler(cfg.AssistantService, cfg.AuditService, time.Duration(cfg.Config.Assistant.TimeoutSec)*time.Second)
+		}
+		var multimodalHandler *handler.MultimodalHandler
+		if cfg.MultimodalService != nil {
+			multimodalHandler = handler.NewMultimodalHandler(cfg.MultimodalService, cfg.AuditService)
 		}
 
 		// ── Public routes ──────────────────────────────────────────────
@@ -323,6 +328,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				protected.GET("/assistant/conversations", assistantHandler.ListConversations)
 				protected.GET("/assistant/conversations/:id", assistantHandler.GetConversation)
 			}
+			if multimodalHandler != nil {
+				protected.POST("/assistant/media/analyze", multimodalHandler.AnalyzeMedia)
+			}
 
 			// Upload
 			uploadHandler := handler.NewUploadHandler("./uploads", 10*1024*1024)
@@ -427,6 +435,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				admin.POST("/assistant/tools/weekly-report", adminHandler.GenerateWeeklyReport)
 				admin.POST("/assistant/tools/creator-recommendation", adminHandler.GenerateCreatorRecommendation)
 				admin.POST("/assistant/tools/event-copy", adminHandler.GenerateEventCopy)
+				if multimodalHandler != nil {
+					admin.POST("/assistant/tools/moderation-explanation", multimodalHandler.ExplainModeration)
+				}
 
 				// Admin achievements
 				admin.POST("/users/:id/achievements", achievementHandler.AdminUnlockAchievement)

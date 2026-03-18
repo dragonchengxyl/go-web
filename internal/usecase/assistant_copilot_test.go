@@ -1,6 +1,9 @@
 package usecase
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestBuildPostCreateInsights(t *testing.T) {
 	svc := &AssistantService{}
@@ -14,7 +17,7 @@ func TestBuildPostCreateInsights(t *testing.T) {
 		},
 	}
 
-	insights := svc.buildPostCreateInsights(t.Context(), "帮我润色一下这条动态", ctx)
+	insights := svc.buildPostCreateInsights(context.Background(), "帮我润色一下这条动态", ctx)
 	assertInsightKinds(t, insights, "draft_polish", "title_options", "tag_suggestions", "visibility_suggestion")
 }
 

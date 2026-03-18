@@ -21,6 +21,7 @@ import (
 	"github.com/studio/platform/internal/observability/assistantmetrics"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/cache"
+	"github.com/studio/platform/internal/pkg/resilience"
 )
 
 // AssistantChatMessage is the user/assistant message payload exchanged with the frontend.
@@ -88,6 +89,7 @@ type AssistantService struct {
 	userService         *UserService
 	syncGroup           cache.Group
 	lastKnowledgeSyncNS atomic.Int64
+	llmCircuit          *resilience.CircuitBreaker
 }
 
 // NewAssistantService creates a lightweight assistant service.
@@ -120,6 +122,15 @@ func NewAssistantService(
 	if cfg.SyncIntervalSec <= 0 {
 		cfg.SyncIntervalSec = 600
 	}
+	if cfg.LLMRetryMax <= 0 {
+		cfg.LLMRetryMax = 2
+	}
+	if cfg.CircuitFailures <= 0 {
+		cfg.CircuitFailures = 3
+	}
+	if cfg.CircuitOpenSec <= 0 {
+		cfg.CircuitOpenSec = 60
+	}
 
 	return &AssistantService{
 		cfg:          cfg,
@@ -131,6 +142,7 @@ func NewAssistantService(
 		groupService: groupService,
 		eventService: eventService,
 		userService:  userService,
+		llmCircuit:   resilience.NewCircuitBreaker(cfg.CircuitFailures, time.Duration(cfg.CircuitOpenSec)*time.Second),
 	}
 }
 
@@ -173,6 +185,13 @@ func (s *AssistantService) StreamReply(
 		assistantmetrics.RecordFallback("provider_unconfigured")
 		return streamText(fallbackAnswer, onToken)
 	}
+	if s.llmCircuit != nil {
+		assistantmetrics.RecordCircuitState("chat", string(s.llmCircuit.Snapshot().State))
+		if !s.llmCircuit.Allow() {
+			assistantmetrics.RecordFallback("chat_circuit_open")
+			return streamText(fallbackAnswer+"\n\n（当前模型链路暂时熔断，我先给你返回站内检索结果。）", onToken)
+		}
+	}
 
 	llmMessages := make([]llm.ChatMessage, 0, len(normalized)+1)
 	llmMessages = append(llmMessages, llm.ChatMessage{
@@ -187,15 +206,33 @@ func (s *AssistantService) StreamReply(
 	}
 
 	streamedAny := false
-	err = s.llmClient.StreamChat(ctx, llmMessages, func(token string) error {
-		streamedAny = true
-		return onToken(token)
-	})
-	if err == nil {
-		return nil
-	}
-	if streamedAny {
-		return err
+	maxAttempts := max(s.cfg.LLMRetryMax, 1)
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		err = s.llmClient.StreamChat(ctx, llmMessages, func(token string) error {
+			streamedAny = true
+			return onToken(token)
+		})
+		if err == nil {
+			if s.llmCircuit != nil {
+				s.llmCircuit.RecordSuccess()
+				assistantmetrics.RecordCircuitState("chat", string(s.llmCircuit.Snapshot().State))
+			}
+			return nil
+		}
+		if streamedAny {
+			if s.llmCircuit != nil {
+				s.llmCircuit.RecordFailure(err)
+				assistantmetrics.RecordCircuitState("chat", string(s.llmCircuit.Snapshot().State))
+			}
+			return err
+		}
+		if s.llmCircuit != nil {
+			s.llmCircuit.RecordFailure(err)
+			assistantmetrics.RecordCircuitState("chat", string(s.llmCircuit.Snapshot().State))
+		}
+		if attempt < maxAttempts-1 {
+			time.Sleep(time.Duration(attempt+1) * 200 * time.Millisecond)
+		}
 	}
 
 	meta.Fallback = true
@@ -1677,6 +1714,10 @@ func assistantPageFieldLabel(key string) string {
 		return "当前可见性"
 	case "ai_generated":
 		return "是否勾选 AI 生成标记"
+	case "image_tags":
+		return "图片建议标签"
+	case "image_alt_notes":
+		return "图片摘要"
 	case "event_status":
 		return "活动状态"
 	case "event_time":

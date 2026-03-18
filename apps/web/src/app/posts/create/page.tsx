@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { X, ImagePlus, Loader2, Users } from "lucide-react";
-import { apiClient } from "@/lib/api-client";
+import { Sparkles, Tag, X, ImagePlus, Loader2, Users } from "lucide-react";
+import { apiClient, MediaAnalysisItem } from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
 import { useAssistantPageContext } from "@/contexts/assistant-page-context";
 import { useOSSUpload } from "@/hooks/use-oss-upload";
@@ -42,7 +42,10 @@ export default function CreatePostPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [mediaAnalysis, setMediaAnalysis] = useState<MediaAnalysisItem[]>([]);
+  const [analyzingImages, setAnalyzingImages] = useState(false);
   const { upload } = useOSSUpload();
+  const lastAnalysisKeyRef = useRef("");
 
   // Draft restore on mount
   useEffect(() => {
@@ -110,6 +113,20 @@ export default function CreatePostPage() {
     if (isAIGenerated) {
       fields.ai_generated = "已勾选";
     }
+    if (mediaAnalysis.length > 0) {
+      const mergedTags = Array.from(
+        new Set(mediaAnalysis.flatMap((item) => item.tags ?? [])),
+      );
+      if (mergedTags.length > 0) {
+        fields.image_tags = mergedTags.join("、");
+      }
+      const firstAlt = mediaAnalysis
+        .map((item) => item.alt_text)
+        .find((item) => item?.trim());
+      if (firstAlt) {
+        fields.image_alt_notes = truncateForAssistant(firstAlt, 120);
+      }
+    }
 
     setPageContext({
       path: "/posts/create",
@@ -140,9 +157,46 @@ export default function CreatePostPage() {
     tags,
     title,
     visibility,
+    mediaAnalysis,
   ]);
 
   useEffect(() => () => clearPageContext(), [clearPageContext]);
+
+  useEffect(() => {
+    const urls = images.filter((item) => item.url && !item.uploading).map((item) => item.url);
+    if (urls.length === 0) {
+      setMediaAnalysis([]);
+      lastAnalysisKeyRef.current = "";
+      return;
+    }
+
+    const key = urls.join("|");
+    if (key === lastAnalysisKeyRef.current) return;
+
+    let cancelled = false;
+    setAnalyzingImages(true);
+    apiClient
+      .analyzeAssistantMedia(urls, "post_create")
+      .then((result) => {
+        if (cancelled) return;
+        setMediaAnalysis(result.items ?? []);
+        lastAnalysisKeyRef.current = key;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMediaAnalysis([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAnalyzingImages(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [images]);
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,6 +241,23 @@ export default function CreatePostPage() {
 
   function removeImage(index: number) {
     setImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function applySuggestedTags() {
+    const suggested = mediaAnalysis.flatMap((item) => item.tags ?? []);
+    if (suggested.length === 0) return;
+    const merged = Array.from(
+      new Set(
+        [
+          ...tags
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+          ...suggested.map((item) => item.replace(/^#/, "").trim()).filter(Boolean),
+        ],
+      ),
+    );
+    setTags(merged.join(", "));
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -343,6 +414,74 @@ export default function CreatePostPage() {
             className="hidden"
             onChange={handleFileChange}
           />
+          {(analyzingImages || mediaAnalysis.length > 0) && (
+            <div className="mt-4 rounded-2xl border border-cyan-200/70 bg-cyan-50/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">图片理解建议</p>
+                  <p className="text-xs text-slate-500">
+                    自动生成 alt text、标签和摘要，方便你补充图片信息。
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={applySuggestedTags}
+                  disabled={mediaAnalysis.length === 0}
+                >
+                  <Tag className="mr-1 h-4 w-4" />
+                  应用推荐标签
+                </Button>
+              </div>
+
+              {analyzingImages ? (
+                <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  正在分析图片内容...
+                </div>
+              ) : (
+                <div className="mt-3 grid gap-3">
+                  {mediaAnalysis.map((item, index) => (
+                    <div
+                      key={`${item.media_url}-${index}`}
+                      className="rounded-2xl border border-white/80 bg-white px-4 py-3"
+                    >
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
+                        图片 {index + 1}
+                        {item.fallback && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+                            fallback
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-slate-900">
+                        Alt Text：{item.alt_text}
+                      </p>
+                      {item.image_summary && (
+                        <p className="mt-2 text-xs leading-5 text-slate-600">
+                          {item.image_summary}
+                        </p>
+                      )}
+                      {item.tags?.length ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {item.tags.map((tag) => (
+                            <span
+                              key={`${item.media_url}-${tag}`}
+                              className="rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-medium text-cyan-800"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* AI Generated label */}

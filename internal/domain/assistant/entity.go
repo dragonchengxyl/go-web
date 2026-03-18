@@ -35,6 +35,23 @@ type Insight struct {
 	Bullets []string `json:"bullets,omitempty"`
 }
 
+// MediaAnalysis stores image understanding results for UI and moderation.
+type MediaAnalysis struct {
+	ID                uuid.UUID `json:"id"`
+	MediaURL          string    `json:"media_url"`
+	AltText           string    `json:"alt_text"`
+	Tags              []string  `json:"tags,omitempty"`
+	ImageSummary      string    `json:"image_summary,omitempty"`
+	ModerationSummary string    `json:"moderation_summary,omitempty"`
+	RiskLevel         string    `json:"risk_level,omitempty"`
+	SafetyNotes       []string  `json:"safety_notes,omitempty"`
+	Provider          string    `json:"provider,omitempty"`
+	Model             string    `json:"model,omitempty"`
+	Fallback          bool      `json:"fallback"`
+	CachedAt          time.Time `json:"cached_at"`
+	ExpiresAt         time.Time `json:"expires_at"`
+}
+
 const (
 	KnowledgeSourcePage  = "page"
 	KnowledgeSourcePost  = "post"
@@ -131,10 +148,13 @@ type Overview struct {
 	IndexedDocuments    int64            `json:"indexed_documents"`
 	DocumentsBySource   map[string]int64 `json:"documents_by_source"`
 	LastIndexedAt       *time.Time       `json:"last_indexed_at,omitempty"`
+	MediaCacheEntries   int64            `json:"media_cache_entries"`
 	FeedbackHelpful     int64            `json:"feedback_helpful"`
 	FeedbackUnhelpful   int64            `json:"feedback_unhelpful"`
 	EmbeddingConfigured bool             `json:"embedding_configured"`
 	EmbeddingModel      string           `json:"embedding_model,omitempty"`
+	VisionConfigured    bool             `json:"vision_configured"`
+	VisionModel         string           `json:"vision_model,omitempty"`
 	RetrievalLimit      int              `json:"retrieval_limit"`
 	VectorScanLimit     int              `json:"vector_scan_limit"`
 	SyncIntervalSec     int              `json:"sync_interval_sec"`

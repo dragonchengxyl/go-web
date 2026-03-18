@@ -139,6 +139,8 @@ func (s *AssistantService) GetOverview(ctx context.Context) (*AssistantOverview,
 	}
 	overview.EmbeddingConfigured = strings.TrimSpace(s.cfg.EmbeddingAPIKey) != ""
 	overview.EmbeddingModel = strings.TrimSpace(s.cfg.EmbeddingModel)
+	overview.VisionConfigured = strings.TrimSpace(s.cfg.VisionAPIKey) != ""
+	overview.VisionModel = strings.TrimSpace(s.cfg.VisionModel)
 	overview.RetrievalLimit = s.cfg.RetrievalLimit
 	overview.VectorScanLimit = s.cfg.VectorScanLimit
 	overview.SyncIntervalSec = s.cfg.SyncIntervalSec

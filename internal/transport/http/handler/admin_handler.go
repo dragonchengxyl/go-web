@@ -827,7 +827,10 @@ func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
 			"embedding_base_url":   h.config.Assistant.EmbeddingBaseURL,
 			"embedding_model":      h.config.Assistant.EmbeddingModel,
 			"embedding_dims":       h.config.Assistant.EmbeddingDims,
+			"vision_base_url":      h.config.Assistant.VisionBaseURL,
+			"vision_model":         h.config.Assistant.VisionModel,
 			"timeout_sec":          h.config.Assistant.TimeoutSec,
+			"vision_timeout_sec":   h.config.Assistant.VisionTimeoutSec,
 			"max_context_items":    h.config.Assistant.MaxContextItems,
 			"persona_name":         h.config.Assistant.PersonaName,
 			"retrieval_limit":      h.config.Assistant.RetrievalLimit,
@@ -835,6 +838,7 @@ func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
 			"sync_interval_sec":    h.config.Assistant.SyncIntervalSec,
 			"configured":           h.config.Assistant.APIKey != "",
 			"embedding_configured": h.config.Assistant.EmbeddingAPIKey != "",
+			"vision_configured":    h.config.Assistant.VisionAPIKey != "",
 		},
 		"oss": gin.H{
 			"provider":      h.config.OSS.Provider,

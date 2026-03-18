@@ -464,6 +464,31 @@ export default function AdminAssistantPage() {
           icon={Loader2}
           tone={(overview?.metrics.fallback_total ?? 0) > 0 ? "warning" : "default"}
         />
+        <AdminMetricCard
+          label="媒体缓存"
+          value={String(overview?.overview.media_cache_entries ?? 0)}
+          hint="已缓存的图片理解结果数"
+          icon={FileText}
+          tone="default"
+        />
+        <AdminMetricCard
+          label="图片分析次数"
+          value={String(overview?.metrics.multimodal_requests_total ?? 0)}
+          hint="多模态图片理解总调用次数"
+          icon={Sparkles}
+          tone="brand"
+        />
+        <AdminMetricCard
+          label="视觉熔断状态"
+          value={overview?.metrics.vision_circuit_state || "closed"}
+          hint="视觉模型链路当前熔断状态"
+          icon={Wand2}
+          tone={
+            (overview?.metrics.vision_circuit_state || "closed") === "open"
+              ? "warning"
+              : "success"
+          }
+        />
       </div>
 
       <Card className="rounded-3xl border-slate-200 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
@@ -477,6 +502,14 @@ export default function AdminAssistantPage() {
               <span className="text-right font-medium text-slate-900">
                 {overview?.overview.embedding_configured
                   ? overview?.overview.embedding_model || "已配置"
+                  : "本地 fallback"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>Vision</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.overview.vision_configured
+                  ? overview?.overview.vision_model || "已配置"
                   : "本地 fallback"}
               </span>
             </div>
@@ -537,12 +570,46 @@ export default function AdminAssistantPage() {
                 {overview?.metrics.last_indexed_documents ?? "—"}
               </span>
             </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>最近图片分析耗时</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.last_multimodal_latency_ms
+                  ? `${overview.metrics.last_multimodal_latency_ms.toFixed(1)} ms`
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>图片缓存命中</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.multimodal_cache_hits ?? "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>图片降级次数</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.multimodal_fallback_total ?? "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>图片重试次数</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.multimodal_retry_total ?? "—"}
+              </span>
+            </div>
             <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
                 最近同步错误
               </p>
               <p className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
                 {overview?.metrics.last_index_error || "无"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                最近图片分析错误
+              </p>
+              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                {overview?.metrics.last_multimodal_error || "无"}
               </p>
             </div>
           </div>

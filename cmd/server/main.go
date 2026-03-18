@@ -218,6 +218,20 @@ func main() {
 		logger.Info("Assistant embedding provider not configured, using local fallback embedder")
 	}
 	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantEmbedder, assistantRepo, bookmarkService, postService, groupService, eventService, userService)
+	visionClient := llm.NewOpenAICompatibleVisionClient(
+		cfg.Assistant.VisionBaseURL,
+		cfg.Assistant.VisionAPIKey,
+		cfg.Assistant.VisionModel,
+		time.Duration(cfg.Assistant.VisionTimeoutSec)*time.Second,
+	)
+	multimodalService := usecase.NewMultimodalService(
+		cfg.Assistant,
+		assistantRepo,
+		visionClient,
+		postService,
+		cfg.OSS.AllowedHosts,
+		frontendURL,
+	)
 	adminAIToolService := usecase.NewAdminAIToolService(
 		cfg.Assistant,
 		assistantLLM,
@@ -267,6 +281,7 @@ func main() {
 		RecommendationService:  recommendationService,
 		AssistantService:       assistantService,
 		AdminAIToolService:     adminAIToolService,
+		MultimodalService:      multimodalService,
 		Hub:                    hub,
 		TokenStore:             tokenStore,
 		ReportRepo:             reportRepo,

@@ -15,6 +15,8 @@ import (
 	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/infra/llm"
+	"github.com/studio/platform/internal/observability/assistantmetrics"
+	"github.com/studio/platform/internal/pkg/resilience"
 )
 
 // AdminAIToolSection is a structured section in a tool result.
@@ -55,6 +57,7 @@ type AdminAIToolService struct {
 	tipService     *TipService
 	groupService   *GroupService
 	eventService   *EventService
+	llmCircuit     *resilience.CircuitBreaker
 }
 
 func NewAdminAIToolService(
@@ -73,6 +76,15 @@ func NewAdminAIToolService(
 	if cfg.Provider == "" {
 		cfg.Provider = "deepseek"
 	}
+	if cfg.LLMRetryMax <= 0 {
+		cfg.LLMRetryMax = 2
+	}
+	if cfg.CircuitFailures <= 0 {
+		cfg.CircuitFailures = 3
+	}
+	if cfg.CircuitOpenSec <= 0 {
+		cfg.CircuitOpenSec = 60
+	}
 	return &AdminAIToolService{
 		cfg:            cfg,
 		llmClient:      llmClient,
@@ -85,6 +97,7 @@ func NewAdminAIToolService(
 		tipService:     tipService,
 		groupService:   groupService,
 		eventService:   eventService,
+		llmCircuit:     resilience.NewCircuitBreaker(cfg.CircuitFailures, time.Duration(cfg.CircuitOpenSec)*time.Second),
 	}
 }
 
@@ -369,21 +382,44 @@ func (s *AdminAIToolService) generateDraft(ctx context.Context, systemPrompt, us
 	if s.llmClient == nil || !s.llmClient.Configured() {
 		return fallback, true
 	}
-
-	var reply strings.Builder
-	streamed := false
-	err := s.llmClient.StreamChat(ctx, []llm.ChatMessage{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: userPrompt},
-	}, func(token string) error {
-		streamed = true
-		reply.WriteString(token)
-		return nil
-	})
-	if err != nil || strings.TrimSpace(reply.String()) == "" {
-		return fallback, true
+	if s.llmCircuit != nil {
+		assistantmetrics.RecordCircuitState("chat", string(s.llmCircuit.Snapshot().State))
+		if !s.llmCircuit.Allow() {
+			return fallback, true
+		}
 	}
-	return strings.TrimSpace(reply.String()), !streamed
+
+	maxAttempts := max(s.cfg.LLMRetryMax, 1)
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		var reply strings.Builder
+		streamed := false
+		err := s.llmClient.StreamChat(ctx, []llm.ChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		}, func(token string) error {
+			streamed = true
+			reply.WriteString(token)
+			return nil
+		})
+		if err == nil && strings.TrimSpace(reply.String()) != "" {
+			if s.llmCircuit != nil {
+				s.llmCircuit.RecordSuccess()
+				assistantmetrics.RecordCircuitState("chat", string(s.llmCircuit.Snapshot().State))
+			}
+			return strings.TrimSpace(reply.String()), false
+		}
+		if s.llmCircuit != nil {
+			s.llmCircuit.RecordFailure(err)
+			assistantmetrics.RecordCircuitState("chat", string(s.llmCircuit.Snapshot().State))
+		}
+		if streamed {
+			break
+		}
+		if attempt < maxAttempts-1 {
+			time.Sleep(time.Duration(attempt+1) * 200 * time.Millisecond)
+		}
+	}
+	return fallback, true
 }
 
 func (s *AdminAIToolService) describeReportTarget(ctx context.Context, rep *report.Report) (string, []string) {

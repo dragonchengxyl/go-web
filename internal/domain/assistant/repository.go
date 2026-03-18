@@ -23,6 +23,8 @@ type Repository interface {
 	SearchKnowledgeDocuments(ctx context.Context, query string, sourceTypes []string, limit int) ([]*KnowledgeDocument, error)
 	ListKnowledgeDocumentsForScan(ctx context.Context, sourceTypes []string, limit int) ([]*KnowledgeDocument, error)
 	GetKnowledgeOverview(ctx context.Context) (*Overview, error)
+	GetMediaAnalysis(ctx context.Context, mediaURL string) (*MediaAnalysis, error)
+	UpsertMediaAnalysis(ctx context.Context, item *MediaAnalysis) error
 
 	UpsertFeedback(ctx context.Context, item *Feedback) error
 }
