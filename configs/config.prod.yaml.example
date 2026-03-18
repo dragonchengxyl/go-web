@@ -82,7 +82,14 @@ assistant:
   base_url: https://api.deepseek.com/v1
   api_key: ""
   model: deepseek-chat
+  embedding_base_url: ""
+  embedding_api_key: ""
+  embedding_model: text-embedding-3-small
+  embedding_dims: 1536
   temperature: 0.6
   timeout_sec: 90
   max_context_items: 6
   persona_name: 霜牙
+  retrieval_limit: 8
+  vector_scan_limit: 1200
+  sync_interval_sec: 600

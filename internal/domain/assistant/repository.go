@@ -18,4 +18,11 @@ type Repository interface {
 
 	GetSettings(ctx context.Context) (*Settings, error)
 	UpsertSettings(ctx context.Context, settings *Settings) error
+
+	ReplaceKnowledgeDocuments(ctx context.Context, sourceType string, docs []*KnowledgeDocument) error
+	SearchKnowledgeDocuments(ctx context.Context, query string, sourceTypes []string, limit int) ([]*KnowledgeDocument, error)
+	ListKnowledgeDocumentsForScan(ctx context.Context, sourceTypes []string, limit int) ([]*KnowledgeDocument, error)
+	GetKnowledgeOverview(ctx context.Context) (*Overview, error)
+
+	UpsertFeedback(ctx context.Context, item *Feedback) error
 }

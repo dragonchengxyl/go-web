@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	assistantdomain "github.com/studio/platform/internal/domain/assistant"
 	"github.com/studio/platform/internal/domain/audit"
+	"github.com/studio/platform/internal/observability/assistantmetrics"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -57,6 +58,8 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), h.timeout)
 	defer cancel()
+	streamStartedAt := time.Now()
+	responseID := uuid.New()
 
 	var persistedConversationID uuid.UUID
 	streamMessages := req.Messages
@@ -105,6 +108,9 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 
 	var reply strings.Builder
 	var cards []usecase.AssistantCard
+	provider := "assistant"
+	fallback := false
+	firstTokenSeen := false
 	userID, _ := getUserID(c)
 	if err := h.service.StreamReply(
 		ctx,
@@ -115,10 +121,19 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 			if persistedConversationID != uuid.Nil {
 				meta.ConversationID = persistedConversationID.String()
 			}
+			meta.ResponseID = responseID.String()
+			if strings.TrimSpace(meta.Provider) != "" {
+				provider = meta.Provider
+			}
+			fallback = meta.Fallback
 			cards = meta.Cards
 			return writeEvent("meta", meta)
 		},
 		func(token string) error {
+			if !firstTokenSeen {
+				assistantmetrics.ObserveFirstToken(provider, fallback, time.Since(streamStartedAt))
+				firstTokenSeen = true
+			}
 			reply.WriteString(token)
 			return writeEvent("token", gin.H{"content": token})
 		},
@@ -128,13 +143,13 @@ func (h *AssistantHandler) StreamChat(c *gin.Context) {
 	}
 
 	if persistedConversationID != uuid.Nil {
-		if err := h.service.SaveAssistantReply(ctx, persistedConversationID, reply.String(), cards); err != nil {
+		if err := h.service.SaveAssistantReply(ctx, responseID, persistedConversationID, reply.String(), cards); err != nil {
 			_ = writeEvent("error", gin.H{"message": err.Error()})
 			return
 		}
 	}
 
-	_ = writeEvent("done", gin.H{"ok": true})
+	_ = writeEvent("done", gin.H{"ok": true, "response_id": responseID.String()})
 }
 
 // ListConversations handles GET /api/v1/assistant/conversations.
@@ -242,6 +257,36 @@ func (h *AssistantHandler) UpdateSettings(c *gin.Context) {
 	}
 	h.logSettingsUpdate(c, adminID, settings)
 	response.Success(c, settings)
+}
+
+// SubmitFeedback handles POST /api/v1/assistant/feedback.
+func (h *AssistantHandler) SubmitFeedback(c *gin.Context) {
+	var req usecase.AssistantFeedbackInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	var userID *uuid.UUID
+	if value, ok := getUserID(c); ok {
+		userID = &value
+	}
+
+	if err := h.service.SubmitFeedback(c.Request.Context(), userID, req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, err.Error()))
+		return
+	}
+	response.Success(c, gin.H{"ok": true})
+}
+
+// GetOverview handles GET /api/v1/admin/assistant/overview.
+func (h *AssistantHandler) GetOverview(c *gin.Context) {
+	data, err := h.service.GetOverview(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
 }
 
 func latestAssistantUserMessage(messages []usecase.AssistantChatMessage) string {

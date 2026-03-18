@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowUp, Loader2, Sparkles, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import {
   apiClient,
   AssistantCard,
@@ -327,6 +327,7 @@ export function FurryAssistant() {
   const [fallbackMode, setFallbackMode] = useState(false);
   const [intentLabel, setIntentLabel] = useState("综合导览");
   const [sourceCounts, setSourceCounts] = useState<Record<string, number>>({});
+  const [feedbackLoadingId, setFeedbackLoadingId] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -488,7 +489,13 @@ export function FurryAssistant() {
               if (!last || last.role !== "assistant") return copy;
               copy[copy.length - 1] = {
                 ...last,
+                id: meta.response_id || last.id,
                 cards: meta.cards,
+                provider: meta.provider,
+                fallback: meta.fallback,
+                intent: meta.intent,
+                source_counts: meta.source_counts,
+                feedback_value: undefined,
               };
               return copy;
             });
@@ -578,6 +585,55 @@ export function FurryAssistant() {
       return;
     }
     localStorage.removeItem(STORAGE_KEY);
+  }
+
+  function findQueryForAssistantMessage(index: number) {
+    for (let i = index - 1; i >= 0; i--) {
+      if (messages[i]?.role === "user") {
+        return messages[i]?.content || "";
+      }
+    }
+    return "";
+  }
+
+  async function handleFeedback(
+    message: AssistantChatMessage,
+    index: number,
+    value: "helpful" | "unhelpful",
+  ) {
+    if (!message.id || feedbackLoadingId === message.id) return;
+
+    setFeedbackLoadingId(message.id);
+    setError("");
+    try {
+      await apiClient.submitAssistantFeedback({
+        response_id: message.id,
+        conversation_id: conversationId ?? undefined,
+        value,
+        query: findQueryForAssistantMessage(index),
+        reply_excerpt: message.content,
+        provider: message.provider,
+        intent: message.intent,
+        fallback: message.fallback,
+        page_path: pageContext?.path,
+        source_counts: message.source_counts,
+        cards: message.cards,
+      });
+      setMessages((prev) =>
+        prev.map((item, itemIndex) =>
+          itemIndex === index
+            ? {
+                ...item,
+                feedback_value: value,
+              }
+            : item,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "反馈提交失败");
+    } finally {
+      setFeedbackLoadingId(null);
+    }
   }
 
   const userMessageCount = messages.filter((msg) => msg.role === "user").length;
@@ -721,6 +777,37 @@ export function FurryAssistant() {
                   )}
                   {message.role === "assistant" && (
                     <CardList cards={message.cards} />
+                  )}
+                  {message.role === "assistant" && message.id && message.content && (
+                    <div className="mt-3 flex items-center gap-2 border-t border-orange-100 pt-3 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      <span>这条回复有帮助吗？</span>
+                      <button
+                        type="button"
+                        onClick={() => void handleFeedback(message, index, "helpful")}
+                        disabled={feedbackLoadingId === message.id}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors ${
+                          message.feedback_value === "helpful"
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            : "hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/20"
+                        }`}
+                      >
+                        <ThumbsUp className="h-3.5 w-3.5" />
+                        有帮助
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleFeedback(message, index, "unhelpful")}
+                        disabled={feedbackLoadingId === message.id}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 transition-colors ${
+                          message.feedback_value === "unhelpful"
+                            ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
+                            : "hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/20"
+                        }`}
+                      >
+                        <ThumbsDown className="h-3.5 w-3.5" />
+                        没帮助
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

@@ -202,7 +202,20 @@ func main() {
 		cfg.Assistant.Temperature,
 		time.Duration(cfg.Assistant.TimeoutSec)*time.Second,
 	)
-	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantRepo, bookmarkService, postService, groupService, eventService, userService)
+	var assistantEmbedder embedding.Embedder = embedding.NewSimpleEmbedder()
+	if cfg.Assistant.EmbeddingAPIKey != "" {
+		assistantEmbedder = embedding.NewOpenAICompatibleEmbedder(
+			cfg.Assistant.EmbeddingBaseURL,
+			cfg.Assistant.EmbeddingAPIKey,
+			cfg.Assistant.EmbeddingModel,
+			cfg.Assistant.EmbeddingDims,
+			time.Duration(cfg.Assistant.TimeoutSec)*time.Second,
+		)
+		logger.Info("Assistant embedding provider enabled", zap.String("model", cfg.Assistant.EmbeddingModel))
+	} else {
+		logger.Info("Assistant embedding provider not configured, using local fallback embedder")
+	}
+	assistantService := usecase.NewAssistantService(cfg.Assistant, assistantLLM, assistantEmbedder, assistantRepo, bookmarkService, postService, groupService, eventService, userService)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)
@@ -266,6 +279,27 @@ func main() {
 	// Background scheduled tasks
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
+
+	go func() {
+		if err := assistantService.SyncKnowledgeIndex(bgCtx); err != nil {
+			logger.Warn("initial assistant knowledge sync failed", zap.Error(err))
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(assistantService.KnowledgeSyncInterval())
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := assistantService.SyncKnowledgeIndex(bgCtx); err != nil {
+					logger.Warn("assistant knowledge sync failed", zap.Error(err))
+				}
+			case <-bgCtx.Done():
+				return
+			}
+		}
+	}()
 
 	// Cancel expired orders every minute
 	go func() {

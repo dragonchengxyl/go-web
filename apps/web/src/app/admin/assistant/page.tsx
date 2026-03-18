@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Loader2, Save, Sparkles } from "lucide-react";
-import { apiClient, AssistantMeta, AssistantSettings } from "@/lib/api-client";
+import {
+  apiClient,
+  AssistantMeta,
+  AssistantOverviewData,
+  AssistantSettings,
+} from "@/lib/api-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +67,13 @@ function formatSourceCounts(counts?: Record<string, number>) {
     .join(" · ");
 }
 
+function formatDateTime(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("zh-CN");
+}
+
 function ToggleRow({
   label,
   desc,
@@ -102,6 +114,11 @@ export default function AdminAssistantPage() {
   const { data, isLoading } = useQuery<AssistantSettings>({
     queryKey: ["admin-assistant-settings"],
     queryFn: () => apiClient.getAssistantSettings(),
+  });
+  const { data: overview } = useQuery<AssistantOverviewData>({
+    queryKey: ["admin-assistant-overview"],
+    queryFn: () => apiClient.getAssistantOverview(),
+    refetchInterval: 30000,
   });
 
   useEffect(() => {
@@ -144,6 +161,15 @@ export default function AdminAssistantPage() {
     e.preventDefault();
     saveMutation.mutate(form);
   }
+
+  const helpfulTotal =
+    (overview?.overview.feedback_helpful || 0) +
+    (overview?.overview.feedback_unhelpful || 0);
+  const helpfulRate = helpfulTotal
+    ? `${Math.round(
+        ((overview?.overview.feedback_helpful || 0) / helpfulTotal) * 100,
+      )}%`
+    : "—";
 
   async function runDiagnostic() {
     const prompt = diagnosticPrompt.trim();
@@ -255,6 +281,124 @@ export default function AdminAssistantPage() {
           tone="default"
         />
       </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <AdminMetricCard
+          label="索引文档"
+          value={String(overview?.overview.indexed_documents ?? 0)}
+          hint="当前检索知识库中的总块数"
+          icon={Sparkles}
+          tone="brand"
+        />
+        <AdminMetricCard
+          label="最近同步"
+          value={
+            overview?.metrics.last_index_synced_at
+              ? formatDateTime(overview.metrics.last_index_synced_at)
+              : "未同步"
+          }
+          hint="后台索引最近一次刷新时间"
+          icon={Save}
+          tone="default"
+        />
+        <AdminMetricCard
+          label="有帮助率"
+          value={helpfulRate}
+          hint="用户对回复的有帮助反馈占比"
+          icon={Bot}
+          tone="success"
+        />
+        <AdminMetricCard
+          label="Fallback 次数"
+          value={String(overview?.metrics.fallback_total ?? 0)}
+          hint="模型未用上，直接退回站内检索的次数"
+          icon={Loader2}
+          tone={(overview?.metrics.fallback_total ?? 0) > 0 ? "warning" : "default"}
+        />
+      </div>
+
+      <Card className="rounded-3xl border-slate-200 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+        <CardHeader>
+          <CardTitle className="text-lg">检索与索引概览</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-6 md:grid-cols-2">
+          <div className="space-y-3 text-sm text-slate-600">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>Embedding</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.overview.embedding_configured
+                  ? overview?.overview.embedding_model || "已配置"
+                  : "本地 fallback"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>检索块来源</span>
+              <span className="text-right font-medium text-slate-900">
+                {formatSourceCounts(overview?.overview.documents_by_source)}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>检索上限</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.overview.retrieval_limit ?? "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>向量扫描上限</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.overview.vector_scan_limit ?? "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <span>同步间隔</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.overview.sync_interval_sec
+                  ? `${overview.overview.sync_interval_sec}s`
+                  : "—"}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-3 text-sm text-slate-600">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>最近检索耗时</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.last_retrieval_duration_ms
+                  ? `${overview.metrics.last_retrieval_duration_ms.toFixed(1)} ms`
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>最近首 token</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.last_first_token_latency_ms
+                  ? `${overview.metrics.last_first_token_latency_ms.toFixed(1)} ms`
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>最近召回块数</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.last_retrieved_documents ?? "—"}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+              <span>最近同步块数</span>
+              <span className="text-right font-medium text-slate-900">
+                {overview?.metrics.last_indexed_documents ?? "—"}
+              </span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                最近同步错误
+              </p>
+              <p className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                {overview?.metrics.last_index_error || "无"}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <div className="flex justify-center py-16">

@@ -140,6 +140,11 @@ export interface AssistantChatMessage {
   content: string;
   cards?: AssistantCard[];
   created_at?: string;
+  provider?: string;
+  fallback?: boolean;
+  intent?: string;
+  source_counts?: Record<string, number>;
+  feedback_value?: "helpful" | "unhelpful";
 }
 
 export interface AssistantPageContextPayload {
@@ -159,6 +164,7 @@ export interface AssistantMeta {
   intent_label?: string;
   source_counts?: Record<string, number>;
   conversation_id?: string;
+  response_id?: string;
   cards: AssistantCard[];
 }
 
@@ -185,6 +191,50 @@ export interface AssistantSettings {
   include_events: boolean;
   updated_at?: string;
   updated_by?: string;
+}
+
+export interface AssistantFeedbackInput {
+  response_id: string;
+  conversation_id?: string;
+  value: "helpful" | "unhelpful";
+  query: string;
+  reply_excerpt: string;
+  provider?: string;
+  intent?: string;
+  fallback?: boolean;
+  page_path?: string;
+  source_counts?: Record<string, number>;
+  cards?: AssistantCard[];
+}
+
+export interface AssistantOverviewData {
+  overview: {
+    indexed_documents: number;
+    documents_by_source: Record<string, number>;
+    last_indexed_at?: string;
+    feedback_helpful: number;
+    feedback_unhelpful: number;
+    embedding_configured: boolean;
+    embedding_model?: string;
+    retrieval_limit: number;
+    vector_scan_limit: number;
+    sync_interval_sec: number;
+  };
+  metrics: {
+    retrievals_total: number;
+    last_retrieval_duration_ms: number;
+    last_retrieved_documents: number;
+    first_token_observed_total: number;
+    last_first_token_latency_ms: number;
+    fallback_total: number;
+    fallback_by_reason: Record<string, number>;
+    feedback_total: number;
+    feedback_by_value: Record<string, number>;
+    last_index_sync_duration_ms: number;
+    last_indexed_documents: number;
+    last_index_synced_at?: string;
+    last_index_error?: string;
+  };
 }
 
 interface AssistantStreamHandlers {
@@ -1165,6 +1215,14 @@ class ApiClient {
     return this.put<AssistantSettings>("/admin/assistant/settings", data);
   }
 
+  async submitAssistantFeedback(data: AssistantFeedbackInput) {
+    return this.post<{ ok: boolean }>("/assistant/feedback", data);
+  }
+
+  async getAssistantOverview() {
+    return this.get<AssistantOverviewData>("/admin/assistant/overview");
+  }
+
   async getAdminOrders(params?: {
     page?: number;
     page_size?: number;
@@ -1443,10 +1501,17 @@ export interface AdminSystemConfig {
     provider: string;
     base_url: string;
     model: string;
+    embedding_base_url?: string;
+    embedding_model?: string;
+    embedding_dims?: number;
     timeout_sec: number;
     max_context_items: number;
     persona_name: string;
     configured: boolean;
+    embedding_configured?: boolean;
+    retrieval_limit?: number;
+    vector_scan_limit?: number;
+    sync_interval_sec?: number;
   };
   oss: {
     provider: string;

@@ -143,9 +143,14 @@ export default function AdminSystemPage() {
             rows={[
               { label: 'Provider', value: data?.assistant.provider || '—' },
               { label: 'Model', value: data?.assistant.model || '—' },
+              { label: 'Embedding', value: data?.assistant.embedding_model || '—' },
               { label: 'Base URL', value: data?.assistant.base_url || '—' },
+              { label: 'Embedding URL', value: data?.assistant.embedding_base_url || '—' },
               { label: 'Timeout', value: data?.assistant.timeout_sec ? `${data.assistant.timeout_sec}s` : '—' },
               { label: 'Max Context', value: data?.assistant.max_context_items ?? '—' },
+              { label: 'Retrieval Limit', value: data?.assistant.retrieval_limit ?? '—' },
+              { label: 'Vector Scan', value: data?.assistant.vector_scan_limit ?? '—' },
+              { label: 'Sync Interval', value: data?.assistant.sync_interval_sec ? `${data.assistant.sync_interval_sec}s` : '—' },
               { label: 'Persona', value: data?.assistant.persona_name || '—' },
             ]}
           />

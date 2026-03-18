@@ -27,6 +27,13 @@ type Card struct {
 	Source  string `json:"source,omitempty"`
 }
 
+const (
+	KnowledgeSourcePage  = "page"
+	KnowledgeSourcePost  = "post"
+	KnowledgeSourceGroup = "group"
+	KnowledgeSourceEvent = "event"
+)
+
 // Conversation stores a user's AI assistant thread.
 type Conversation struct {
 	ID                 uuid.UUID `json:"id"`
@@ -62,6 +69,66 @@ type Settings struct {
 	IncludeEvents   bool       `json:"include_events"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 	UpdatedBy       *uuid.UUID `json:"updated_by,omitempty"`
+}
+
+// KnowledgeDocument stores an indexed assistant retrieval chunk.
+type KnowledgeDocument struct {
+	ID              uuid.UUID `json:"id"`
+	SourceType      string    `json:"source_type"`
+	SourceKey       string    `json:"source_key"`
+	ChunkIndex      int       `json:"chunk_index"`
+	Title           string    `json:"title"`
+	Summary         string    `json:"summary"`
+	Content         string    `json:"content"`
+	Href            string    `json:"href"`
+	Meta            string    `json:"meta,omitempty"`
+	SourceLabel     string    `json:"source_label,omitempty"`
+	Tags            []string  `json:"tags,omitempty"`
+	SearchText      string    `json:"search_text,omitempty"`
+	Embedding       []float64 `json:"embedding,omitempty"`
+	IndexedAt       time.Time `json:"indexed_at"`
+	SourceUpdatedAt time.Time `json:"source_updated_at"`
+	KeywordScore    float64   `json:"keyword_score,omitempty"`
+	VectorScore     float64   `json:"vector_score,omitempty"`
+}
+
+type FeedbackValue string
+
+const (
+	FeedbackHelpful   FeedbackValue = "helpful"
+	FeedbackUnhelpful FeedbackValue = "unhelpful"
+)
+
+// Feedback stores a user's judgement for a single assistant response.
+type Feedback struct {
+	ID             uuid.UUID      `json:"id"`
+	ResponseID     uuid.UUID      `json:"response_id"`
+	ConversationID *uuid.UUID     `json:"conversation_id,omitempty"`
+	UserID         *uuid.UUID     `json:"user_id,omitempty"`
+	Value          FeedbackValue  `json:"value"`
+	QueryText      string         `json:"query_text"`
+	ReplyExcerpt   string         `json:"reply_excerpt"`
+	Provider       string         `json:"provider,omitempty"`
+	Intent         string         `json:"intent,omitempty"`
+	Fallback       bool           `json:"fallback"`
+	PagePath       string         `json:"page_path,omitempty"`
+	SourceCounts   map[string]int `json:"source_counts,omitempty"`
+	Cards          []Card         `json:"cards,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
+// Overview summarises assistant retrieval/index/feedback status for admin use.
+type Overview struct {
+	IndexedDocuments    int64            `json:"indexed_documents"`
+	DocumentsBySource   map[string]int64 `json:"documents_by_source"`
+	LastIndexedAt       *time.Time       `json:"last_indexed_at,omitempty"`
+	FeedbackHelpful     int64            `json:"feedback_helpful"`
+	FeedbackUnhelpful   int64            `json:"feedback_unhelpful"`
+	EmbeddingConfigured bool             `json:"embedding_configured"`
+	EmbeddingModel      string           `json:"embedding_model,omitempty"`
+	RetrievalLimit      int              `json:"retrieval_limit"`
+	VectorScanLimit     int              `json:"vector_scan_limit"`
+	SyncIntervalSec     int              `json:"sync_interval_sec"`
 }
 
 var (

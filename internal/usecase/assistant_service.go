@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -15,8 +16,11 @@ import (
 	"github.com/studio/platform/internal/domain/event"
 	"github.com/studio/platform/internal/domain/group"
 	"github.com/studio/platform/internal/domain/user"
+	"github.com/studio/platform/internal/infra/embedding"
 	"github.com/studio/platform/internal/infra/llm"
+	"github.com/studio/platform/internal/observability/assistantmetrics"
 	"github.com/studio/platform/internal/pkg/apperr"
+	"github.com/studio/platform/internal/pkg/cache"
 )
 
 // AssistantChatMessage is the user/assistant message payload exchanged with the frontend.
@@ -50,6 +54,7 @@ type AssistantMeta struct {
 	IntentLabel    string          `json:"intent_label,omitempty"`
 	SourceCounts   map[string]int  `json:"source_counts,omitempty"`
 	ConversationID string          `json:"conversation_id,omitempty"`
+	ResponseID     string          `json:"response_id,omitempty"`
 	Cards          []AssistantCard `json:"cards"`
 }
 
@@ -67,20 +72,24 @@ const (
 
 // AssistantService powers the site AI helper.
 type AssistantService struct {
-	cfg          configs.AssistantConfig
-	llmClient    *llm.OpenAICompatibleClient
-	historyRepo  assistantdomain.Repository
-	bookmarkSvc  *BookmarkService
-	postService  *PostService
-	groupService *GroupService
-	eventService *EventService
-	userService  *UserService
+	cfg                 configs.AssistantConfig
+	llmClient           *llm.OpenAICompatibleClient
+	embedder            embedding.Embedder
+	historyRepo         assistantdomain.Repository
+	bookmarkSvc         *BookmarkService
+	postService         *PostService
+	groupService        *GroupService
+	eventService        *EventService
+	userService         *UserService
+	syncGroup           cache.Group
+	lastKnowledgeSyncNS atomic.Int64
 }
 
 // NewAssistantService creates a lightweight assistant service.
 func NewAssistantService(
 	cfg configs.AssistantConfig,
 	llmClient *llm.OpenAICompatibleClient,
+	embedder embedding.Embedder,
 	historyRepo assistantdomain.Repository,
 	bookmarkSvc *BookmarkService,
 	postService *PostService,
@@ -97,10 +106,20 @@ func NewAssistantService(
 	if cfg.Provider == "" {
 		cfg.Provider = "deepseek"
 	}
+	if cfg.RetrievalLimit <= 0 {
+		cfg.RetrievalLimit = 8
+	}
+	if cfg.VectorScanLimit <= 0 {
+		cfg.VectorScanLimit = 1200
+	}
+	if cfg.SyncIntervalSec <= 0 {
+		cfg.SyncIntervalSec = 600
+	}
 
 	return &AssistantService{
 		cfg:          cfg,
 		llmClient:    llmClient,
+		embedder:     embedder,
 		historyRepo:  historyRepo,
 		bookmarkSvc:  bookmarkSvc,
 		postService:  postService,
@@ -146,6 +165,7 @@ func (s *AssistantService) StreamReply(
 	}
 
 	if s.llmClient == nil || !s.llmClient.Configured() {
+		assistantmetrics.RecordFallback("provider_unconfigured")
 		return streamText(fallbackAnswer, onToken)
 	}
 
@@ -179,6 +199,7 @@ func (s *AssistantService) StreamReply(
 			return err
 		}
 	}
+	assistantmetrics.RecordFallback("provider_error")
 	return streamText(fallbackAnswer+"\n\n（模型暂时未响应，我先把站内检索到的信息整理给你。）", onToken)
 }
 
@@ -278,12 +299,15 @@ func (s *AssistantService) PrepareConversation(
 }
 
 // SaveAssistantReply persists the assistant answer for a conversation.
-func (s *AssistantService) SaveAssistantReply(ctx context.Context, conversationID uuid.UUID, content string, cards []AssistantCard) error {
+func (s *AssistantService) SaveAssistantReply(ctx context.Context, responseID, conversationID uuid.UUID, content string, cards []AssistantCard) error {
 	if !s.HistoryEnabled() || conversationID == uuid.Nil || strings.TrimSpace(content) == "" {
 		return nil
 	}
+	if responseID == uuid.Nil {
+		responseID = uuid.New()
+	}
 	if err := s.historyRepo.CreateMessage(ctx, &assistantdomain.Message{
-		ID:             uuid.New(),
+		ID:             responseID,
 		ConversationID: conversationID,
 		Role:           assistantdomain.RoleAssistant,
 		Content:        content,
@@ -413,11 +437,8 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, inten
 		}
 	}
 
-	if settings.IncludePages {
-		appendUnique(recommendPageCards()...)
-	}
-	if settings.IncludePosts {
-		appendUnique(s.collectPostCards(ctx, query, assistantCandidateLimit(intent, "post", maxItems))...)
+	if knowledgeCards, err := s.collectKnowledgeCards(ctx, query, intent, settings); err == nil {
+		appendUnique(knowledgeCards...)
 	}
 	if settings.IncludeUsers {
 		appendUnique(s.collectUserCards(ctx, query, assistantCandidateLimit(intent, "user", maxItems))...)
@@ -425,11 +446,19 @@ func (s *AssistantService) collectCards(ctx context.Context, query string, inten
 	if settings.IncludeTags {
 		appendUnique(s.collectTagCards(ctx, query, assistantCandidateLimit(intent, "tag", maxItems))...)
 	}
-	if settings.IncludeGroups {
-		appendUnique(s.collectGroupCards(ctx, query, assistantCandidateLimit(intent, "group", maxItems))...)
-	}
-	if settings.IncludeEvents {
-		appendUnique(s.collectEventCards(ctx, query, assistantCandidateLimit(intent, "event", maxItems))...)
+	if len(scored) == 0 {
+		if settings.IncludePages {
+			appendUnique(recommendPageCards()...)
+		}
+		if settings.IncludePosts {
+			appendUnique(s.collectPostCards(ctx, query, assistantCandidateLimit(intent, "post", maxItems))...)
+		}
+		if settings.IncludeGroups {
+			appendUnique(s.collectGroupCards(ctx, query, assistantCandidateLimit(intent, "group", maxItems))...)
+		}
+		if settings.IncludeEvents {
+			appendUnique(s.collectEventCards(ctx, query, assistantCandidateLimit(intent, "event", maxItems))...)
+		}
 	}
 
 	sort.SliceStable(scored, func(i, j int) bool {

@@ -145,6 +145,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			assistant := v1.Group("/assistant")
 			assistant.Use(authMiddleware.OptionalAuthenticate())
 			assistant.POST("/chat/stream", assistantHandler.StreamChat)
+			assistant.POST("/feedback", assistantHandler.SubmitFeedback)
 		}
 
 		// Music (public read)
@@ -418,6 +419,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				if assistantHandler != nil {
 					admin.GET("/assistant/settings", assistantHandler.GetSettings)
 					admin.PUT("/assistant/settings", assistantHandler.UpdateSettings)
+					admin.GET("/assistant/overview", assistantHandler.GetOverview)
 				}
 
 				// Admin achievements

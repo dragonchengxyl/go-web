@@ -119,12 +119,19 @@ type GRPCConfig struct {
 
 // AssistantConfig holds settings for the site AI assistant.
 type AssistantConfig struct {
-	Provider        string  `mapstructure:"provider"` // "deepseek" or any OpenAI-compatible provider
-	BaseURL         string  `mapstructure:"base_url"` // e.g. https://api.deepseek.com/v1
-	APIKey          string  `mapstructure:"api_key"`
-	Model           string  `mapstructure:"model"` // e.g. deepseek-chat
-	Temperature     float64 `mapstructure:"temperature"`
-	TimeoutSec      int     `mapstructure:"timeout_sec"`
-	MaxContextItems int     `mapstructure:"max_context_items"` // cards shown to the user / injected into prompt
-	PersonaName     string  `mapstructure:"persona_name"`
+	Provider         string  `mapstructure:"provider"` // "deepseek" or any OpenAI-compatible provider
+	BaseURL          string  `mapstructure:"base_url"` // e.g. https://api.deepseek.com/v1
+	APIKey           string  `mapstructure:"api_key"`
+	Model            string  `mapstructure:"model"` // e.g. deepseek-chat
+	EmbeddingBaseURL string  `mapstructure:"embedding_base_url"`
+	EmbeddingAPIKey  string  `mapstructure:"embedding_api_key"`
+	EmbeddingModel   string  `mapstructure:"embedding_model"`
+	EmbeddingDims    int     `mapstructure:"embedding_dims"`
+	Temperature      float64 `mapstructure:"temperature"`
+	TimeoutSec       int     `mapstructure:"timeout_sec"`
+	MaxContextItems  int     `mapstructure:"max_context_items"` // cards shown to the user / injected into prompt
+	PersonaName      string  `mapstructure:"persona_name"`
+	RetrievalLimit   int     `mapstructure:"retrieval_limit"`
+	VectorScanLimit  int     `mapstructure:"vector_scan_limit"`
+	SyncIntervalSec  int     `mapstructure:"sync_interval_sec"`
 }
