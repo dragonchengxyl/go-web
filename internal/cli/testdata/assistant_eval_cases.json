@@ -1,0 +1,105 @@
+[
+  {
+    "name": "public-onboarding",
+    "kind": "chat_stream",
+    "auth": "none",
+    "messages": [
+      {
+        "role": "user",
+        "content": "我第一次来，先逛哪里？"
+      }
+    ],
+    "contains_any": ["发现页", "圈子", "活动"],
+    "expect_citation": true
+  },
+  {
+    "name": "post-create-copilot",
+    "kind": "chat_stream",
+    "auth": "none",
+    "messages": [
+      {
+        "role": "user",
+        "content": "帮我根据当前草稿推荐标题和标签"
+      }
+    ],
+    "page_context": {
+      "path": "/posts/create",
+      "kind": "post_create",
+      "title": "发布动态",
+      "summary": "用户当前正在撰写一条新动态，适合提供标题、正文、标签和可见性建议。",
+      "fields": {
+        "draft_content": "最近把角色设定改了一版，想分享新的配色和氛围。",
+        "visibility": "公开"
+      }
+    },
+    "contains_any": ["标题", "标签"],
+    "expect_insight_kinds": ["title_options", "tag_suggestions"]
+  },
+  {
+    "name": "group-copilot",
+    "kind": "chat_stream",
+    "auth": "none",
+    "messages": [
+      {
+        "role": "user",
+        "content": "这个圈子适合我加入吗？顺便总结一下规则"
+      }
+    ],
+    "page_context": {
+      "path": "/groups/demo",
+      "kind": "group_detail",
+      "title": "圈子详情：兽设交流",
+      "summary": "用户当前正在浏览一个圈子详情页，适合帮助判断是否加入、该先看什么、发什么内容更合适。",
+      "fields": {
+        "group_description": "这里主要交流原创角色设定、配色和世界观。",
+        "group_rules": "发帖请注明原创或二创；禁止直接搬运；讨论保持友好。",
+        "group_tags": "原创设定、角色设计",
+        "member_count": "128",
+        "post_count": "456",
+        "is_member": "未加入"
+      }
+    },
+    "contains_any": ["规则", "加入"],
+    "expect_insight_kinds": ["rules_summary", "join_suggestion"]
+  },
+  {
+    "name": "event-copilot",
+    "kind": "chat_stream",
+    "auth": "none",
+    "messages": [
+      {
+        "role": "user",
+        "content": "参加前我需要准备什么？"
+      }
+    ],
+    "page_context": {
+      "path": "/events/demo",
+      "kind": "event_detail",
+      "title": "活动详情：线上设定分享会",
+      "summary": "用户当前正在查看活动详情，适合帮助判断是否参加、总结关键信息和提示注意事项。",
+      "fields": {
+        "event_status": "报名中",
+        "event_time": "2026-03-20 20:00 - 22:00",
+        "event_location": "线上活动",
+        "event_attendees": "12 / 50",
+        "event_tags": "创作交流、线上分享",
+        "event_description": "会聊设定、配色、参考资料整理和角色世界观。",
+        "has_attended": "未报名"
+      }
+    },
+    "contains_any": ["准备", "报名", "清单"],
+    "expect_insight_kinds": ["preparation_checklist"]
+  },
+  {
+    "name": "weekly-report-tool",
+    "kind": "admin_tool",
+    "auth": "admin",
+    "skip_if_no_auth": true,
+    "endpoint": "/api/v1/admin/assistant/tools/weekly-report",
+    "payload": {
+      "days": 7
+    },
+    "contains_any": ["周报", "运营"],
+    "expect_draft_labels": ["周报正文"]
+  }
+]
