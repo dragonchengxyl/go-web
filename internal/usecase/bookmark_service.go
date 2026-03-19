@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/audiowork"
 	"github.com/studio/platform/internal/domain/bookmark"
 	"github.com/studio/platform/internal/domain/event"
 	"github.com/studio/platform/internal/domain/group"
@@ -13,18 +14,20 @@ import (
 )
 
 type BookmarkService struct {
-	repo     bookmark.Repository
-	postSvc  *PostService
-	groupSvc *GroupService
-	eventSvc *EventService
+	repo         bookmark.Repository
+	postSvc      *PostService
+	groupSvc     *GroupService
+	eventSvc     *EventService
+	audioWorkSvc *AudioWorkService
 }
 
-func NewBookmarkService(repo bookmark.Repository, postSvc *PostService, groupSvc *GroupService, eventSvc *EventService) *BookmarkService {
+func NewBookmarkService(repo bookmark.Repository, postSvc *PostService, groupSvc *GroupService, eventSvc *EventService, audioWorkSvc *AudioWorkService) *BookmarkService {
 	return &BookmarkService{
-		repo:     repo,
-		postSvc:  postSvc,
-		groupSvc: groupSvc,
-		eventSvc: eventSvc,
+		repo:         repo,
+		postSvc:      postSvc,
+		groupSvc:     groupSvc,
+		eventSvc:     eventSvc,
+		audioWorkSvc: audioWorkSvc,
 	}
 }
 
@@ -112,6 +115,23 @@ func (s *BookmarkService) ListEvents(ctx context.Context, userID uuid.UUID, page
 	return events, total, nil
 }
 
+func (s *BookmarkService) ListAudioWorks(ctx context.Context, userID uuid.UUID, page, pageSize int, sort string) ([]*audiowork.Work, int64, error) {
+	items, total, err := s.repo.List(ctx, userID, bookmark.TargetAudioWork, page, pageSize, sort)
+	if err != nil {
+		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "读取收藏音频作品失败", err)
+	}
+	works := make([]*audiowork.Work, 0, len(items))
+	for _, item := range items {
+		work, err := s.audioWorkSvc.GetByID(ctx, item.TargetID)
+		if err != nil {
+			continue
+		}
+		work.IsBookmarkedByMe = true
+		works = append(works, work)
+	}
+	return works, total, nil
+}
+
 func (s *BookmarkService) ensureTargetExists(ctx context.Context, targetType bookmark.TargetType, targetID uuid.UUID) error {
 	switch targetType {
 	case bookmark.TargetPost:
@@ -122,6 +142,9 @@ func (s *BookmarkService) ensureTargetExists(ctx context.Context, targetType boo
 		return err
 	case bookmark.TargetEvent:
 		_, err := s.eventSvc.GetEvent(ctx, targetID)
+		return err
+	case bookmark.TargetAudioWork:
+		_, err := s.audioWorkSvc.GetByID(ctx, targetID)
 		return err
 	default:
 		return apperr.New(apperr.CodeInvalidParam, "不支持的收藏类型")

@@ -1,12 +1,16 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, AudioLines, Clock3, UserRound, Waves } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, AudioLines, Bookmark, Clock3, Heart, MessageCircle, Send, UserRound, Waves } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/auth-context';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 
 function formatDateTime(value?: string) {
   if (!value) return '—';
@@ -14,13 +18,68 @@ function formatDateTime(value?: string) {
 }
 
 export default function AudioWorkDetailPage() {
+  const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
   const workId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const { isLoggedIn, loading: authLoading } = useAuth();
+  const [commentDraft, setCommentDraft] = useState('');
 
   const workQuery = useQuery({
     queryKey: ['audio-work', workId],
     queryFn: () => apiClient.getAudioWork(workId as string),
     enabled: !!workId,
+  });
+
+  const commentsQuery = useQuery({
+    queryKey: ['audio-work-comments', workId],
+    queryFn: () => apiClient.getCommentsByTarget('audio_work', workId as string, 1, 50),
+    enabled: !!workId,
+  });
+
+  const meStateQuery = useQuery({
+    queryKey: ['audio-work-me-state', workId],
+    queryFn: () => apiClient.getAudioWorkMeState(workId as string),
+    enabled: !!workId && !authLoading && isLoggedIn,
+  });
+
+  const refreshDetail = () => {
+    queryClient.invalidateQueries({ queryKey: ['audio-work', workId] });
+    queryClient.invalidateQueries({ queryKey: ['audio-works-public'] });
+    queryClient.invalidateQueries({ queryKey: ['audio-work-comments', workId] });
+    queryClient.invalidateQueries({ queryKey: ['audio-work-me-state', workId] });
+  };
+
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      if (!workId) throw new Error('missing work id');
+      if (meStateQuery.data?.liked) {
+        return apiClient.unlikeAudioWork(workId);
+      }
+      return apiClient.likeAudioWork(workId);
+    },
+    onSuccess: refreshDetail,
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: async () => {
+      if (!workId) throw new Error('missing work id');
+      if (meStateQuery.data?.bookmarked) {
+        return apiClient.unbookmarkAudioWork(workId);
+      }
+      return apiClient.bookmarkAudioWork(workId);
+    },
+    onSuccess: refreshDetail,
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async () => {
+      if (!workId) throw new Error('missing work id');
+      return apiClient.createCommentForTarget('audio_work', workId, commentDraft.trim());
+    },
+    onSuccess: () => {
+      setCommentDraft('');
+      refreshDetail();
+    },
   });
 
   if (workQuery.isLoading) {
@@ -52,6 +111,8 @@ export default function AudioWorkDetailPage() {
 
   const work = workQuery.data;
   const waveform = work.waveform_preview ?? [];
+  const comments = commentsQuery.data?.comments ?? [];
+  const meState = meStateQuery.data;
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-12 pt-20">
@@ -86,6 +147,14 @@ export default function AudioWorkDetailPage() {
                   @{work.author_username}
                 </Badge>
               ) : null}
+              <Badge className="border-rose-300/30 bg-rose-300/10 px-3 py-1 text-rose-100 hover:bg-rose-300/10">
+                <Heart className="mr-1.5 h-3.5 w-3.5" />
+                {work.like_count}
+              </Badge>
+              <Badge className="border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-cyan-100 hover:bg-cyan-300/10">
+                <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+                {work.comment_count}
+              </Badge>
             </div>
 
             {work.tags && work.tags.length > 0 ? (
@@ -108,6 +177,29 @@ export default function AudioWorkDetailPage() {
               <audio controls className="w-full">
                 <source src={work.audio_url} />
               </audio>
+
+              {isLoggedIn ? (
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant={meState?.liked ? 'default' : 'outline'}
+                    onClick={() => likeMutation.mutate()}
+                    disabled={likeMutation.isPending}
+                  >
+                    <Heart className="mr-2 h-4 w-4" />
+                    {meState?.liked ? '取消点赞' : '点赞作品'}
+                  </Button>
+                  <Button
+                    variant={meState?.bookmarked ? 'default' : 'outline'}
+                    onClick={() => bookmarkMutation.mutate()}
+                    disabled={bookmarkMutation.isPending}
+                  >
+                    <Bookmark className="mr-2 h-4 w-4" />
+                    {meState?.bookmarked ? '已收藏' : '收藏作品'}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-300">登录后可以点赞、评论和收藏这首作品。</p>
+              )}
 
               {waveform.length > 0 ? (
                 <div>
@@ -140,6 +232,66 @@ export default function AudioWorkDetailPage() {
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <Card className="rounded-[24px] border-border/70">
+          <CardHeader>
+            <CardTitle>作品互动</CardTitle>
+            <CardDescription>评论体系复用了社区现有的多态评论模型，现在这首作品已经可以承接基础互动。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isLoggedIn ? (
+              <div className="space-y-3">
+                <Textarea
+                  value={commentDraft}
+                  onChange={(event) => setCommentDraft(event.target.value)}
+                  placeholder="写下你对这首作品的想法，例如编曲、情绪、声线或混音建议。"
+                  className="min-h-[120px]"
+                />
+                <Button
+                  onClick={() => commentMutation.mutate()}
+                  disabled={commentMutation.isPending || commentDraft.trim().length === 0}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  发表评论
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">登录后可参与评论。</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[24px] border-border/70">
+          <CardHeader>
+            <CardTitle>评论区</CardTitle>
+            <CardDescription>{work.comment_count} 条评论</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {commentsQuery.isLoading ? (
+              <div className="space-y-3">
+                {[0, 1, 2].map((item) => (
+                  <div key={item} className="h-20 animate-pulse rounded-2xl bg-muted/30" />
+                ))}
+              </div>
+            ) : comments.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+                还没有评论，成为第一个留下反馈的人。
+              </div>
+            ) : (
+              comments.map((comment) => (
+                <div key={comment.id} className="rounded-2xl border border-border/70 bg-background px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">@{comment.author_username || comment.user_id}</p>
+                    <span className="text-xs text-muted-foreground">{formatDateTime(comment.created_at)}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-foreground">{comment.content}</p>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

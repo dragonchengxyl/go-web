@@ -41,6 +41,14 @@ func (h *BookmarkHandler) UnbookmarkEvent(c *gin.Context) {
 	h.remove(c, bookmark.TargetEvent, c.Param("id"))
 }
 
+func (h *BookmarkHandler) BookmarkAudioWork(c *gin.Context) {
+	h.add(c, bookmark.TargetAudioWork, c.Param("id"))
+}
+
+func (h *BookmarkHandler) UnbookmarkAudioWork(c *gin.Context) {
+	h.remove(c, bookmark.TargetAudioWork, c.Param("id"))
+}
+
 func (h *BookmarkHandler) Check(c *gin.Context) {
 	userID, ok := getUserID(c)
 	if !ok {
@@ -113,6 +121,22 @@ func (h *BookmarkHandler) ListEvents(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"events": events, "total": total, "page": page, "size": len(events)})
+}
+
+func (h *BookmarkHandler) ListAudioWorks(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	page, pageSize := getPageParams(c)
+	sort := c.DefaultQuery("sort", "latest")
+	works, total, err := h.service.ListAudioWorks(c.Request.Context(), userID, page, pageSize, sort)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"works": works, "total": total, "page": page, "size": len(works)})
 }
 
 func (h *BookmarkHandler) add(c *gin.Context, targetType bookmark.TargetType, rawID string) {
@@ -191,5 +215,5 @@ func (h *BookmarkHandler) RemoveBatch(c *gin.Context) {
 }
 
 func isValidBookmarkType(t bookmark.TargetType) bool {
-	return t == bookmark.TargetPost || t == bookmark.TargetGroup || t == bookmark.TargetEvent
+	return t == bookmark.TargetPost || t == bookmark.TargetGroup || t == bookmark.TargetEvent || t == bookmark.TargetAudioWork
 }

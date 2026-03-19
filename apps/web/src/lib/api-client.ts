@@ -340,6 +340,8 @@ export interface AudioWork {
   audio_url: string;
   duration_sec: number;
   visibility: AudioWorkVisibility;
+  like_count: number;
+  comment_count: number;
   tags?: string[];
   waveform_preview?: number[];
   metadata?: Record<string, unknown>;
@@ -641,9 +643,18 @@ class ApiClient {
   }
 
   async getComments(postId: string, page?: number, pageSize?: number) {
+    return this.getCommentsByTarget("post", postId, page, pageSize);
+  }
+
+  async getCommentsByTarget(
+    commentableType: "post" | "audio_work",
+    commentableId: string,
+    page?: number,
+    pageSize?: number,
+  ) {
     const q = new URLSearchParams({
-      commentable_type: "post",
-      commentable_id: postId,
+      commentable_type: commentableType,
+      commentable_id: commentableId,
     });
     if (page) q.set("page", String(page));
     if (pageSize) q.set("page_size", String(pageSize));
@@ -656,9 +667,17 @@ class ApiClient {
   }
 
   async createComment(postId: string, content: string) {
+    return this.createCommentForTarget("post", postId, content);
+  }
+
+  async createCommentForTarget(
+    commentableType: "post" | "audio_work",
+    commentableId: string,
+    content: string,
+  ) {
     return this.post<Comment>("/comments", {
-      commentable_type: "post",
-      commentable_id: postId,
+      commentable_type: commentableType,
+      commentable_id: commentableId,
       content,
     });
   }
@@ -1085,6 +1104,18 @@ class ApiClient {
     return this.get<AudioWork>(`/audio/works/${id}`);
   }
 
+  async getAudioWorkMeState(id: string) {
+    return this.get<{ liked: boolean; bookmarked: boolean }>(`/audio/works/${id}/me-state`);
+  }
+
+  async likeAudioWork(id: string) {
+    return this.post<{ message: string }>(`/audio/works/${id}/like`);
+  }
+
+  async unlikeAudioWork(id: string) {
+    return this.delete<{ message: string }>(`/audio/works/${id}/like`);
+  }
+
   // ── Events ───────────────────────────────────────────────────────────────
 
   async listEvents(page = 1, pageSize = 20) {
@@ -1245,8 +1276,16 @@ class ApiClient {
     return this.delete<{ message: string }>(`/events/${id}/bookmark`);
   }
 
+  async bookmarkAudioWork(id: string) {
+    return this.post<{ message: string }>(`/audio/works/${id}/bookmark`);
+  }
+
+  async unbookmarkAudioWork(id: string) {
+    return this.delete<{ message: string }>(`/audio/works/${id}/bookmark`);
+  }
+
   async checkBookmark(
-    targetType: "post" | "group" | "event",
+    targetType: "post" | "group" | "event" | "audio_work",
     targetId: string,
   ) {
     return this.get<{ bookmarked: boolean }>(
@@ -1305,8 +1344,25 @@ class ApiClient {
     }>(`/bookmarks/events?page=${page}&page_size=${pageSize}&sort=${sort}`);
   }
 
+  async getBookmarkedAudioWorks(page = 1, pageSize = 20) {
+    return this.getBookmarkedAudioWorksWithSort(page, pageSize, "latest");
+  }
+
+  async getBookmarkedAudioWorksWithSort(
+    page = 1,
+    pageSize = 20,
+    sort: "latest" | "oldest" = "latest",
+  ) {
+    return this.get<{
+      works: AudioWork[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/bookmarks/audio/works?page=${page}&page_size=${pageSize}&sort=${sort}`);
+  }
+
   async batchDeleteBookmarks(
-    targetType: "post" | "group" | "event",
+    targetType: "post" | "group" | "event" | "audio_work",
     targetIds: string[],
   ) {
     return this.post<{ message: string }>("/bookmarks/batch-delete", {

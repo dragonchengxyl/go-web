@@ -4,17 +4,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/audiowork"
+	"github.com/studio/platform/internal/domain/bookmark"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
 )
 
 type AudioWorkHandler struct {
-	service *usecase.AudioWorkService
+	service         *usecase.AudioWorkService
+	bookmarkService *usecase.BookmarkService
 }
 
-func NewAudioWorkHandler(service *usecase.AudioWorkService) *AudioWorkHandler {
-	return &AudioWorkHandler{service: service}
+func NewAudioWorkHandler(service *usecase.AudioWorkService, bookmarkService *usecase.BookmarkService) *AudioWorkHandler {
+	return &AudioWorkHandler{service: service, bookmarkService: bookmarkService}
 }
 
 // ListPublicWorks handles GET /api/v1/audio/works.
@@ -105,4 +107,71 @@ func (h *AudioWorkHandler) PublishFromJob(c *gin.Context) {
 		return
 	}
 	response.Success(c, work)
+}
+
+// LikeWork handles POST /api/v1/audio/works/:id/like.
+func (h *AudioWorkHandler) LikeWork(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的音频作品ID"))
+		return
+	}
+	if err := h.service.LikeWork(c.Request.Context(), userID, workID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "点赞成功"})
+}
+
+// UnlikeWork handles DELETE /api/v1/audio/works/:id/like.
+func (h *AudioWorkHandler) UnlikeWork(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的音频作品ID"))
+		return
+	}
+	if err := h.service.UnlikeWork(c.Request.Context(), userID, workID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "取消点赞成功"})
+}
+
+// GetMeState handles GET /api/v1/audio/works/:id/me-state.
+func (h *AudioWorkHandler) GetMeState(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的音频作品ID"))
+		return
+	}
+
+	liked, err := h.service.HasLiked(c.Request.Context(), userID, workID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	bookmarked := false
+	if h.bookmarkService != nil {
+		value, bookmarkErr := h.bookmarkService.Exists(c.Request.Context(), userID, bookmark.TargetAudioWork, workID)
+		if bookmarkErr == nil {
+			bookmarked = value
+		}
+	}
+	response.Success(c, gin.H{"liked": liked, "bookmarked": bookmarked})
 }

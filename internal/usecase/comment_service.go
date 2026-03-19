@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/audiowork"
 	"github.com/studio/platform/internal/domain/comment"
 	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
@@ -13,8 +14,9 @@ import (
 
 // CommentService handles comment-related business logic
 type CommentService struct {
-	commentRepo comment.Repository
-	publisher   *streams.Publisher // may be nil
+	commentRepo   comment.Repository
+	audioWorkRepo audiowork.Repository
+	publisher     *streams.Publisher // may be nil
 }
 
 // NewCommentService creates a new CommentService
@@ -29,6 +31,10 @@ func NewCommentService(commentRepo comment.Repository, opts ...func(*CommentServ
 // WithCommentPublisher injects an event publisher into CommentService.
 func WithCommentPublisher(p *streams.Publisher) func(*CommentService) {
 	return func(s *CommentService) { s.publisher = p }
+}
+
+func WithAudioWorkCommentCounter(repo audiowork.Repository) func(*CommentService) {
+	return func(s *CommentService) { s.audioWorkRepo = repo }
 }
 
 // CreateCommentInput represents input for creating a comment
@@ -61,6 +67,12 @@ func (s *CommentService) CreateComment(ctx context.Context, userID uuid.UUID, in
 
 	if err := s.commentRepo.Create(ctx, c); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建评论失败", err)
+	}
+
+	if input.CommentableType == comment.CommentableTypeAudioWork && s.audioWorkRepo != nil {
+		if err := s.audioWorkRepo.IncrementCommentCount(ctx, input.CommentableID); err != nil {
+			return nil, apperr.Wrap(apperr.CodeInternalError, "更新音频作品评论数失败", err)
+		}
 	}
 
 	// Publish comment.created event
@@ -133,6 +145,12 @@ func (s *CommentService) DeleteComment(ctx context.Context, userID, commentID uu
 
 	if err := s.commentRepo.Delete(ctx, commentID); err != nil {
 		return apperr.Wrap(apperr.CodeInternalError, "删除评论失败", err)
+	}
+
+	if c.CommentableType == comment.CommentableTypeAudioWork && s.audioWorkRepo != nil {
+		if err := s.audioWorkRepo.DecrementCommentCount(ctx, c.CommentableID); err != nil {
+			return apperr.Wrap(apperr.CodeInternalError, "更新音频作品评论数失败", err)
+		}
 	}
 
 	// Decrement parent reply count if this is a reply

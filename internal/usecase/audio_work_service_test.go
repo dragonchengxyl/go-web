@@ -96,3 +96,72 @@ func (r *fakeAudioWorkRepo) List(_ context.Context, filter audiowork.ListFilter)
 	}
 	return items, int64(len(items)), nil
 }
+
+func (r *fakeAudioWorkRepo) Like(_ context.Context, userID, workID uuid.UUID) error {
+	work, ok := r.items[workID]
+	if !ok {
+		return audiowork.ErrNotFound
+	}
+	if work.IsLikedByMe {
+		return audiowork.ErrAlreadyLiked
+	}
+	work.IsLikedByMe = true
+	return nil
+}
+
+func (r *fakeAudioWorkRepo) Unlike(_ context.Context, userID, workID uuid.UUID) error {
+	work, ok := r.items[workID]
+	if !ok {
+		return audiowork.ErrNotFound
+	}
+	work.IsLikedByMe = false
+	return nil
+}
+
+func (r *fakeAudioWorkRepo) HasLiked(_ context.Context, userID, workID uuid.UUID) (bool, error) {
+	work, ok := r.items[workID]
+	if !ok {
+		return false, audiowork.ErrNotFound
+	}
+	return work.IsLikedByMe, nil
+}
+
+func (r *fakeAudioWorkRepo) IncrementLikeCount(_ context.Context, workID uuid.UUID) error {
+	work, ok := r.items[workID]
+	if !ok {
+		return audiowork.ErrNotFound
+	}
+	work.LikeCount++
+	return nil
+}
+
+func (r *fakeAudioWorkRepo) DecrementLikeCount(_ context.Context, workID uuid.UUID) error {
+	work, ok := r.items[workID]
+	if !ok {
+		return audiowork.ErrNotFound
+	}
+	if work.LikeCount > 0 {
+		work.LikeCount--
+	}
+	return nil
+}
+
+func (r *fakeAudioWorkRepo) IncrementCommentCount(_ context.Context, workID uuid.UUID) error {
+	work, ok := r.items[workID]
+	if !ok {
+		return audiowork.ErrNotFound
+	}
+	work.CommentCount++
+	return nil
+}
+
+func (r *fakeAudioWorkRepo) DecrementCommentCount(_ context.Context, workID uuid.UUID) error {
+	work, ok := r.items[workID]
+	if !ok {
+		return audiowork.ErrNotFound
+	}
+	if work.CommentCount > 0 {
+		work.CommentCount--
+	}
+	return nil
+}

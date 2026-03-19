@@ -24,6 +24,8 @@ type Work struct {
 	AudioURL        string         `json:"audio_url"`
 	DurationSec     float64        `json:"duration_sec"`
 	Visibility      Visibility     `json:"visibility"`
+	LikeCount       int            `json:"like_count"`
+	CommentCount    int            `json:"comment_count"`
 	Tags            []string       `json:"tags,omitempty"`
 	WaveformPreview []float64      `json:"waveform_preview,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
@@ -31,7 +33,9 @@ type Work struct {
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 
-	AuthorUsername string `json:"author_username,omitempty"`
+	AuthorUsername   string `json:"author_username,omitempty"`
+	IsLikedByMe      bool   `json:"is_liked_by_me,omitempty"`
+	IsBookmarkedByMe bool   `json:"is_bookmarked_by_me,omitempty"`
 }
 
 type ListFilter struct {
@@ -45,4 +49,5 @@ var (
 	ErrNotFound         = errors.New("audio work not found")
 	ErrForbidden        = errors.New("not authorized to access this audio work")
 	ErrAlreadyPublished = errors.New("audio job already published")
+	ErrAlreadyLiked     = errors.New("audio work already liked")
 )

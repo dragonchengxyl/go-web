@@ -1,7 +1,5 @@
-'use client';
-
 import Link from 'next/link';
-import { AudioLines, PlayCircle, UserRound, Waves } from 'lucide-react';
+import { AudioLines, Heart, MessageCircle, PlayCircle, UserRound, Waves } from 'lucide-react';
 import { type AudioWork } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
@@ -99,6 +97,17 @@ export function AudioWorkCard({
             <span className="inline-flex items-center gap-1">
               <Waves className="h-3.5 w-3.5" />
               {work.waveform_preview?.length ? '已生成波形' : '音频作品'}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Heart className="h-3.5 w-3.5" />
+              {work.like_count}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <MessageCircle className="h-3.5 w-3.5" />
+              {work.comment_count}
             </span>
           </div>
 

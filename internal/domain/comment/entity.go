@@ -10,9 +10,10 @@ import (
 type CommentableType string
 
 const (
-	CommentableTypeGame  CommentableType = "game"
-	CommentableTypeTrack CommentableType = "track"
-	CommentableTypePost  CommentableType = "post"
+	CommentableTypeGame      CommentableType = "game"
+	CommentableTypeTrack     CommentableType = "track"
+	CommentableTypePost      CommentableType = "post"
+	CommentableTypeAudioWork CommentableType = "audio_work"
 )
 
 // Comment represents a comment entity

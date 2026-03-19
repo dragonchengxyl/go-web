@@ -171,6 +171,65 @@ func (s *AudioWorkService) GetPublicWork(ctx context.Context, workID uuid.UUID) 
 	return work, nil
 }
 
+func (s *AudioWorkService) GetByID(ctx context.Context, workID uuid.UUID) (*audiowork.Work, error) {
+	work, err := s.workRepo.GetByID(ctx, workID)
+	if err != nil {
+		if errors.Is(err, audiowork.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询音频作品失败", err)
+	}
+	return work, nil
+}
+
+func (s *AudioWorkService) LikeWork(ctx context.Context, userID, workID uuid.UUID) error {
+	if _, err := s.GetByID(ctx, workID); err != nil {
+		return err
+	}
+	liked, err := s.workRepo.HasLiked(ctx, userID, workID)
+	if err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "检查点赞状态失败", err)
+	}
+	if liked {
+		return apperr.BadRequest("已点赞")
+	}
+	if err := s.workRepo.Like(ctx, userID, workID); err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "点赞音频作品失败", err)
+	}
+	if err := s.workRepo.IncrementLikeCount(ctx, workID); err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "更新作品点赞数失败", err)
+	}
+	return nil
+}
+
+func (s *AudioWorkService) UnlikeWork(ctx context.Context, userID, workID uuid.UUID) error {
+	if _, err := s.GetByID(ctx, workID); err != nil {
+		return err
+	}
+	liked, err := s.workRepo.HasLiked(ctx, userID, workID)
+	if err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "检查点赞状态失败", err)
+	}
+	if !liked {
+		return apperr.BadRequest("未点赞")
+	}
+	if err := s.workRepo.Unlike(ctx, userID, workID); err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "取消点赞音频作品失败", err)
+	}
+	if err := s.workRepo.DecrementLikeCount(ctx, workID); err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "更新作品点赞数失败", err)
+	}
+	return nil
+}
+
+func (s *AudioWorkService) HasLiked(ctx context.Context, userID, workID uuid.UUID) (bool, error) {
+	liked, err := s.workRepo.HasLiked(ctx, userID, workID)
+	if err != nil {
+		return false, apperr.Wrap(apperr.CodeInternalError, "查询作品点赞状态失败", err)
+	}
+	return liked, nil
+}
+
 func (s *AudioWorkService) validateAudioURL(raw string) error {
 	return s.validateMediaURL(raw, "/uploads/processed-audio/", "音频输出地址无效")
 }

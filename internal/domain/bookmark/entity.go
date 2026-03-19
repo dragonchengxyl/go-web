@@ -10,9 +10,10 @@ import (
 type TargetType string
 
 const (
-	TargetPost  TargetType = "post"
-	TargetGroup TargetType = "group"
-	TargetEvent TargetType = "event"
+	TargetPost      TargetType = "post"
+	TargetGroup     TargetType = "group"
+	TargetEvent     TargetType = "event"
+	TargetAudioWork TargetType = "audio_work"
 )
 
 // Bookmark is a generic saved item reference.

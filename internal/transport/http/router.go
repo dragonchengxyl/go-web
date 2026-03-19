@@ -124,7 +124,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		}
 		var audioWorkHandler *handler.AudioWorkHandler
 		if cfg.AudioWorkService != nil {
-			audioWorkHandler = handler.NewAudioWorkHandler(cfg.AudioWorkService)
+			audioWorkHandler = handler.NewAudioWorkHandler(cfg.AudioWorkService, cfg.BookmarkService)
 		}
 
 		// ── Public routes ──────────────────────────────────────────────
@@ -332,10 +332,13 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				protected.DELETE("/groups/:id/bookmark", bookmarkHandler.UnbookmarkGroup)
 				protected.POST("/events/:id/bookmark", bookmarkHandler.BookmarkEvent)
 				protected.DELETE("/events/:id/bookmark", bookmarkHandler.UnbookmarkEvent)
+				protected.POST("/audio/works/:id/bookmark", bookmarkHandler.BookmarkAudioWork)
+				protected.DELETE("/audio/works/:id/bookmark", bookmarkHandler.UnbookmarkAudioWork)
 				protected.GET("/bookmarks/check", bookmarkHandler.Check)
 				protected.GET("/bookmarks/posts", bookmarkHandler.ListPosts)
 				protected.GET("/bookmarks/groups", bookmarkHandler.ListGroups)
 				protected.GET("/bookmarks/events", bookmarkHandler.ListEvents)
+				protected.GET("/bookmarks/audio/works", bookmarkHandler.ListAudioWorks)
 				protected.POST("/bookmarks/batch-delete", bookmarkHandler.RemoveBatch)
 			}
 
@@ -368,6 +371,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			if audioWorkHandler != nil {
 				protected.POST("/audio/jobs/:id/publish", audioWorkHandler.PublishFromJob)
 				protected.GET("/users/me/audio/works", audioWorkHandler.ListMyWorks)
+				protected.GET("/audio/works/:id/me-state", audioWorkHandler.GetMeState)
+				protected.POST("/audio/works/:id/like", audioWorkHandler.LikeWork)
+				protected.DELETE("/audio/works/:id/like", audioWorkHandler.UnlikeWork)
 			}
 
 			// Creator dashboard

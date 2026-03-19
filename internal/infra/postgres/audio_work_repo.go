@@ -25,10 +25,10 @@ func NewAudioWorkRepository(pool *pgxpool.Pool) *AudioWorkRepository {
 const createAudioWorkSQL = `
 	INSERT INTO audio_works (
 		id, author_id, source_job_id, title, description, cover_image_url, audio_url,
-		duration_sec, visibility, tags, waveform_preview, metadata, published_at, created_at, updated_at
+		duration_sec, visibility, like_count, comment_count, tags, waveform_preview, metadata, published_at, created_at, updated_at
 	) VALUES (
 		$1, $2, $3, $4, $5, $6, $7,
-		$8, $9, $10, $11, $12, $13, $14, $15
+		$8, $9, $10, $11, $12, $13, $14, $15, $16, $17
 	)
 `
 
@@ -56,6 +56,8 @@ func (r *AudioWorkRepository) Create(ctx context.Context, work *audiowork.Work) 
 		work.AudioURL,
 		work.DurationSec,
 		work.Visibility,
+		work.LikeCount,
+		work.CommentCount,
 		tagsJSON,
 		waveformJSON,
 		metadataJSON,
@@ -74,7 +76,7 @@ func (r *AudioWorkRepository) Create(ctx context.Context, work *audiowork.Work) 
 
 const getAudioWorkByIDSQL = `
 	SELECT w.id, w.author_id, w.source_job_id, w.title, w.description, w.cover_image_url, w.audio_url,
-	       w.duration_sec, w.visibility, w.tags, w.waveform_preview, w.metadata,
+	       w.duration_sec, w.visibility, w.like_count, w.comment_count, w.tags, w.waveform_preview, w.metadata,
 	       w.published_at, w.created_at, w.updated_at, COALESCE(u.username, '')
 	FROM audio_works w
 	LEFT JOIN users u ON u.id = w.author_id
@@ -129,7 +131,7 @@ func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFil
 
 	query := fmt.Sprintf(`
 		SELECT w.id, w.author_id, w.source_job_id, w.title, w.description, w.cover_image_url, w.audio_url,
-		       w.duration_sec, w.visibility, w.tags, w.waveform_preview, w.metadata,
+		       w.duration_sec, w.visibility, w.like_count, w.comment_count, w.tags, w.waveform_preview, w.metadata,
 		       w.published_at, w.created_at, w.updated_at, COALESCE(u.username, ''),
 		       COUNT(*) OVER() AS total_count
 		FROM audio_works w
@@ -183,6 +185,8 @@ func scanAudioWork(scanner audioWorkScanner) (*audiowork.Work, error) {
 		&work.AudioURL,
 		&work.DurationSec,
 		&work.Visibility,
+		&work.LikeCount,
+		&work.CommentCount,
 		&tagsJSON,
 		&waveformJSON,
 		&metadataJSON,
@@ -232,6 +236,8 @@ func scanAudioWorkWithTotal(rows pgx.Rows) (*audiowork.Work, int64, error) {
 		&work.AudioURL,
 		&work.DurationSec,
 		&work.Visibility,
+		&work.LikeCount,
+		&work.CommentCount,
 		&tagsJSON,
 		&waveformJSON,
 		&metadataJSON,
@@ -266,4 +272,70 @@ func scanAudioWorkWithTotal(rows pgx.Rows) (*audiowork.Work, int64, error) {
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func (r *AudioWorkRepository) Like(ctx context.Context, userID, workID uuid.UUID) error {
+	result, err := r.pool.Exec(ctx, `
+		INSERT INTO audio_work_likes (user_id, work_id, created_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (user_id, work_id) DO NOTHING
+	`, userID, workID)
+	if err != nil {
+		return fmt.Errorf("like audio work: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return audiowork.ErrAlreadyLiked
+	}
+	return nil
+}
+
+func (r *AudioWorkRepository) Unlike(ctx context.Context, userID, workID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM audio_work_likes WHERE user_id = $1 AND work_id = $2`, userID, workID)
+	if err != nil {
+		return fmt.Errorf("unlike audio work: %w", err)
+	}
+	return nil
+}
+
+func (r *AudioWorkRepository) HasLiked(ctx context.Context, userID, workID uuid.UUID) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM audio_work_likes WHERE user_id = $1 AND work_id = $2)
+	`, userID, workID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check audio work like state: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *AudioWorkRepository) IncrementLikeCount(ctx context.Context, workID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `UPDATE audio_works SET like_count = like_count + 1 WHERE id = $1`, workID)
+	if err != nil {
+		return fmt.Errorf("increment audio work like count: %w", err)
+	}
+	return nil
+}
+
+func (r *AudioWorkRepository) DecrementLikeCount(ctx context.Context, workID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `UPDATE audio_works SET like_count = GREATEST(like_count - 1, 0) WHERE id = $1`, workID)
+	if err != nil {
+		return fmt.Errorf("decrement audio work like count: %w", err)
+	}
+	return nil
+}
+
+func (r *AudioWorkRepository) IncrementCommentCount(ctx context.Context, workID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `UPDATE audio_works SET comment_count = comment_count + 1 WHERE id = $1`, workID)
+	if err != nil {
+		return fmt.Errorf("increment audio work comment count: %w", err)
+	}
+	return nil
+}
+
+func (r *AudioWorkRepository) DecrementCommentCount(ctx context.Context, workID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `UPDATE audio_works SET comment_count = GREATEST(comment_count - 1, 0) WHERE id = $1`, workID)
+	if err != nil {
+		return fmt.Errorf("decrement audio work comment count: %w", err)
+	}
+	return nil
 }

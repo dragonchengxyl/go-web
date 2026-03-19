@@ -144,7 +144,6 @@ func main() {
 	// Redis Streams publisher (event bus)
 	publisher := streams.NewPublisher(redisClient)
 
-	commentService := usecase.NewCommentService(commentRepo, usecase.WithCommentPublisher(publisher))
 	paymentService := usecase.NewPaymentServiceWithOptions(orderRepo, alipayGW, wechatGW, usecase.WithPaymentPublisher(publisher))
 	searchService := usecase.NewSearchService(pool)
 
@@ -201,11 +200,16 @@ func main() {
 		audioJobRepo,
 		usecase.WithAudioWorkAllowedHosts(cfg.OSS.AllowedHosts),
 	)
+	commentService := usecase.NewCommentService(
+		commentRepo,
+		usecase.WithCommentPublisher(publisher),
+		usecase.WithAudioWorkCommentCounter(audioWorkRepo),
+	)
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
 	assistantRepo := postgres.NewAssistantRepository(pool)
 	bookmarkRepo := postgres.NewBookmarkRepository(pool)
-	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService)
+	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService, audioWorkService)
 	auditRepo := postgres.NewAuditRepository(pool)
 	auditService := usecase.NewAuditService(auditRepo)
 	reportRepo := postgres.NewReportRepository(pool)
