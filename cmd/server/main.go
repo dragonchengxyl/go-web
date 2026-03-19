@@ -93,6 +93,7 @@ func main() {
 	eventRepo := postgres.NewEventRepository(pool)
 	groupRepo := postgres.NewGroupRepository(pool)
 	audioJobRepo := postgres.NewAudioJobRepository(pool)
+	audioWorkRepo := postgres.NewAudioWorkRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
@@ -198,6 +199,11 @@ func main() {
 		usecase.WithAudioJobAllowedHosts(cfg.OSS.AllowedHosts),
 		usecase.WithAudioJobProcessor(audioProcessor),
 	)
+	audioWorkService := usecase.NewAudioWorkService(
+		audioWorkRepo,
+		audioJobRepo,
+		usecase.WithAudioWorkAllowedHosts(cfg.OSS.AllowedHosts),
+	)
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
 	assistantRepo := postgres.NewAssistantRepository(pool)
@@ -299,6 +305,7 @@ func main() {
 		SearchService:          searchService,
 		StatsService:           statsService,
 		AudioJobService:        audioJobService,
+		AudioWorkService:       audioWorkService,
 		AchievementService:     achievementService,
 		AuditService:           auditService,
 		PostService:            postService,

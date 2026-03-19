@@ -322,6 +322,27 @@ export interface AudioJob {
   finished_at?: string;
 }
 
+export type AudioWorkVisibility = "public" | "private";
+
+export interface AudioWork {
+  id: string;
+  author_id: string;
+  source_job_id: string;
+  title: string;
+  description?: string;
+  cover_image_url?: string;
+  audio_url: string;
+  duration_sec: number;
+  visibility: AudioWorkVisibility;
+  tags?: string[];
+  waveform_preview?: number[];
+  metadata?: Record<string, unknown>;
+  published_at: string;
+  created_at: string;
+  updated_at: string;
+  author_username?: string;
+}
+
 export interface AdminAIToolSection {
   title: string;
   bullets?: string[];
@@ -1009,6 +1030,53 @@ class ApiClient {
 
   async retryAudioJob(id: string) {
     return this.post<AudioJob>(`/audio/jobs/${id}/retry`);
+  }
+
+  async publishAudioJob(
+    id: string,
+    data?: {
+      title?: string;
+      description?: string;
+      cover_image_url?: string;
+      visibility?: AudioWorkVisibility;
+      tags?: string[];
+    },
+  ) {
+    return this.post<AudioWork>(`/audio/jobs/${id}/publish`, data ?? {});
+  }
+
+  async listMyAudioWorks(options?: {
+    page?: number;
+    page_size?: number;
+  }) {
+    const q = new URLSearchParams();
+    if (options?.page) q.set("page", String(options.page));
+    if (options?.page_size) q.set("page_size", String(options.page_size));
+    return this.get<{
+      items: AudioWork[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/users/me/audio/works?${q.toString()}`);
+  }
+
+  async listAudioWorks(options?: {
+    page?: number;
+    page_size?: number;
+  }) {
+    const q = new URLSearchParams();
+    if (options?.page) q.set("page", String(options.page));
+    if (options?.page_size) q.set("page_size", String(options.page_size));
+    return this.get<{
+      items: AudioWork[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/audio/works?${q.toString()}`);
+  }
+
+  async getAudioWork(id: string) {
+    return this.get<AudioWork>(`/audio/works/${id}`);
   }
 
   // ── Events ───────────────────────────────────────────────────────────────

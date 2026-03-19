@@ -10,6 +10,7 @@ import {
   Clock3,
   Loader2,
   Mic2,
+  PlayCircle,
   RefreshCcw,
   Sparkles,
   UploadCloud,
@@ -18,7 +19,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { apiClient, type AudioJob, type AudioJobStatus, type AudioJobTaskType } from '@/lib/api-client';
+import { apiClient, type AudioJob, type AudioJobStatus, type AudioJobTaskType, type AudioWork } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -170,7 +171,16 @@ export default function CreatorAudioPage() {
     },
   });
 
+  const worksQuery = useQuery({
+    queryKey: ['my-audio-works'],
+    queryFn: () => apiClient.listMyAudioWorks({ page: 1, page_size: 12 }),
+    enabled: !loading && isLoggedIn,
+  });
+
   const jobs = jobsQuery.data?.items ?? [];
+  const works = worksQuery.data?.items ?? [];
+  const publishedJobIDs = new Set(works.map((item) => item.source_job_id));
+  const publishedWorkByJobId = new Map(works.map((item) => [item.source_job_id, item]));
   const hasActiveJobs = jobs.some((item) => item.status === 'queued' || item.status === 'running');
   const jobStats = {
     queued: jobs.filter((item) => item.status === 'queued').length,
@@ -243,6 +253,19 @@ export default function CreatorAudioPage() {
     mutationFn: (jobId: string) => apiClient.retryAudioJob(jobId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['audio-jobs'] });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: (job: AudioJob) =>
+      apiClient.publishAudioJob(job.id, {
+        title: job.title,
+        description: readString(job.result, 'summary') || undefined,
+        visibility: 'public',
+        tags: readStringArray(job.result, 'style_tags'),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-audio-works'] });
     },
   });
 
@@ -501,7 +524,45 @@ export default function CreatorAudioPage() {
                       job={job}
                       retrying={retryMutation.isPending}
                       onRetry={() => retryMutation.mutate(job.id)}
+                      canPublish={
+                        job.status === 'succeeded' &&
+                        !!readString(job.result, 'output_audio_url') &&
+                        !publishedJobIDs.has(job.id)
+                      }
+                      publishing={publishMutation.isPending}
+                      onPublish={() => publishMutation.mutate(job)}
+                      publishedWorkId={publishedWorkByJobId.get(job.id)?.id}
                     />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[24px] border-border/70">
+            <CardHeader className="border-b border-border/60 bg-muted/20">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <PlayCircle className="h-5 w-5 text-emerald-500" />
+                已发布作品
+              </CardTitle>
+              <CardDescription>这里展示已经从任务发布出去的音频作品。现在它们已经有独立详情页，下一步可以继续接推荐、打赏和活动投稿。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 p-6">
+              {worksQuery.isLoading ? (
+                <div className="space-y-3">
+                  {[0, 1].map((item) => (
+                    <div key={item} className="h-28 animate-pulse rounded-2xl bg-muted/40" />
+                  ))}
+                </div>
+              ) : works.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/10 px-6 py-8 text-center">
+                  <p className="text-base font-medium">还没有发布作品</p>
+                  <p className="mt-2 text-sm text-muted-foreground">先完成一个带输出音频的任务，然后点击“发布作品”。</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {works.map((work) => (
+                    <PublishedWorkCard key={work.id} work={work} />
                   ))}
                 </div>
               )}
@@ -578,10 +639,18 @@ function JobCard({
   job,
   retrying,
   onRetry,
+  canPublish,
+  publishing,
+  onPublish,
+  publishedWorkId,
 }: {
   job: AudioJob;
   retrying: boolean;
   onRetry: () => void;
+  canPublish: boolean;
+  publishing: boolean;
+  onPublish: () => void;
+  publishedWorkId?: string;
 }) {
   const task = taskMeta(job.task_type);
   const StatusIcon = statusIcon(job.status);
@@ -611,6 +680,18 @@ function JobCard({
             <RefreshCcw className="mr-2 h-4 w-4" />
             重试
           </Button>
+        ) : canPublish ? (
+          <Button variant="outline" size="sm" disabled={publishing} onClick={onPublish}>
+            {publishing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
+            发布作品
+          </Button>
+        ) : publishedWorkId ? (
+          <Link
+            href={`/audio/works/${publishedWorkId}`}
+            className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+          >
+            查看作品
+          </Link>
         ) : null}
       </div>
 
@@ -666,6 +747,41 @@ function JobCard({
           </a>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function PublishedWorkCard({ work }: { work: AudioWork }) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-base font-semibold">{work.title}</p>
+            <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+              {work.visibility === 'public' ? '公开' : '私密'}
+            </Badge>
+          </div>
+          {work.description ? <p className="mt-1 text-sm text-muted-foreground">{work.description}</p> : null}
+          <p className="mt-2 text-xs text-muted-foreground">发布时间：{formatDateTime(work.published_at)}</p>
+        </div>
+        <Link
+          href={`/audio/works/${work.id}`}
+          className="inline-flex items-center rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
+        >
+          打开详情
+          <ArrowRight className="ml-1 h-4 w-4" />
+        </Link>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {work.duration_sec > 0 ? <Badge variant="outline">{work.duration_sec.toFixed(2)}s</Badge> : null}
+        {(work.tags ?? []).map((tag) => (
+          <Badge key={tag} variant="outline" className="bg-muted/30">
+            {tag}
+          </Badge>
+        ))}
+      </div>
     </div>
   );
 }

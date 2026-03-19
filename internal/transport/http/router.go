@@ -34,6 +34,7 @@ type RouterConfig struct {
 	SearchService          *usecase.SearchService
 	StatsService           usecase.StatsProvider
 	AudioJobService        *usecase.AudioJobService
+	AudioWorkService       *usecase.AudioWorkService
 	AchievementService     *usecase.AchievementService
 	AuditService           *usecase.AuditService
 	PostService            *usecase.PostService
@@ -121,6 +122,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		if cfg.AudioJobService != nil {
 			audioJobHandler = handler.NewAudioJobHandler(cfg.AudioJobService)
 		}
+		var audioWorkHandler *handler.AudioWorkHandler
+		if cfg.AudioWorkService != nil {
+			audioWorkHandler = handler.NewAudioWorkHandler(cfg.AudioWorkService)
+		}
 
 		// ── Public routes ──────────────────────────────────────────────
 
@@ -172,6 +177,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		{
 			tracks.GET("/:track_id", musicHandler.GetTrack)
 			tracks.POST("/:track_id/stream", musicHandler.StreamTrack)
+		}
+
+		if audioWorkHandler != nil {
+			audioWorks := v1.Group("/audio/works")
+			audioWorks.GET("", audioWorkHandler.ListPublicWorks)
+			audioWorks.GET("/:id", audioWorkHandler.GetPublicWork)
 		}
 
 		// Comments (public list)
@@ -353,6 +364,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				protected.GET("/audio/jobs", audioJobHandler.ListJobs)
 				protected.GET("/audio/jobs/:id", audioJobHandler.GetJob)
 				protected.POST("/audio/jobs/:id/retry", audioJobHandler.RetryJob)
+			}
+			if audioWorkHandler != nil {
+				protected.POST("/audio/jobs/:id/publish", audioWorkHandler.PublishFromJob)
+				protected.GET("/users/me/audio/works", audioWorkHandler.ListMyWorks)
 			}
 
 			// Creator dashboard

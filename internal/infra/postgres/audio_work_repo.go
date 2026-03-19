@@ -1,0 +1,269 @@
+package postgres
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/studio/platform/internal/domain/audiowork"
+)
+
+type AudioWorkRepository struct {
+	pool *pgxpool.Pool
+}
+
+func NewAudioWorkRepository(pool *pgxpool.Pool) *AudioWorkRepository {
+	return &AudioWorkRepository{pool: pool}
+}
+
+const createAudioWorkSQL = `
+	INSERT INTO audio_works (
+		id, author_id, source_job_id, title, description, cover_image_url, audio_url,
+		duration_sec, visibility, tags, waveform_preview, metadata, published_at, created_at, updated_at
+	) VALUES (
+		$1, $2, $3, $4, $5, $6, $7,
+		$8, $9, $10, $11, $12, $13, $14, $15
+	)
+`
+
+func (r *AudioWorkRepository) Create(ctx context.Context, work *audiowork.Work) error {
+	tagsJSON, err := json.Marshal(work.Tags)
+	if err != nil {
+		return fmt.Errorf("marshal audio work tags: %w", err)
+	}
+	waveformJSON, err := json.Marshal(work.WaveformPreview)
+	if err != nil {
+		return fmt.Errorf("marshal waveform preview: %w", err)
+	}
+	metadataJSON, err := marshalJSONMap(work.Metadata, true)
+	if err != nil {
+		return fmt.Errorf("marshal audio work metadata: %w", err)
+	}
+
+	_, err = r.pool.Exec(ctx, createAudioWorkSQL,
+		work.ID,
+		work.AuthorID,
+		work.SourceJobID,
+		work.Title,
+		work.Description,
+		work.CoverImageURL,
+		work.AudioURL,
+		work.DurationSec,
+		work.Visibility,
+		tagsJSON,
+		waveformJSON,
+		metadataJSON,
+		work.PublishedAt,
+		work.CreatedAt,
+		work.UpdatedAt,
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return audiowork.ErrAlreadyPublished
+		}
+		return fmt.Errorf("create audio work: %w", err)
+	}
+	return nil
+}
+
+const getAudioWorkByIDSQL = `
+	SELECT w.id, w.author_id, w.source_job_id, w.title, w.description, w.cover_image_url, w.audio_url,
+	       w.duration_sec, w.visibility, w.tags, w.waveform_preview, w.metadata,
+	       w.published_at, w.created_at, w.updated_at, COALESCE(u.username, '')
+	FROM audio_works w
+	LEFT JOIN users u ON u.id = w.author_id
+	WHERE w.id = $1
+`
+
+func (r *AudioWorkRepository) GetByID(ctx context.Context, id uuid.UUID) (*audiowork.Work, error) {
+	work, err := scanAudioWork(r.pool.QueryRow(ctx, getAudioWorkByIDSQL, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, audiowork.ErrNotFound
+		}
+		return nil, fmt.Errorf("get audio work: %w", err)
+	}
+	return work, nil
+}
+
+func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFilter) ([]*audiowork.Work, int64, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := filter.PageSize
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	var (
+		args       []any
+		conditions []string
+	)
+
+	if filter.AuthorID != nil {
+		args = append(args, *filter.AuthorID)
+		conditions = append(conditions, fmt.Sprintf("w.author_id = $%d", len(args)))
+	}
+	if filter.Visibility != nil && *filter.Visibility != "" {
+		args = append(args, *filter.Visibility)
+		conditions = append(conditions, fmt.Sprintf("w.visibility = $%d", len(args)))
+	}
+	if len(conditions) == 0 {
+		conditions = append(conditions, "TRUE")
+	}
+
+	offset := (page - 1) * pageSize
+	args = append(args, pageSize, offset)
+	limitPos := len(args) - 1
+	offsetPos := len(args)
+
+	query := fmt.Sprintf(`
+		SELECT w.id, w.author_id, w.source_job_id, w.title, w.description, w.cover_image_url, w.audio_url,
+		       w.duration_sec, w.visibility, w.tags, w.waveform_preview, w.metadata,
+		       w.published_at, w.created_at, w.updated_at, COALESCE(u.username, ''),
+		       COUNT(*) OVER() AS total_count
+		FROM audio_works w
+		LEFT JOIN users u ON u.id = w.author_id
+		WHERE %s
+		ORDER BY w.published_at DESC
+		LIMIT $%d OFFSET $%d
+	`, strings.Join(conditions, " AND "), limitPos, offsetPos)
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list audio works: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]*audiowork.Work, 0)
+	var total int64
+	for rows.Next() {
+		work, count, err := scanAudioWorkWithTotal(rows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("scan audio work: %w", err)
+		}
+		total = count
+		items = append(items, work)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate audio works: %w", err)
+	}
+	return items, total, nil
+}
+
+type audioWorkScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanAudioWork(scanner audioWorkScanner) (*audiowork.Work, error) {
+	var (
+		work         audiowork.Work
+		tagsJSON     []byte
+		waveformJSON []byte
+		metadataJSON []byte
+	)
+
+	err := scanner.Scan(
+		&work.ID,
+		&work.AuthorID,
+		&work.SourceJobID,
+		&work.Title,
+		&work.Description,
+		&work.CoverImageURL,
+		&work.AudioURL,
+		&work.DurationSec,
+		&work.Visibility,
+		&tagsJSON,
+		&waveformJSON,
+		&metadataJSON,
+		&work.PublishedAt,
+		&work.CreatedAt,
+		&work.UpdatedAt,
+		&work.AuthorUsername,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(tagsJSON) > 0 {
+		if err := json.Unmarshal(tagsJSON, &work.Tags); err != nil {
+			return nil, fmt.Errorf("unmarshal audio work tags: %w", err)
+		}
+	}
+	if len(waveformJSON) > 0 {
+		if err := json.Unmarshal(waveformJSON, &work.WaveformPreview); err != nil {
+			return nil, fmt.Errorf("unmarshal waveform preview: %w", err)
+		}
+	}
+	metadata, err := unmarshalJSONMap(metadataJSON)
+	if err != nil {
+		return nil, err
+	}
+	work.Metadata = metadata
+	return &work, nil
+}
+
+func scanAudioWorkWithTotal(rows pgx.Rows) (*audiowork.Work, int64, error) {
+	var (
+		work         audiowork.Work
+		tagsJSON     []byte
+		waveformJSON []byte
+		metadataJSON []byte
+		total        int64
+	)
+
+	err := rows.Scan(
+		&work.ID,
+		&work.AuthorID,
+		&work.SourceJobID,
+		&work.Title,
+		&work.Description,
+		&work.CoverImageURL,
+		&work.AudioURL,
+		&work.DurationSec,
+		&work.Visibility,
+		&tagsJSON,
+		&waveformJSON,
+		&metadataJSON,
+		&work.PublishedAt,
+		&work.CreatedAt,
+		&work.UpdatedAt,
+		&work.AuthorUsername,
+		&total,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if len(tagsJSON) > 0 {
+		if err := json.Unmarshal(tagsJSON, &work.Tags); err != nil {
+			return nil, 0, fmt.Errorf("unmarshal audio work tags: %w", err)
+		}
+	}
+	if len(waveformJSON) > 0 {
+		if err := json.Unmarshal(waveformJSON, &work.WaveformPreview); err != nil {
+			return nil, 0, fmt.Errorf("unmarshal waveform preview: %w", err)
+		}
+	}
+	metadata, err := unmarshalJSONMap(metadataJSON)
+	if err != nil {
+		return nil, 0, err
+	}
+	work.Metadata = metadata
+	return &work, total, nil
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
