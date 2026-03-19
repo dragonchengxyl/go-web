@@ -85,6 +85,7 @@
 - 任务类型支持 `ai_music` / `voice_convert` / `voice_enhance` / `audio_master`
 - 状态流转为 `queued -> running -> succeeded / failed`
 - 主服务会发布 `audio.job.created` 到 Redis Streams，并由本地 consumer 自动走 mock 处理流程
+- 对本地上传音频，当前会执行真实文件处理骨架：复制输出文件、计算哈希、提取基础元数据，WAV 还会解析时长 / 采样率 / 波形预览
 - 处理结果统一回写到任务 `result` JSON，后续可以继续接真实 AI 音频引擎、转码服务和商业化流程
 
 ## WebSocket 事件

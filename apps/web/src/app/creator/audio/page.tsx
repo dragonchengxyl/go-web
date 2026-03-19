@@ -118,9 +118,22 @@ function readString(record: Record<string, unknown> | undefined, key: string) {
   return typeof value === 'string' ? value : '';
 }
 
+function readNumber(record: Record<string, unknown> | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
 function readStringArray(record: Record<string, unknown> | undefined, key: string) {
   const value = record?.[key];
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function readRecord(record: Record<string, unknown> | undefined, key: string) {
+  const value = record?.[key];
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
 }
 
 export default function CreatorAudioPage() {
@@ -274,7 +287,7 @@ export default function CreatorAudioPage() {
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">Creator Audio Lab</p>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">把音频生成、加工和发布链路做成可演示工作台</h1>
             <p className="mt-3 text-sm leading-6 text-slate-200/80 sm:text-base">
-              这一页对接了你刚做好的音频任务中心。现在可以上传音频、提交 AI 任务、自动轮询状态，并查看 mock 输出结果，已经具备继续接真实 worker 的骨架。
+              这一页对接了你刚做好的音频任务中心。现在可以上传音频、提交 AI 任务、自动轮询状态，并查看本地处理后的输出结果和元数据，已经具备继续接真实 worker 的骨架。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -297,7 +310,7 @@ export default function CreatorAudioPage() {
                 <Sparkles className="h-5 w-5 text-fuchsia-500" />
                 新建音频任务
               </CardTitle>
-              <CardDescription>先完成上传，再按任务类型提交。当前处理链是 mock 流程，但状态流转和结果回写都已经接通。</CardDescription>
+              <CardDescription>先完成上传，再按任务类型提交。当前已经能对本地上传音频做真实文件处理和元数据提取，AI 生成部分仍保留 mock 结果。</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <form className="space-y-6" onSubmit={handleCreateJob}>
@@ -433,7 +446,7 @@ export default function CreatorAudioPage() {
                 <AudioLines className="h-5 w-5 text-sky-500" />
                 任务队列
               </CardTitle>
-              <CardDescription>列表会在存在进行中任务时自动刷新。你现在可以把它当成“音频工作流控制台”的第一版。</CardDescription>
+              <CardDescription>列表会在存在进行中任务时自动刷新。对本地上传文件，结果里会展示真实解析出的格式、时长、采样率等信息。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5 p-6">
               <div className="grid gap-3 sm:grid-cols-4">
@@ -575,6 +588,8 @@ function JobCard({
   const summary = readString(job.result, 'summary');
   const outputAudioURL = readString(job.result, 'output_audio_url');
   const arrangement = readStringArray(job.result, 'arrangement');
+  const sourceAnalysis = readRecord(job.result, 'source_analysis');
+  const outputAnalysis = readRecord(job.result, 'output_analysis');
 
   return (
     <div className="rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
@@ -617,6 +632,13 @@ function JobCard({
         </div>
       ) : null}
 
+      {sourceAnalysis || outputAnalysis ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {sourceAnalysis ? <AudioMetaPanel title="输入音频" meta={sourceAnalysis} /> : null}
+          {outputAnalysis ? <AudioMetaPanel title="输出音频" meta={outputAnalysis} /> : null}
+        </div>
+      ) : null}
+
       {job.error_message ? (
         <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{job.error_message}</div>
       ) : null}
@@ -644,6 +666,27 @@ function JobCard({
           </a>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function AudioMetaPanel({ title, meta }: { title: string; meta: Record<string, unknown> }) {
+  const format = readString(meta, 'format');
+  const duration = readNumber(meta, 'duration_sec');
+  const sampleRate = readNumber(meta, 'sample_rate');
+  const bitDepth = readNumber(meta, 'bit_depth');
+  const channels = readNumber(meta, 'channels');
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-muted/10 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{title}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {format ? <Badge variant="outline">{format.toUpperCase()}</Badge> : null}
+        {duration !== null ? <Badge variant="outline">{duration.toFixed(2)}s</Badge> : null}
+        {sampleRate !== null ? <Badge variant="outline">{sampleRate} Hz</Badge> : null}
+        {bitDepth !== null ? <Badge variant="outline">{bitDepth} bit</Badge> : null}
+        {channels !== null ? <Badge variant="outline">{channels} ch</Badge> : null}
+      </div>
     </div>
   );
 }

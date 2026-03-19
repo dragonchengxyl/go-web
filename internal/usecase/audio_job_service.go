@@ -21,9 +21,14 @@ type AudioJobService struct {
 	publisher    *streams.Publisher
 	logger       *zap.Logger
 	allowedHosts []string
+	processor    audioJobProcessor
 }
 
 type AudioJobServiceOption func(*AudioJobService)
+
+type audioJobProcessor interface {
+	Process(ctx context.Context, job *audiojob.Job) (map[string]any, error)
+}
 
 func NewAudioJobService(repo audiojob.Repository, opts ...AudioJobServiceOption) *AudioJobService {
 	svc := &AudioJobService{repo: repo}
@@ -48,6 +53,12 @@ func WithAudioJobLogger(logger *zap.Logger) AudioJobServiceOption {
 func WithAudioJobAllowedHosts(hosts []string) AudioJobServiceOption {
 	return func(s *AudioJobService) {
 		s.allowedHosts = append([]string(nil), hosts...)
+	}
+}
+
+func WithAudioJobProcessor(processor audioJobProcessor) AudioJobServiceOption {
+	return func(s *AudioJobService) {
+		s.processor = processor
 	}
 }
 
@@ -189,7 +200,7 @@ func (s *AudioJobService) ProcessJob(ctx context.Context, jobID uuid.UUID) error
 		return fmt.Errorf("mark audio job running: %w", err)
 	}
 
-	result, err := buildMockAudioResult(job)
+	result, err := s.processJobResult(ctx, job)
 	finishedAt := time.Now()
 	job.FinishedAt = &finishedAt
 	job.UpdatedAt = finishedAt
@@ -361,6 +372,23 @@ func buildMockAudioResult(job *audiojob.Job) (map[string]any, error) {
 		result["params_echo"] = string(paramsJSON)
 	}
 	return result, nil
+}
+
+func (s *AudioJobService) processJobResult(ctx context.Context, job *audiojob.Job) (map[string]any, error) {
+	if s.processor != nil {
+		result, err := s.processor.Process(ctx, job)
+		if err == nil {
+			return result, nil
+		}
+		if s.logger != nil {
+			s.logger.Warn("audio processor failed, falling back to mock result",
+				zap.Error(err),
+				zap.String("job_id", job.ID.String()),
+				zap.String("task_type", string(job.TaskType)),
+			)
+		}
+	}
+	return buildMockAudioResult(job)
 }
 
 func cloneMap(input map[string]any) map[string]any {

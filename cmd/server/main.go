@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/configs"
+	audioinfra "github.com/studio/platform/internal/infra/audio"
 	"github.com/studio/platform/internal/infra/embedding"
 	"github.com/studio/platform/internal/infra/grpcclient"
 	"github.com/studio/platform/internal/infra/llm"
@@ -189,11 +190,13 @@ func main() {
 
 	eventService := usecase.NewEventService(eventRepo)
 	groupService := usecase.NewGroupService(groupRepo)
+	audioProcessor := audioinfra.NewLocalProcessor("./uploads", "/uploads")
 	audioJobService := usecase.NewAudioJobService(
 		audioJobRepo,
 		usecase.WithAudioJobPublisher(publisher),
 		usecase.WithAudioJobLogger(logger),
 		usecase.WithAudioJobAllowedHosts(cfg.OSS.AllowedHosts),
+		usecase.WithAudioJobProcessor(audioProcessor),
 	)
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
