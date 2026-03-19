@@ -1,43 +1,47 @@
-# 生产环境配置
-# 用法: go run ./cmd/server/main.go -config configs/config.prod.yaml
+# 生产环境配置模板
+# 用法:
+#   cp configs/config.prod.yaml.example configs/config.prod.yaml
+#   然后填入真实生产值
 #
-# 复制此文件: cp configs/config.prod.yaml.example configs/config.prod.yaml
-# 此文件已被 gitignore，填入真实生产凭据后不要提交到 git
-#
-# 提示: 单个字段也可以用 STUDIO_* 环境变量覆盖
-# 例如: STUDIO_DATABASE_DSN=... 会覆盖 database.dsn
+# 注意:
+# - `configs/config.prod.yaml` 已被 gitignore，不要提交真实凭据
+# - 所有字段都可以被 `STUDIO_*` 环境变量覆盖
+# - 这里仅保留当前代码真实支持的配置项
 
 server:
   port: 8080
   mode: release
   allow_origins:
-    - https://your-domain.com        # 改为你的生产域名
-  frontend_url: https://your-domain.com
+    - https://app.example.com
+  frontend_url: https://app.example.com
 
 database:
-  dsn: postgres://user:password@host:5432/dbname?sslmode=require
-  max_conns: 20
+  dsn: postgres://studio:CHANGE_ME@db.example.com:5432/studio_prod?sslmode=require
+  max_conns: 30
   min_conns: 5
 
 redis:
-  addr: your-redis-host:6379
-  password: your-redis-password
+  addr: redis.example.com:6379
+  password: CHANGE_ME
   db: 0
 
 jwt:
-  secret: use-a-long-random-string-here   # openssl rand -base64 48
+  # 例如: openssl rand -base64 48
+  secret: CHANGE_ME_LONG_RANDOM_SECRET
   access_expiry: 15m
   refresh_expiry: 720h
 
 oss:
-  provider: r2          # "aliyun" or "r2"
-  access_key_id: ""
-  access_key_secret: ""
-  bucket: ""
-  endpoint: ""
-  region: auto          # R2 用 "auto"
+  # aliyun | r2
+  provider: r2
+  access_key_id: CHANGE_ME
+  access_key_secret: CHANGE_ME
+  bucket: furry-community-prod
+  endpoint: https://<account_id>.r2.cloudflarestorage.com
+  region: auto
   allowed_hosts:
-    - your-cdn-domain.com
+    - cdn.example.com
+    - pub-<bucket>.r2.dev
 
 ratelimit:
   unauthenticated: 60
@@ -45,13 +49,14 @@ ratelimit:
   admin: 1000
 
 email:
-  host: smtp.your-provider.com
+  host: smtp.example.com
   port: 587
-  username: your-smtp-user
-  password: your-smtp-password
-  from: noreply@your-domain.com
+  username: noreply@example.com
+  password: CHANGE_ME
+  from: noreply@example.com
 
 moderation:
+  # 不启用可留空
   access_key_id: ""
   access_key_secret: ""
   endpoint: green-cip.cn-shanghai.aliyuncs.com
@@ -61,21 +66,37 @@ payment:
     app_id: ""
     private_key: ""
     public_key: ""
-    notify_url: https://your-domain.com/api/v1/payments/alipay/notify
+    notify_url: https://api.example.com/api/v1/payment/callback/alipay
     sandbox: false
   wechat:
     app_id: ""
     mch_id: ""
     api_key: ""
-    notify_url: https://your-domain.com/api/v1/payments/wechat/notify
+    notify_url: https://api.example.com/api/v1/payment/callback/wechat
     sandbox: false
 
 sponsor:
-  monthly_goal: 500
+  monthly_goal: 5000
   current_raised: 0
   alipay_qr_url: ""
   wechat_qr_url: ""
-  message: "感谢支持 Furry 社区的运营！"
+  message: "感谢支持社区创作与运营。"
+
+grpc:
+  # 主 API 作为 client 时使用，留空表示走本地实现或未启用
+  stats_addr: ""
+  notification_addr: ""
+  moderation_addr: ""
+  # 独立服务监听端口
+  stats_port: 50051
+  notification_port: 50052
+  moderation_port: 50053
+
+audio:
+  max_attempts: 3
+  retry_backoff_sec: 10
+  retry_poll_sec: 5
+  retry_batch_size: 20
 
 assistant:
   provider: deepseek

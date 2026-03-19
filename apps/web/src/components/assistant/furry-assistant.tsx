@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2, Sparkles, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronDown,
+  Loader2,
+  Sparkles,
+  ThumbsDown,
+  ThumbsUp,
+  X,
+} from "lucide-react";
 import {
   apiClient,
   AssistantCard,
@@ -115,85 +123,43 @@ function CardList({ cards }: { cards?: AssistantCard[] }) {
   if (!cards || cards.length === 0) return null;
 
   return (
-    <div className="mt-3 grid gap-2">
+    <div className="grid gap-2.5">
       {cards.map((card) => (
         <Link
           key={`${card.kind}-${card.href}-${card.title}`}
+          id={card.ref ? `ref-${card.ref}` : undefined}
           href={card.href}
-          className="rounded-2xl border border-amber-200/70 bg-white/80 p-3 transition-colors hover:border-orange-300 hover:bg-orange-50 dark:border-orange-900/70 dark:bg-slate-900/70 dark:hover:bg-slate-900"
+          className="group rounded-[22px] border border-slate-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,247,237,0.86))] p-3.5 transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-[0_16px_30px_rgba(251,146,60,0.16)] dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(15,23,42,0.72))] dark:hover:border-orange-500/50"
         >
-          <div className="mb-1 flex items-center gap-2">
+          <div className="mb-2 flex items-center gap-2">
             {card.ref && (
-              <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white dark:bg-orange-500 dark:text-slate-950">
+              <span className="rounded-full bg-slate-950 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white dark:bg-orange-500 dark:text-slate-950">
                 {card.ref}
               </span>
             )}
             <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700 dark:bg-orange-950/70 dark:text-orange-300">
-              {card.kind}
+              {SOURCE_KIND_LABELS[card.kind] || card.kind}
             </span>
             {card.meta && (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="truncate text-[11px] text-muted-foreground">
                 {card.meta}
               </span>
             )}
           </div>
-          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <p className="text-sm font-semibold text-slate-900 transition-colors group-hover:text-orange-700 dark:text-slate-100 dark:group-hover:text-orange-200">
             {card.title}
           </p>
-          <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
+          <p className="mt-1.5 text-xs leading-5 text-slate-600 dark:text-slate-400">
             {card.summary}
           </p>
-          {card.reason && (
-            <p className="mt-2 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
-              推荐理由：{card.reason}
-            </p>
-          )}
-          {card.source && (
-            <p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
-              来源：{card.source}
-            </p>
+          {(card.reason || card.source) && (
+            <div className="mt-3 space-y-1 border-t border-orange-100/80 pt-3 text-[11px] leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              {card.reason ? <p>推荐理由：{card.reason}</p> : null}
+              {card.source ? <p>来源：{card.source}</p> : null}
+            </div>
           )}
         </Link>
       ))}
-    </div>
-  );
-}
-
-function ReferenceList({ cards }: { cards?: AssistantCard[] }) {
-  if (!cards || cards.length === 0) return null;
-
-  return (
-    <div className="mt-3 rounded-2xl border border-orange-200/70 bg-orange-50/70 p-3 dark:border-orange-900/50 dark:bg-orange-950/20">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-700 dark:text-orange-300">
-        参考来源
-      </p>
-      <div className="mt-2 space-y-2">
-        {cards.map((card, index) => (
-          <Link
-            key={`ref-${card.kind}-${card.href}-${index}`}
-            id={card.ref ? `ref-${card.ref}` : undefined}
-            href={card.href}
-            className="block rounded-xl px-2 py-2 transition-colors hover:bg-white/80 dark:hover:bg-slate-900/50"
-          >
-            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-200/80 px-1.5 font-semibold text-orange-900 dark:bg-orange-900/60 dark:text-orange-100">
-                {card.ref || index + 1}
-              </span>
-              <span className="font-medium text-slate-900 dark:text-slate-100">
-                {card.title}
-              </span>
-              <span className="text-muted-foreground">{card.meta}</span>
-            </div>
-            {(card.reason || card.source) && (
-              <p className="mt-1 pl-7 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
-                {card.reason ? `推荐理由：${card.reason}` : ""}
-                {card.reason && card.source ? " · " : ""}
-                {card.source ? `来源：${card.source}` : ""}
-              </p>
-            )}
-          </Link>
-        ))}
-      </div>
     </div>
   );
 }
@@ -202,11 +168,11 @@ function InsightList({ insights }: { insights?: AssistantInsight[] }) {
   if (!insights || insights.length === 0) return null;
 
   return (
-    <div className="mt-3 grid gap-2">
+    <div className="grid gap-2.5">
       {insights.map((insight, index) => (
         <div
           key={`${insight.kind}-${index}`}
-          className="rounded-2xl border border-cyan-200/80 bg-cyan-50/70 p-3 dark:border-cyan-900/40 dark:bg-cyan-950/10"
+          className="rounded-[22px] border border-cyan-200/80 bg-[linear-gradient(180deg,rgba(236,254,255,0.88),rgba(255,255,255,0.94))] p-3.5 dark:border-cyan-900/40 dark:bg-[linear-gradient(180deg,rgba(8,47,73,0.22),rgba(15,23,42,0.54))]"
         >
           <div className="mb-2 flex items-center gap-2">
             <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200">
@@ -232,6 +198,95 @@ function InsightList({ insights }: { insights?: AssistantInsight[] }) {
           ) : null}
         </div>
       ))}
+    </div>
+  );
+}
+
+function AttachmentSection({
+  title,
+  summary,
+  badge,
+  expanded,
+  onToggle,
+  children,
+}: {
+  title: string;
+  summary: string;
+  badge: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-[24px] border border-slate-200/85 bg-white/75 shadow-[0_10px_24px_rgba(15,23,42,0.05)] backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/40">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-900/50"
+      >
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-800 dark:text-slate-100">
+            {title}
+          </p>
+          <p className="mt-1 text-[11px] leading-5 text-slate-500 dark:text-slate-400">
+            {summary}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            {badge}
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-slate-400 transition-transform dark:text-slate-500 ${
+              expanded ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+      {expanded ? (
+        <div className="border-t border-slate-200/80 px-3.5 py-3 dark:border-slate-800">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PromptDeck({
+  title,
+  prompts,
+  tone,
+  onPick,
+}: {
+  title: string;
+  prompts: string[];
+  tone: "context" | "default";
+  onPick: (prompt: string) => void;
+}) {
+  if (prompts.length === 0) return null;
+
+  const cardClassName =
+    tone === "context"
+      ? "border-cyan-200/80 bg-[linear-gradient(180deg,rgba(236,254,255,0.95),rgba(255,255,255,0.92))] hover:border-cyan-300 hover:bg-cyan-50/90 dark:border-cyan-900/40 dark:bg-[linear-gradient(180deg,rgba(8,47,73,0.24),rgba(15,23,42,0.52))] dark:hover:bg-cyan-950/30"
+      : "border-orange-200/80 bg-[linear-gradient(180deg,rgba(255,247,237,0.95),rgba(255,255,255,0.92))] hover:border-orange-300 hover:bg-orange-50 dark:border-orange-900/40 dark:bg-[linear-gradient(180deg,rgba(124,45,18,0.22),rgba(15,23,42,0.52))] dark:hover:bg-orange-950/30";
+
+  return (
+    <div className="space-y-2.5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+        {title}
+      </p>
+      <div className="grid gap-2">
+        {prompts.map((prompt) => (
+          <button
+            key={`${title}-${prompt}`}
+            type="button"
+            onClick={() => onPick(prompt)}
+            className={`rounded-[22px] border px-3.5 py-3 text-left text-sm leading-6 text-slate-700 transition-all hover:-translate-y-0.5 dark:text-slate-200 ${cardClassName}`}
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -321,7 +376,7 @@ function AssistantMarkdown({ text }: { text: string }) {
   const blocks = text.split(/\n{2,}/).filter((item) => item.trim());
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4 text-[15px] leading-7">
       {blocks.map((block, blockIndex) => {
         const lines = block.split("\n").filter((item) => item.trim());
         const isList = lines.every(
@@ -333,7 +388,7 @@ function AssistantMarkdown({ text }: { text: string }) {
           return (
             <ul
               key={`list-${blockIndex}`}
-              className="space-y-1.5 pl-4 text-sm leading-6 text-inherit"
+              className="space-y-2 pl-5 text-[15px] leading-7 text-inherit"
             >
               {lines.map((line, lineIndex) => (
                 <li
@@ -348,7 +403,7 @@ function AssistantMarkdown({ text }: { text: string }) {
         }
 
         return (
-          <p key={`p-${blockIndex}`} className="text-sm leading-6 text-inherit">
+          <p key={`p-${blockIndex}`} className="text-[15px] leading-7 text-inherit">
             {lines.map((line, lineIndex) => (
               <span key={`line-${blockIndex}-${lineIndex}`}>
                 {renderInlineMarkdown(line)}
@@ -382,8 +437,13 @@ export function FurryAssistant() {
   const [intentLabel, setIntentLabel] = useState("综合导览");
   const [sourceCounts, setSourceCounts] = useState<Record<string, number>>({});
   const [feedbackLoadingId, setFeedbackLoadingId] = useState<string | null>(null);
+  const [showConversationRail, setShowConversationRail] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>(
+    {},
+  );
   const scrollerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lastMessageCountRef = useRef(0);
 
   async function loadConversationList() {
     if (!isLoggedIn) return;
@@ -406,6 +466,7 @@ export function FurryAssistant() {
     setProviderLabel("AI");
     setIntentLabel("综合导览");
     setSourceCounts({});
+    setExpandedSections({});
     try {
       const data = await apiClient.getAssistantConversation(id);
       setConversationId(data.conversation.id);
@@ -448,6 +509,7 @@ export function FurryAssistant() {
           setProviderLabel("AI");
           setIntentLabel("综合导览");
           setSourceCounts({});
+          setExpandedSections({});
         } finally {
           setHistoryLoading(false);
         }
@@ -462,6 +524,7 @@ export function FurryAssistant() {
     setProviderLabel("AI");
     setIntentLabel("综合导览");
     setSourceCounts({});
+    setExpandedSections({});
     localStorage.removeItem(CONVERSATION_KEY);
 
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -488,9 +551,18 @@ export function FurryAssistant() {
   }, [isLoggedIn, messages]);
 
   useEffect(() => {
-    if (!scrollerRef.current) return;
-    scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight;
-  }, [messages, loading, open]);
+    if (!open || !scrollerRef.current) return;
+    const container = scrollerRef.current;
+    const behavior: ScrollBehavior =
+      loading || messages.length === lastMessageCountRef.current ? "auto" : "smooth";
+    lastMessageCountRef.current = messages.length;
+    requestAnimationFrame(() => {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior,
+      });
+    });
+  }, [historyLoading, loading, messages, open]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -517,6 +589,7 @@ export function FurryAssistant() {
     setLoading(true);
     setIntentLabel("综合导览");
     setSourceCounts({});
+    setShowConversationRail(false);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -634,6 +707,8 @@ export function FurryAssistant() {
     setProviderLabel("AI");
     setIntentLabel("综合导览");
     setSourceCounts({});
+    setExpandedSections({});
+    setShowConversationRail(false);
     if (isLoggedIn) {
       setConversationId(null);
       localStorage.removeItem(CONVERSATION_KEY);
@@ -691,50 +766,72 @@ export function FurryAssistant() {
     }
   }
 
+  function toggleSection(sectionKey: string) {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  }
+
   const userMessageCount = messages.filter((msg) => msg.role === "user").length;
   const sourceSummary = Object.entries(sourceCounts)
     .sort(([kindA], [kindB]) => kindA.localeCompare(kindB))
-    .map(([kind, count]) => `${SOURCE_KIND_LABELS[kind] || kind}×${count}`)
+    .map(([kind, count]) => `${count} 个${SOURCE_KIND_LABELS[kind] || kind}`)
     .join(" · ");
   const contextualPrompts = pageContext?.prompt_hints ?? [];
 
   return (
     <div className="pointer-events-none fixed bottom-5 right-4 z-[60] sm:bottom-6 sm:right-6">
       {open && (
-        <div className="pointer-events-auto mb-4 w-[calc(100vw-2rem)] max-w-[390px] overflow-hidden rounded-[28px] border border-orange-200/70 bg-[radial-gradient(circle_at_top,#fff7ed,white_48%,#fff_100%)] shadow-[0_28px_80px_rgba(15,23,42,0.22)] dark:border-orange-900/50 dark:bg-[radial-gradient(circle_at_top,#1f1724,#0f172a_52%,#0b1120_100%)]">
-          <div className="border-b border-orange-200/70 bg-white/70 px-4 py-4 backdrop-blur dark:border-orange-900/50 dark:bg-slate-950/50">
+        <div className="pointer-events-auto relative mb-4 flex h-[min(84vh,820px)] w-[min(100vw-1rem,34rem)] flex-col overflow-hidden rounded-[32px] border border-orange-200/70 bg-[linear-gradient(180deg,rgba(255,248,240,0.96),rgba(255,255,255,0.92))] shadow-[0_32px_90px_rgba(15,23,42,0.24)] backdrop-blur dark:border-orange-900/50 dark:bg-[linear-gradient(180deg,rgba(17,24,39,0.98),rgba(2,6,23,0.94))] sm:w-[min(100vw-2rem,36rem)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.18),transparent_36%),radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_28%)]" />
+          <div className="relative border-b border-orange-200/70 bg-white/72 px-4 py-4 backdrop-blur-xl dark:border-orange-900/50 dark:bg-slate-950/60">
             <div className="flex items-start gap-3">
               <MascotAvatar />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <p className="text-sm font-semibold tracking-[0.02em] text-slate-900 dark:text-slate-100">
                       霜牙
                     </p>
-                    <p className="mt-0.5 text-xs leading-5 text-slate-600 dark:text-slate-400">
-                      Furry 站内导览助手，能帮你找页面、帖子、圈子和活动。
+                    <p className="mt-1 max-w-[28rem] text-xs leading-5 text-slate-600 dark:text-slate-400">
+                      更像站内导览编辑台，不是客服话术窗。负责把页面、圈子、活动和可执行建议整理给你。
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setOpen(false)}
-                    className="rounded-full p-1 text-slate-500 transition-colors hover:bg-orange-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                    aria-label="关闭助手"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {isLoggedIn && conversations.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowConversationRail((prev) => !prev)}
+                        className="rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-orange-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:border-orange-500/50 dark:hover:text-slate-100"
+                      >
+                        {showConversationRail ? "收起历史" : "历史对话"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setOpen(false)}
+                      className="rounded-full p-1 text-slate-500 transition-colors hover:bg-orange-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                      aria-label="关闭助手"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-3 flex items-center gap-2">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     {fallbackMode
                       ? "站内检索模式"
                       : `${providerLabel} + 站内检索`}
                   </span>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    意图：{intentLabel}
+                  </span>
                   <button
                     type="button"
                     onClick={clearConversation}
-                    className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                    className="rounded-full bg-white/75 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground dark:bg-slate-900/70"
                   >
                     {isLoggedIn ? "新建对话" : "清空对话"}
                   </button>
@@ -745,14 +842,11 @@ export function FurryAssistant() {
                       场景：{pageContext.title}
                     </span>
                   )}
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
-                    意图：{intentLabel}
-                  </span>
-                  {sourceSummary && (
+                  {sourceSummary ? (
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 dark:bg-slate-800">
-                      召回：{sourceSummary}
+                      已结合：{sourceSummary}
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -760,20 +854,20 @@ export function FurryAssistant() {
 
           <div
             ref={scrollerRef}
-            className="max-h-[min(65vh,560px)] space-y-4 overflow-y-auto px-4 py-4"
+            className="relative flex-1 space-y-5 overflow-y-auto px-4 pb-6 pt-4 overscroll-contain sm:px-5"
           >
-            {isLoggedIn && conversations.length > 0 && (
-              <div className="space-y-2">
+            {isLoggedIn && conversations.length > 0 && showConversationRail && (
+              <div className="rounded-[24px] border border-slate-200/80 bg-white/72 p-3.5 shadow-[0_14px_32px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/40">
                 <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                   最近对话
                 </p>
-                <div className="flex gap-2 overflow-x-auto pb-1">
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                   {conversations.slice(0, 8).map((conversation) => (
                     <button
                       key={conversation.id}
                       type="button"
                       onClick={() => void openConversation(conversation.id)}
-                      className={`min-w-[140px] max-w-[180px] rounded-2xl border px-3 py-2 text-left transition-colors ${
+                      className={`min-w-[160px] max-w-[220px] rounded-[20px] border px-3 py-2.5 text-left transition-colors ${
                         conversationId === conversation.id
                           ? "border-orange-400 bg-orange-50 dark:border-orange-500 dark:bg-orange-950/40"
                           : "border-border bg-background/70 hover:border-orange-300 hover:bg-orange-50/70 dark:hover:bg-slate-900"
@@ -804,21 +898,42 @@ export function FurryAssistant() {
               <div
                 key={`${message.role}-${index}`}
                 className={
-                  message.role === "user" ? "ml-12 flex justify-end" : "mr-8"
+                  message.role === "user"
+                    ? "ml-14 flex justify-end"
+                    : "mr-3 sm:mr-10"
                 }
               >
                 <div
                   className={
                     message.role === "user"
-                      ? "max-w-[85%] rounded-[20px] rounded-br-md bg-slate-900 px-4 py-3 text-sm leading-6 text-white shadow-sm dark:bg-orange-500"
-                      : "max-w-full rounded-[22px] rounded-bl-md border border-orange-200/80 bg-white/90 px-4 py-3 text-sm leading-6 text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100"
+                      ? "max-w-[80%] rounded-[24px] rounded-br-[10px] bg-[linear-gradient(135deg,#0f172a,#334155)] px-4 py-3 text-sm leading-6 text-white shadow-[0_16px_32px_rgba(15,23,42,0.24)] dark:bg-[linear-gradient(135deg,#f97316,#fb923c)] dark:text-slate-950"
+                      : "max-w-[94%] rounded-[28px] rounded-bl-[12px] border border-orange-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,247,237,0.88))] px-4 py-4 text-slate-800 shadow-[0_20px_40px_rgba(15,23,42,0.08)] backdrop-blur-sm dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.95),rgba(15,23,42,0.84))] dark:text-slate-100"
                   }
                 >
+                  {message.role === "assistant" && (
+                    <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-orange-100/80 pb-3 text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      <span className="rounded-full bg-slate-950 px-2.5 py-1 font-semibold text-white dark:bg-orange-500 dark:text-slate-950">
+                        霜牙
+                      </span>
+                      {message.provider ? (
+                        <span className="rounded-full bg-white/75 px-2.5 py-1 dark:bg-slate-800/70">
+                          {message.provider === "deepseek"
+                            ? "DeepSeek"
+                            : message.provider}
+                        </span>
+                      ) : null}
+                      {message.fallback ? (
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                          检索整理
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                   {message.role === "assistant" ? (
                     message.content ? (
                       <AssistantMarkdown text={message.content} />
                     ) : loading && index === messages.length - 1 ? (
-                      <p className="whitespace-pre-wrap break-words">
+                      <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
                         正在整理站内信息...
                       </p>
                     ) : null
@@ -827,17 +942,38 @@ export function FurryAssistant() {
                       {message.content}
                     </p>
                   )}
-                  {message.role === "assistant" && (
-                    <InsightList insights={message.insights} />
-                  )}
-                  {message.role === "assistant" && (
-                    <ReferenceList cards={message.cards} />
-                  )}
-                  {message.role === "assistant" && (
-                    <CardList cards={message.cards} />
-                  )}
+                  {message.role === "assistant" && message.insights?.length ? (
+                    <AttachmentSection
+                      title="Copilot 建议"
+                      summary="把标题、标签、规则摘要或准备清单收在这里，避免正文被信息块打断。"
+                      badge={`${message.insights.length} 项`}
+                      expanded={
+                        expandedSections[`insights-${message.id || index}`] ??
+                        userMessageCount === 0
+                      }
+                      onToggle={() =>
+                        toggleSection(`insights-${message.id || index}`)
+                      }
+                    >
+                      <InsightList insights={message.insights} />
+                    </AttachmentSection>
+                  ) : null}
+                  {message.role === "assistant" && message.cards?.length ? (
+                    <AttachmentSection
+                      title="相关入口"
+                      summary="需要时再展开看来源和可点击入口，阅读正文时不再堆满整屏。"
+                      badge={`${message.cards.length} 个`}
+                      expanded={
+                        expandedSections[`cards-${message.id || index}`] ??
+                        userMessageCount === 0
+                      }
+                      onToggle={() => toggleSection(`cards-${message.id || index}`)}
+                    >
+                      <CardList cards={message.cards} />
+                    </AttachmentSection>
+                  ) : null}
                   {message.role === "assistant" && message.id && message.content && (
-                    <div className="mt-3 flex items-center gap-2 border-t border-orange-100 pt-3 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-orange-100 pt-3 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
                       <span>这条回复有帮助吗？</span>
                       <button
                         type="button"
@@ -881,32 +1017,32 @@ export function FurryAssistant() {
             )}
 
             {!loading && userMessageCount === 0 && (
-              <div className="flex flex-wrap gap-2">
-                {contextualPrompts.map((prompt) => (
-                  <button
-                    key={`context-${prompt}`}
-                    type="button"
-                    onClick={() => void askAssistant(prompt)}
-                    className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-                {QUICK_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => void askAssistant(prompt)}
-                    className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-100 dark:border-orange-900/60 dark:bg-orange-950/30 dark:text-orange-200"
-                  >
-                    {prompt}
-                  </button>
-                ))}
+              <div className="space-y-3 rounded-[26px] border border-slate-200/80 bg-white/74 p-3.5 shadow-[0_16px_32px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/40">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                    快速开始
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                    先选一个入口，我会用更像导览页而不是客服对话的方式给你整理信息。
+                  </p>
+                </div>
+                <PromptDeck
+                  title="当前页面"
+                  prompts={contextualPrompts}
+                  tone="context"
+                  onPick={(prompt) => void askAssistant(prompt)}
+                />
+                <PromptDeck
+                  title="站内常用问题"
+                  prompts={QUICK_PROMPTS}
+                  tone="default"
+                  onPick={(prompt) => void askAssistant(prompt)}
+                />
               </div>
             )}
           </div>
 
-          <div className="border-t border-orange-200/70 bg-white/70 px-4 py-4 backdrop-blur dark:border-orange-900/50 dark:bg-slate-950/50">
+          <div className="relative border-t border-orange-200/70 bg-white/74 px-4 py-4 backdrop-blur-xl dark:border-orange-900/50 dark:bg-slate-950/60">
             {error && (
               <p className="mb-3 rounded-2xl bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">
                 {error}
@@ -919,19 +1055,19 @@ export function FurryAssistant() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="问我这个站有什么、去哪逛、推荐什么内容..."
                 rows={3}
-                className="min-h-[92px] w-full resize-none rounded-[22px] border border-orange-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-orange-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+                className="min-h-[96px] w-full resize-none rounded-[24px] border border-orange-200 bg-white/94 px-4 py-3.5 text-sm leading-6 text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-orange-400 dark:border-slate-700 dark:bg-slate-900/92 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
 
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] leading-5 text-muted-foreground">
-                  回答会结合站内公开内容做推荐。
+                <p className="max-w-[18rem] text-[11px] leading-5 text-muted-foreground">
+                  回答会结合站内公开内容和当前页面上下文做整理。
                 </p>
                 {loading ? (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleStop}
-                    className="rounded-full"
+                    className="rounded-full border-slate-300 bg-white/80 dark:border-slate-700 dark:bg-slate-900/70"
                   >
                     停止
                   </Button>
@@ -939,7 +1075,7 @@ export function FurryAssistant() {
                   <Button
                     type="submit"
                     disabled={!input.trim()}
-                    className="rounded-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-orange-500 dark:text-slate-950 dark:hover:bg-orange-400"
+                    className="rounded-full bg-slate-900 text-white shadow-[0_12px_28px_rgba(15,23,42,0.24)] hover:bg-slate-800 dark:bg-orange-500 dark:text-slate-950 dark:hover:bg-orange-400"
                   >
                     <ArrowUp className="mr-1 h-4 w-4" />
                     发送
@@ -954,7 +1090,7 @@ export function FurryAssistant() {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="pointer-events-auto group flex items-center gap-3 rounded-full border border-orange-200 bg-white/95 px-3 py-2 shadow-[0_16px_45px_rgba(15,23,42,0.2)] backdrop-blur transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(15,23,42,0.24)] dark:border-orange-900/60 dark:bg-slate-950/92"
+        className="pointer-events-auto group flex items-center gap-3 rounded-full border border-orange-200 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(255,247,237,0.92))] px-3 py-2 shadow-[0_18px_48px_rgba(15,23,42,0.22)] backdrop-blur transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(15,23,42,0.26)] dark:border-orange-900/60 dark:bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(17,24,39,0.92))]"
         aria-label="打开 AI 助手"
       >
         <MascotAvatar compact />
