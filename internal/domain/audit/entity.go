@@ -32,6 +32,7 @@ const (
 	ResourceAchievement Resource = "achievement"
 	ResourceCoupon      Resource = "coupon"
 	ResourcePost        Resource = "post"
+	ResourceAudioWork   Resource = "audio_work"
 	ResourceReport      Resource = "report"
 	ResourceGroup       Resource = "group"
 	ResourceEvent       Resource = "event"

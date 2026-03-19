@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowLeft, AudioLines, Bookmark, Clock3, Heart, MessageCircle, Play, Pause, Send, UserRound, Waves } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bookmark, Clock3, Flag, Heart, MessageCircle, Play, Pause, Send, UserRound, Waves } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { audioWorkToPlayerTrack, usePlayerStore } from '@/components/music-player';
 import { useAuth } from '@/contexts/auth-context';
@@ -24,6 +24,9 @@ export default function AudioWorkDetailPage() {
   const workId = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const { isLoggedIn, loading: authLoading } = useAuth();
   const [commentDraft, setCommentDraft] = useState('');
+  const [reportReason, setReportReason] = useState('违规内容');
+  const [reportDescription, setReportDescription] = useState('');
+  const [showReportForm, setShowReportForm] = useState(false);
   const { currentTrack, isPlaying, setTrack, togglePlay } = usePlayerStore();
 
   const workQuery = useQuery({
@@ -81,6 +84,17 @@ export default function AudioWorkDetailPage() {
     onSuccess: () => {
       setCommentDraft('');
       refreshDetail();
+    },
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: async () => {
+      if (!workId) throw new Error('missing work id');
+      return apiClient.createReport('audio_work', workId, reportReason, reportDescription.trim() || undefined);
+    },
+    onSuccess: () => {
+      setReportDescription('');
+      setShowReportForm(false);
     },
   });
 
@@ -158,6 +172,11 @@ export default function AudioWorkDetailPage() {
                 <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
                 {work.comment_count}
               </Badge>
+              {work.moderation_status !== 'approved' ? (
+                <Badge className="border-amber-300/30 bg-amber-300/10 px-3 py-1 text-amber-100 hover:bg-amber-300/10">
+                  {work.moderation_status === 'pending' ? '审核中' : '已封禁'}
+                </Badge>
+              ) : null}
             </div>
 
             {work.tags && work.tags.length > 0 ? (
@@ -212,6 +231,13 @@ export default function AudioWorkDetailPage() {
                     <Bookmark className="mr-2 h-4 w-4" />
                     {meState?.bookmarked ? '已收藏' : '收藏作品'}
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowReportForm((value) => !value)}
+                  >
+                    <Flag className="mr-2 h-4 w-4" />
+                    举报作品
+                  </Button>
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-3">
@@ -231,6 +257,38 @@ export default function AudioWorkDetailPage() {
                   <p className="self-center text-sm text-slate-300">登录后可以点赞、评论和收藏这首作品。</p>
                 </div>
               )}
+
+              {showReportForm ? (
+                <div className="rounded-2xl border border-rose-200/40 bg-rose-50/10 p-4">
+                  <div className="grid gap-3">
+                    <select
+                      value={reportReason}
+                      onChange={(event) => setReportReason(event.target.value)}
+                      className="h-10 rounded-md border border-white/10 bg-black/10 px-3 text-sm text-white"
+                    >
+                      <option value="违规内容">违规内容</option>
+                      <option value="侵权/搬运">侵权/搬运</option>
+                      <option value="骚扰/攻击">骚扰/攻击</option>
+                      <option value="其他">其他</option>
+                    </select>
+                    <Textarea
+                      value={reportDescription}
+                      onChange={(event) => setReportDescription(event.target.value)}
+                      placeholder="补充说明举报原因，帮助版主更快处理。"
+                      className="min-h-[100px] border-white/10 bg-black/10 text-white placeholder:text-slate-400"
+                    />
+                    <div className="flex gap-3">
+                      <Button onClick={() => reportMutation.mutate()} disabled={reportMutation.isPending}>
+                        <Flag className="mr-2 h-4 w-4" />
+                        提交举报
+                      </Button>
+                      <Button variant="outline" onClick={() => setShowReportForm(false)}>
+                        取消
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {waveform.length > 0 ? (
                 <div>

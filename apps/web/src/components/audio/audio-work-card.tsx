@@ -27,6 +27,17 @@ function formatDuration(seconds: number) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+function moderationLabel(status: AudioWork["moderation_status"]) {
+  switch (status) {
+    case 'pending':
+      return '审核中';
+    case 'blocked':
+      return '已封禁';
+    default:
+      return '已公开';
+  }
+}
+
 export function AudioWorkCard({
   work,
   compact = false,
@@ -118,6 +129,12 @@ export function AudioWorkCard({
               {work.waveform_preview?.length ? '已生成波形' : '音频作品'}
             </span>
           </div>
+
+          {work.moderation_status !== 'approved' ? (
+            <div className="text-xs text-amber-600">
+              {moderationLabel(work.moderation_status)}
+            </div>
+          ) : null}
 
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">

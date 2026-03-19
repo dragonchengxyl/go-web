@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/domain/post"
 )
 
 type Visibility string
@@ -15,23 +16,25 @@ const (
 )
 
 type Work struct {
-	ID              uuid.UUID      `json:"id"`
-	AuthorID        uuid.UUID      `json:"author_id"`
-	SourceJobID     uuid.UUID      `json:"source_job_id"`
-	Title           string         `json:"title"`
-	Description     *string        `json:"description,omitempty"`
-	CoverImageURL   *string        `json:"cover_image_url,omitempty"`
-	AudioURL        string         `json:"audio_url"`
-	DurationSec     float64        `json:"duration_sec"`
-	Visibility      Visibility     `json:"visibility"`
-	LikeCount       int            `json:"like_count"`
-	CommentCount    int            `json:"comment_count"`
-	Tags            []string       `json:"tags,omitempty"`
-	WaveformPreview []float64      `json:"waveform_preview,omitempty"`
-	Metadata        map[string]any `json:"metadata,omitempty"`
-	PublishedAt     time.Time      `json:"published_at"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
+	ID               uuid.UUID             `json:"id"`
+	AuthorID         uuid.UUID             `json:"author_id"`
+	SourceJobID      uuid.UUID             `json:"source_job_id"`
+	Title            string                `json:"title"`
+	Description      *string               `json:"description,omitempty"`
+	CoverImageURL    *string               `json:"cover_image_url,omitempty"`
+	AudioURL         string                `json:"audio_url"`
+	DurationSec      float64               `json:"duration_sec"`
+	Visibility       Visibility            `json:"visibility"`
+	ModerationStatus post.ModerationStatus `json:"moderation_status"`
+	ModerationNote   *string               `json:"moderation_note,omitempty"`
+	LikeCount        int                   `json:"like_count"`
+	CommentCount     int                   `json:"comment_count"`
+	Tags             []string              `json:"tags,omitempty"`
+	WaveformPreview  []float64             `json:"waveform_preview,omitempty"`
+	Metadata         map[string]any        `json:"metadata,omitempty"`
+	PublishedAt      time.Time             `json:"published_at"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
 
 	AuthorUsername   string `json:"author_username,omitempty"`
 	IsLikedByMe      bool   `json:"is_liked_by_me,omitempty"`
@@ -39,10 +42,11 @@ type Work struct {
 }
 
 type ListFilter struct {
-	AuthorID   *uuid.UUID
-	Visibility *Visibility
-	Page       int
-	PageSize   int
+	AuthorID         *uuid.UUID
+	Visibility       *Visibility
+	ModerationStatus *post.ModerationStatus
+	Page             int
+	PageSize         int
 }
 
 var (

@@ -41,7 +41,11 @@ func (h *AudioWorkHandler) GetPublicWork(c *gin.Context) {
 		return
 	}
 
-	work, err := h.service.GetPublicWork(c.Request.Context(), workID)
+	var viewerID *uuid.UUID
+	if value, ok := getUserID(c); ok {
+		viewerID = &value
+	}
+	work, err := h.service.GetWorkForViewer(c.Request.Context(), workID, viewerID)
 	if err != nil {
 		response.Error(c, err)
 		return

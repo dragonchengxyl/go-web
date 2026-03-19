@@ -11,9 +11,10 @@ import (
 type TargetType string
 
 const (
-	TargetTypePost    TargetType = "post"
-	TargetTypeComment TargetType = "comment"
-	TargetTypeUser    TargetType = "user"
+	TargetTypePost      TargetType = "post"
+	TargetTypeComment   TargetType = "comment"
+	TargetTypeUser      TargetType = "user"
+	TargetTypeAudioWork TargetType = "audio_work"
 )
 
 type Status string
@@ -27,10 +28,11 @@ const (
 type Action string
 
 const (
-	ActionNone          Action = ""
-	ActionBlockPost     Action = "block_post"
-	ActionDeleteComment Action = "delete_comment"
-	ActionBanUser       Action = "ban_user"
+	ActionNone           Action = ""
+	ActionBlockPost      Action = "block_post"
+	ActionDeleteComment  Action = "delete_comment"
+	ActionBanUser        Action = "ban_user"
+	ActionBlockAudioWork Action = "block_audio_work"
 )
 
 type Report struct {

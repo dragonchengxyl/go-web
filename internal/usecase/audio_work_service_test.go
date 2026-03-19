@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/studio/platform/internal/domain/audiojob"
 	"github.com/studio/platform/internal/domain/audiowork"
+	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/usecase"
 )
 
@@ -111,6 +112,16 @@ func (r *fakeAudioWorkRepo) Delete(_ context.Context, id uuid.UUID) error {
 		return audiowork.ErrNotFound
 	}
 	delete(r.items, id)
+	return nil
+}
+
+func (r *fakeAudioWorkRepo) UpdateModerationStatus(_ context.Context, id uuid.UUID, status post.ModerationStatus, note *string) error {
+	work, ok := r.items[id]
+	if !ok {
+		return audiowork.ErrNotFound
+	}
+	work.ModerationStatus = status
+	work.ModerationNote = note
 	return nil
 }
 

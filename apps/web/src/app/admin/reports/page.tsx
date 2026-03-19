@@ -42,12 +42,14 @@ const targetLabels: Record<string, string> = {
   post: '帖子',
   comment: '评论',
   user: '用户',
+  audio_work: '音频作品',
 }
 
 const actionLabels: Record<string, string> = {
   block_post: '已封禁帖子',
   delete_comment: '已删除评论',
   ban_user: '已封禁用户',
+  block_audio_work: '已封禁音频作品',
 }
 
 export default function AdminReportsPage() {
@@ -144,6 +146,8 @@ export default function AdminReportsPage() {
               ? { action: 'delete_comment', label: '删除评论' }
               : report.target_type === 'user'
                 ? { action: 'ban_user', label: '封禁用户' }
+                : report.target_type === 'audio_work'
+                  ? { action: 'block_audio_work', label: '封禁作品' }
                 : null
 
         const isConfirming = confirming?.id === report.id

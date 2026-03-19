@@ -25,19 +25,20 @@ import (
 
 // AdminHandler handles admin HTTP requests
 type AdminHandler struct {
-	statsService   usecase.StatsProvider
-	userService    *usecase.UserService
-	commentService *usecase.CommentService
-	postService    *usecase.PostService
-	groupService   *usecase.GroupService
-	eventService   *usecase.EventService
-	auditService   *usecase.AuditService
-	aiToolService  *usecase.AdminAIToolService
-	config         *configs.Config
-	sponsorService *usecase.SponsorSettingsService
-	orderRepo      order.Repository
-	reportRepo     report.Repository
-	notifyService  *usecase.NotificationService
+	statsService     usecase.StatsProvider
+	userService      *usecase.UserService
+	commentService   *usecase.CommentService
+	postService      *usecase.PostService
+	audioWorkService *usecase.AudioWorkService
+	groupService     *usecase.GroupService
+	eventService     *usecase.EventService
+	auditService     *usecase.AuditService
+	aiToolService    *usecase.AdminAIToolService
+	config           *configs.Config
+	sponsorService   *usecase.SponsorSettingsService
+	orderRepo        order.Repository
+	reportRepo       report.Repository
+	notifyService    *usecase.NotificationService
 }
 
 // NewAdminHandler creates a new AdminHandler
@@ -47,6 +48,7 @@ func NewAdminHandler(
 	_ any, // was gameService - no longer needed
 	commentService *usecase.CommentService,
 	postService *usecase.PostService,
+	audioWorkService *usecase.AudioWorkService,
 	groupService *usecase.GroupService,
 	eventService *usecase.EventService,
 	auditService *usecase.AuditService,
@@ -58,20 +60,71 @@ func NewAdminHandler(
 	notifyService *usecase.NotificationService,
 ) *AdminHandler {
 	return &AdminHandler{
-		statsService:   statsService,
-		userService:    userService,
-		commentService: commentService,
-		postService:    postService,
-		groupService:   groupService,
-		eventService:   eventService,
-		auditService:   auditService,
-		aiToolService:  aiToolService,
-		config:         config,
-		sponsorService: sponsorService,
-		orderRepo:      orderRepo,
-		reportRepo:     reportRepo,
-		notifyService:  notifyService,
+		statsService:     statsService,
+		userService:      userService,
+		commentService:   commentService,
+		postService:      postService,
+		audioWorkService: audioWorkService,
+		groupService:     groupService,
+		eventService:     eventService,
+		auditService:     auditService,
+		aiToolService:    aiToolService,
+		config:           config,
+		sponsorService:   sponsorService,
+		orderRepo:        orderRepo,
+		reportRepo:       reportRepo,
+		notifyService:    notifyService,
 	}
+}
+
+// ListAudioWorks returns paginated audio works filtered by moderation status (admin).
+func (h *AdminHandler) ListAudioWorks(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	status := c.Query("status")
+
+	works, total, err := h.audioWorkService.AdminListWorks(c.Request.Context(), status, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"works": works,
+		"total": total,
+		"page":  page,
+		"size":  pageSize,
+	})
+}
+
+// UpdateAudioWorkModeration updates an audio work moderation status (admin).
+func (h *AdminHandler) UpdateAudioWorkModeration(c *gin.Context) {
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.ErrInvalidParam)
+		return
+	}
+
+	var input struct {
+		Status string `json:"status" binding:"required"`
+		Note   string `json:"note"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	ms := post.ModerationStatus(input.Status)
+	if ms != post.ModerationPending && ms != post.ModerationApproved && ms != post.ModerationBlocked {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的审核状态"))
+		return
+	}
+
+	if err := h.audioWorkService.AdminUpdateModerationStatus(c.Request.Context(), workID, ms, input.Note); err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.logAudit(c, audit.ActionUpdate, audit.ResourceAudioWork, &workID, gin.H{"status": input.Status, "note": input.Note})
+	response.Success(c, gin.H{"status": input.Status, "note": input.Note})
 }
 
 // GetDashboardStats returns main dashboard metrics
@@ -621,6 +674,8 @@ func (h *AdminHandler) UpdateReport(c *gin.Context) {
 					targetType = "report_comment_deleted"
 				case report.ActionBanUser:
 					targetType = "report_user_banned"
+				case report.ActionBlockAudioWork:
+					targetType = "report_audio_work_blocked"
 				}
 			}
 		}
@@ -1040,6 +1095,13 @@ func (h *AdminHandler) applyReportAction(c *gin.Context, rep *report.Report, raw
 			return nil, apperr.New(apperr.CodeInvalidParam, "该举报类型不支持此动作")
 		}
 		if _, err := h.userService.UpdateUserStatus(c.Request.Context(), rep.TargetID, user.StatusBanned); err != nil {
+			return nil, err
+		}
+	case report.TargetTypeAudioWork:
+		if action != report.ActionBlockAudioWork {
+			return nil, apperr.New(apperr.CodeInvalidParam, "该举报类型不支持此动作")
+		}
+		if err := h.audioWorkService.AdminUpdateModerationStatus(c.Request.Context(), rep.TargetID, post.ModerationBlocked, "由举报处理触发封禁"); err != nil {
 			return nil, err
 		}
 	default:

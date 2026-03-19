@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/studio/platform/internal/domain/audiowork"
+	"github.com/studio/platform/internal/domain/post"
 )
 
 type AudioWorkRepository struct {
@@ -25,10 +26,10 @@ func NewAudioWorkRepository(pool *pgxpool.Pool) *AudioWorkRepository {
 const createAudioWorkSQL = `
 	INSERT INTO audio_works (
 		id, author_id, source_job_id, title, description, cover_image_url, audio_url,
-		duration_sec, visibility, like_count, comment_count, tags, waveform_preview, metadata, published_at, created_at, updated_at
+		duration_sec, visibility, moderation_status, moderation_note, like_count, comment_count, tags, waveform_preview, metadata, published_at, created_at, updated_at
 	) VALUES (
 		$1, $2, $3, $4, $5, $6, $7,
-		$8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+		$8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
 	)
 `
 
@@ -56,6 +57,8 @@ func (r *AudioWorkRepository) Create(ctx context.Context, work *audiowork.Work) 
 		work.AudioURL,
 		work.DurationSec,
 		work.Visibility,
+		work.ModerationStatus,
+		work.ModerationNote,
 		work.LikeCount,
 		work.CommentCount,
 		tagsJSON,
@@ -76,7 +79,7 @@ func (r *AudioWorkRepository) Create(ctx context.Context, work *audiowork.Work) 
 
 const getAudioWorkByIDSQL = `
 	SELECT w.id, w.author_id, w.source_job_id, w.title, w.description, w.cover_image_url, w.audio_url,
-	       w.duration_sec, w.visibility, w.like_count, w.comment_count, w.tags, w.waveform_preview, w.metadata,
+	       w.duration_sec, w.visibility, w.moderation_status, w.moderation_note, w.like_count, w.comment_count, w.tags, w.waveform_preview, w.metadata,
 	       w.published_at, w.created_at, w.updated_at, COALESCE(u.username, '')
 	FROM audio_works w
 	LEFT JOIN users u ON u.id = w.author_id
@@ -120,6 +123,10 @@ func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFil
 		args = append(args, *filter.Visibility)
 		conditions = append(conditions, fmt.Sprintf("w.visibility = $%d", len(args)))
 	}
+	if filter.ModerationStatus != nil && *filter.ModerationStatus != "" {
+		args = append(args, *filter.ModerationStatus)
+		conditions = append(conditions, fmt.Sprintf("w.moderation_status = $%d", len(args)))
+	}
 	if len(conditions) == 0 {
 		conditions = append(conditions, "TRUE")
 	}
@@ -131,7 +138,7 @@ func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFil
 
 	query := fmt.Sprintf(`
 		SELECT w.id, w.author_id, w.source_job_id, w.title, w.description, w.cover_image_url, w.audio_url,
-		       w.duration_sec, w.visibility, w.like_count, w.comment_count, w.tags, w.waveform_preview, w.metadata,
+		       w.duration_sec, w.visibility, w.moderation_status, w.moderation_note, w.like_count, w.comment_count, w.tags, w.waveform_preview, w.metadata,
 		       w.published_at, w.created_at, w.updated_at, COALESCE(u.username, ''),
 		       COUNT(*) OVER() AS total_count
 		FROM audio_works w
@@ -170,7 +177,9 @@ const updateAudioWorkSQL = `
 	    cover_image_url = $4,
 	    visibility = $5,
 	    tags = $6,
-	    updated_at = $7
+	    moderation_status = $7,
+	    moderation_note = $8,
+	    updated_at = $9
 	WHERE id = $1
 `
 
@@ -186,6 +195,8 @@ func (r *AudioWorkRepository) Update(ctx context.Context, work *audiowork.Work) 
 		work.CoverImageURL,
 		work.Visibility,
 		tagsJSON,
+		work.ModerationStatus,
+		work.ModerationNote,
 		work.UpdatedAt,
 	)
 	if err != nil {
@@ -201,6 +212,21 @@ func (r *AudioWorkRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	result, err := r.pool.Exec(ctx, `DELETE FROM audio_works WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("delete audio work: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return audiowork.ErrNotFound
+	}
+	return nil
+}
+
+func (r *AudioWorkRepository) UpdateModerationStatus(ctx context.Context, id uuid.UUID, status post.ModerationStatus, note *string) error {
+	result, err := r.pool.Exec(ctx, `
+		UPDATE audio_works
+		SET moderation_status = $2, moderation_note = $3, updated_at = NOW()
+		WHERE id = $1
+	`, id, status, note)
+	if err != nil {
+		return fmt.Errorf("update audio work moderation status: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return audiowork.ErrNotFound
@@ -230,6 +256,8 @@ func scanAudioWork(scanner audioWorkScanner) (*audiowork.Work, error) {
 		&work.AudioURL,
 		&work.DurationSec,
 		&work.Visibility,
+		&work.ModerationStatus,
+		&work.ModerationNote,
 		&work.LikeCount,
 		&work.CommentCount,
 		&tagsJSON,
@@ -281,6 +309,8 @@ func scanAudioWorkWithTotal(rows pgx.Rows) (*audiowork.Work, int64, error) {
 		&work.AudioURL,
 		&work.DurationSec,
 		&work.Visibility,
+		&work.ModerationStatus,
+		&work.ModerationNote,
 		&work.LikeCount,
 		&work.CommentCount,
 		&tagsJSON,

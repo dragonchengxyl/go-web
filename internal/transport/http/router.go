@@ -181,6 +181,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 		if audioWorkHandler != nil {
 			audioWorks := v1.Group("/audio/works")
+			audioWorks.Use(authMiddleware.OptionalAuthenticate())
 			audioWorks.GET("", audioWorkHandler.ListPublicWorks)
 			audioWorks.GET("/:id", audioWorkHandler.GetPublicWork)
 		}
@@ -413,6 +414,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 					nil,
 					cfg.CommentService,
 					cfg.PostService,
+					cfg.AudioWorkService,
 					cfg.GroupService,
 					cfg.EventService,
 					cfg.AuditService,
@@ -445,6 +447,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				admin.GET("/posts", adminHandler.ListPosts)
 				admin.PUT("/posts/:id/moderation", adminHandler.UpdatePostModeration)
 				admin.DELETE("/posts/:id", postHandler.DeletePost)
+				if cfg.AudioWorkService != nil {
+					admin.GET("/audio/works", adminHandler.ListAudioWorks)
+					admin.PUT("/audio/works/:id/moderation", adminHandler.UpdateAudioWorkModeration)
+				}
 
 				if cfg.GroupService != nil {
 					admin.GET("/groups", adminHandler.ListGroups)

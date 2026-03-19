@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
+  Disc3,
   BarChart3,
   Bot,
   CalendarRange,
@@ -56,6 +57,13 @@ const navItems: NavItem[] = [
     description: "处置用户举报与动作闭环",
     section: "治理",
     icon: Flag,
+  },
+  {
+    href: "/admin/audio-works",
+    label: "音频治理",
+    description: "处理音频作品审核与下架状态",
+    section: "治理",
+    icon: Disc3,
   },
   {
     href: "/admin/users",

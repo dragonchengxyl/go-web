@@ -44,7 +44,7 @@ func (h *ReportHandler) CreateReport(c *gin.Context) {
 	}
 
 	targetType := report.TargetType(req.TargetType)
-	if targetType != report.TargetTypePost && targetType != report.TargetTypeComment && targetType != report.TargetTypeUser {
+	if targetType != report.TargetTypePost && targetType != report.TargetTypeComment && targetType != report.TargetTypeUser && targetType != report.TargetTypeAudioWork {
 		response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的举报类型"))
 		return
 	}

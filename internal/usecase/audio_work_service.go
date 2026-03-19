@@ -12,6 +12,7 @@ import (
 	"github.com/studio/platform/internal/domain/audiowork"
 	"github.com/studio/platform/internal/domain/bookmark"
 	"github.com/studio/platform/internal/domain/comment"
+	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
@@ -123,19 +124,20 @@ func (s *AudioWorkService) PublishFromJob(ctx context.Context, input PublishAudi
 	}
 
 	work := &audiowork.Work{
-		ID:              uuid.New(),
-		AuthorID:        input.UserID,
-		SourceJobID:     input.JobID,
-		Title:           title,
-		AudioURL:        audioURL,
-		DurationSec:     readDuration(job.Result),
-		Visibility:      visibility,
-		Tags:            mergeWorkTags(input.Tags, job.Result),
-		WaveformPreview: readWaveform(job.Result),
-		Metadata:        cloneMap(job.Result),
-		PublishedAt:     now,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:               uuid.New(),
+		AuthorID:         input.UserID,
+		SourceJobID:      input.JobID,
+		Title:            title,
+		AudioURL:         audioURL,
+		DurationSec:      readDuration(job.Result),
+		Visibility:       visibility,
+		ModerationStatus: post.ModerationPending,
+		Tags:             mergeWorkTags(input.Tags, job.Result),
+		WaveformPreview:  readWaveform(job.Result),
+		Metadata:         cloneMap(job.Result),
+		PublishedAt:      now,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 	if description != "" {
 		work.Description = &description
@@ -155,10 +157,12 @@ func (s *AudioWorkService) PublishFromJob(ctx context.Context, input PublishAudi
 
 func (s *AudioWorkService) ListPublicWorks(ctx context.Context, input ListAudioWorksInput) ([]*audiowork.Work, int64, error) {
 	visibility := audiowork.VisibilityPublic
+	status := post.ModerationApproved
 	items, total, err := s.workRepo.List(ctx, audiowork.ListFilter{
-		Visibility: &visibility,
-		Page:       input.Page,
-		PageSize:   input.PageSize,
+		Visibility:       &visibility,
+		ModerationStatus: &status,
+		Page:             input.Page,
+		PageSize:         input.PageSize,
 	})
 	if err != nil {
 		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "查询音频作品失败", err)
@@ -180,11 +184,13 @@ func (s *AudioWorkService) ListMyWorks(ctx context.Context, userID uuid.UUID, in
 
 func (s *AudioWorkService) ListUserPublicWorks(ctx context.Context, userID uuid.UUID, input ListAudioWorksInput) ([]*audiowork.Work, int64, error) {
 	visibility := audiowork.VisibilityPublic
+	status := post.ModerationApproved
 	items, total, err := s.workRepo.List(ctx, audiowork.ListFilter{
-		AuthorID:   &userID,
-		Visibility: &visibility,
-		Page:       input.Page,
-		PageSize:   input.PageSize,
+		AuthorID:         &userID,
+		Visibility:       &visibility,
+		ModerationStatus: &status,
+		Page:             input.Page,
+		PageSize:         input.PageSize,
 	})
 	if err != nil {
 		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "查询用户音频作品失败", err)
@@ -192,7 +198,7 @@ func (s *AudioWorkService) ListUserPublicWorks(ctx context.Context, userID uuid.
 	return items, total, nil
 }
 
-func (s *AudioWorkService) GetPublicWork(ctx context.Context, workID uuid.UUID) (*audiowork.Work, error) {
+func (s *AudioWorkService) GetWorkForViewer(ctx context.Context, workID uuid.UUID, viewerID *uuid.UUID) (*audiowork.Work, error) {
 	work, err := s.workRepo.GetByID(ctx, workID)
 	if err != nil {
 		if errors.Is(err, audiowork.ErrNotFound) {
@@ -200,7 +206,10 @@ func (s *AudioWorkService) GetPublicWork(ctx context.Context, workID uuid.UUID) 
 		}
 		return nil, apperr.Wrap(apperr.CodeInternalError, "查询音频作品失败", err)
 	}
-	if work.Visibility != audiowork.VisibilityPublic {
+	if viewerID != nil && work.AuthorID == *viewerID {
+		return work, nil
+	}
+	if work.Visibility != audiowork.VisibilityPublic || work.ModerationStatus != post.ModerationApproved {
 		return nil, apperr.ErrNotFound
 	}
 	return work, nil
@@ -245,6 +254,8 @@ func (s *AudioWorkService) UpdateWork(ctx context.Context, input UpdateAudioWork
 	work.Title = title
 	work.Visibility = visibility
 	work.Tags = normalizeTags(input.Tags)
+	work.ModerationStatus = post.ModerationPending
+	work.ModerationNote = nil
 	work.UpdatedAt = time.Now()
 
 	description := strings.TrimSpace(input.Description)
@@ -342,6 +353,29 @@ func (s *AudioWorkService) HasLiked(ctx context.Context, userID, workID uuid.UUI
 		return false, apperr.Wrap(apperr.CodeInternalError, "查询作品点赞状态失败", err)
 	}
 	return liked, nil
+}
+
+func (s *AudioWorkService) AdminListWorks(ctx context.Context, status string, page, pageSize int) ([]*audiowork.Work, int64, error) {
+	filter := audiowork.ListFilter{Page: page, PageSize: pageSize}
+	if status != "" {
+		ms := post.ModerationStatus(status)
+		filter.ModerationStatus = &ms
+	}
+	return s.workRepo.List(ctx, filter)
+}
+
+func (s *AudioWorkService) AdminUpdateModerationStatus(ctx context.Context, workID uuid.UUID, status post.ModerationStatus, note string) error {
+	var moderationNote *string
+	if trimmed := strings.TrimSpace(note); trimmed != "" {
+		moderationNote = &trimmed
+	}
+	if err := s.workRepo.UpdateModerationStatus(ctx, workID, status, moderationNote); err != nil {
+		if errors.Is(err, audiowork.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return apperr.Wrap(apperr.CodeInternalError, "更新音频作品审核状态失败", err)
+	}
+	return nil
 }
 
 func (s *AudioWorkService) validateAudioURL(raw string) error {

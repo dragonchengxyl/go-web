@@ -340,6 +340,8 @@ export interface AudioWork {
   audio_url: string;
   duration_sec: number;
   visibility: AudioWorkVisibility;
+  moderation_status: ModerationStatus;
+  moderation_note?: string;
   like_count: number;
   comment_count: number;
   tags?: string[];
@@ -1630,6 +1632,30 @@ class ApiClient {
     }>(`/admin/reports?${q.toString()}`);
   }
 
+  async getAdminAudioWorks(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.status) q.set("status", params.status);
+    return this.get<{
+      works: AdminAudioWork[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/admin/audio/works?${q.toString()}`);
+  }
+
+  async updateAdminAudioWorkModeration(id: string, status: ModerationStatus, note?: string) {
+    return this.put<{ status: ModerationStatus; note?: string }>(`/admin/audio/works/${id}/moderation`, {
+      status,
+      note,
+    });
+  }
+
   async updateAdminGroup(id: string, data: { privacy: "public" | "private" }) {
     return this.put<Group>(`/admin/groups/${id}`, data);
   }
@@ -1785,6 +1811,10 @@ export interface AdminEvent extends Event {
   organizer_email?: string;
 }
 
+export interface AdminAudioWork extends AudioWork {
+  author_username?: string;
+}
+
 export interface AdminUser {
   id: string;
   username: string;
@@ -1861,7 +1891,7 @@ export interface AdminReport {
   id: string;
   reporter_id: string;
   reporter_username?: string;
-  target_type: "post" | "comment" | "user";
+  target_type: "post" | "comment" | "user" | "audio_work";
   target_id: string;
   reason: string;
   description?: string;
