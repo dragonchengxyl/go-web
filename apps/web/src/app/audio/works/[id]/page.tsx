@@ -115,9 +115,9 @@ export default function AudioWorkDetailPage() {
             <CardDescription>该音频作品可能尚未公开，或者链接已经失效。</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/creator/audio" className="inline-flex items-center text-sm font-medium text-primary hover:underline">
+            <Link href="/audio/works" className="inline-flex items-center text-sm font-medium text-primary hover:underline">
               <ArrowLeft className="mr-1 h-4 w-4" />
-              返回音频任务台
+              返回作品列表
             </Link>
           </CardContent>
         </Card>
@@ -134,16 +134,16 @@ export default function AudioWorkDetailPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 pb-12 pt-20">
       <div className="mb-6">
-        <Link href="/creator/audio" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground">
+        <Link href="/audio/works" className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground">
           <ArrowLeft className="mr-1 h-4 w-4" />
-          返回音频任务台
+          返回作品列表
         </Link>
       </div>
 
       <div className="overflow-hidden rounded-[30px] border border-border/60 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.15),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.14),transparent_22%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,41,59,0.94))] p-6 text-white shadow-[0_30px_90px_-50px_rgba(15,23,42,0.85)]">
         <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">Published Audio Work</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">音频作品</p>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{work.title}</h1>
             {work.description ? <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-200/80 sm:text-base">{work.description}</p> : null}
 
@@ -192,8 +192,8 @@ export default function AudioWorkDetailPage() {
 
           <Card className="rounded-[24px] border-white/10 bg-white/5 text-white shadow-none backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="text-xl">播放与交付</CardTitle>
-              <CardDescription className="text-slate-300">这是从任务结果发布出来的第一版作品详情。后续可以继续接评论、推荐和商业化。</CardDescription>
+              <CardTitle className="text-xl">播放与互动</CardTitle>
+              <CardDescription className="text-slate-300">在线播放、收藏作品，或参与评论互动。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <audio controls className="w-full">

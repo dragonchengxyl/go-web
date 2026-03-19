@@ -35,11 +35,8 @@ export default function AudioWorksPage() {
     <div className="mx-auto max-w-6xl px-4 pb-12 pt-20">
       <div className="mb-8 overflow-hidden rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.16),transparent_24%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.94))] p-6 text-white shadow-[0_24px_80px_-44px_rgba(15,23,42,0.8)]">
         <div className="max-w-3xl">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">Public Audio Feed</p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">社区里的音频作品开始进入公开分发面</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-200/80 sm:text-base">
-            这里收拢从音频任务台发布出来的作品。当前重点是建立公开消费入口，下一步会继续把它们接入首页、推荐流和互动系统。
-          </p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">音频作品</p>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">社区音频作品</h1>
         </div>
       </div>
 

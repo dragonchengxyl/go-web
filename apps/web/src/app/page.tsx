@@ -544,13 +544,13 @@ export default function HomePage() {
               style={{ border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.25)' }}
             >
               <AudioLines className="h-10 w-10 mx-auto mb-4 opacity-30" />
-              <p className="text-sm mb-4">还没有公开音频作品，先去创作者音频任务台发布第一首。</p>
+              <p className="text-sm mb-4">还没有公开音频作品，去音频创作页发布第一首吧。</p>
               <Link href="/creator/audio">
                 <button
                   className="px-6 py-2 rounded-lg text-sm font-medium text-white"
                   style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}
                 >
-                  打开音频任务台
+                  前往音频创作页
                 </button>
               </Link>
             </div>

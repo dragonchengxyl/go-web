@@ -109,15 +109,15 @@ export default function CreatorDashboard() {
           <div>
             <div className="mb-2 flex items-center gap-2 text-cyan-700">
               <AudioLines className="h-4 w-4" />
-              <span className="text-xs font-semibold uppercase tracking-[0.18em]">Audio Lab</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.18em]">音频创作</span>
             </div>
             <h2 className="text-lg font-semibold">音频任务台</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              上传音频、提交 AI 作曲 / 音色转换 / 人声增强 / 母带任务，并实时查看队列状态。
+              上传音频、提交 AI 作曲 / 音色转换 / 人声增强 / 母带任务，并实时查看任务状态。
             </p>
           </div>
           <Link href="/creator/audio" className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors">
-            打开任务台
+            前往任务台
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>

@@ -43,14 +43,14 @@ const TASK_OPTIONS: AudioTaskOption[] = [
   {
     value: 'ai_music',
     label: 'AI 作曲',
-    description: '根据 prompt 生成歌曲草案，适合先做创意验证。',
+    description: '根据提示词生成歌曲片段和创作灵感。',
     icon: Sparkles,
     tone: 'from-fuchsia-500/20 to-rose-500/10 border-fuchsia-500/30',
   },
   {
     value: 'voice_convert',
     label: '音色转换',
-    description: '使用源音频和参考音频，输出 mock 声线迁移结果。',
+    description: '使用源音频和参考音频完成音色转换。',
     icon: Mic2,
     tone: 'from-sky-500/20 to-cyan-500/10 border-sky-500/30',
   },
@@ -64,7 +64,7 @@ const TASK_OPTIONS: AudioTaskOption[] = [
   {
     value: 'audio_master',
     label: '母带处理',
-    description: '补齐交付信息，模拟母带化后的输出物。',
+    description: '优化响度、动态和整体听感，完成母带处理。',
     icon: Wand2,
     tone: 'from-amber-500/20 to-orange-500/10 border-amber-500/30',
   },
@@ -373,11 +373,9 @@ export default function CreatorAudioPage() {
       <div className="mb-8 overflow-hidden rounded-[28px] border border-border/60 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.16),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.14),transparent_24%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,41,59,0.92))] p-6 text-white shadow-[0_28px_80px_-44px_rgba(15,23,42,0.85)]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">Creator Audio Lab</p>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">把音频生成、加工和发布链路做成可演示工作台</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-200/80 sm:text-base">
-              这一页对接了你刚做好的音频任务中心。现在可以上传音频、提交 AI 任务、自动轮询状态，并查看本地处理后的输出结果和元数据，已经具备继续接真实 worker 的骨架。
-            </p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">音频创作</p>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">音频任务台</h1>
+            <p className="mt-3 text-sm leading-6 text-slate-200/80 sm:text-base">上传音频、选择任务，并随时查看处理进度与结果。</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Badge className="border-white/15 bg-white/10 px-3 py-1 text-white hover:bg-white/10">
@@ -385,7 +383,7 @@ export default function CreatorAudioPage() {
               四类任务
             </Badge>
             <Badge className="border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-cyan-100 hover:bg-cyan-300/10">
-              {hasActiveJobs ? '自动轮询中' : '等待新任务'}
+              {hasActiveJobs ? '任务更新中' : '等待新任务'}
             </Badge>
           </div>
         </div>
@@ -399,7 +397,7 @@ export default function CreatorAudioPage() {
                 <Sparkles className="h-5 w-5 text-fuchsia-500" />
                 新建音频任务
               </CardTitle>
-              <CardDescription>先完成上传，再按任务类型提交。当前已经能对本地上传音频做真实文件处理和元数据提取，AI 生成部分仍保留 mock 结果。</CardDescription>
+              <CardDescription>先完成上传，再按任务类型提交。</CardDescription>
             </CardHeader>
             <CardContent className="p-6">
               <form className="space-y-6" onSubmit={handleCreateJob}>
@@ -449,7 +447,7 @@ export default function CreatorAudioPage() {
                       <Input
                         value={title}
                         onChange={(event) => setTitle(event.target.value)}
-                        placeholder="例如：清晨 synth-pop 风格单曲 demo"
+                        placeholder="例如：清晨 synth-pop 风格单曲"
                         required
                       />
                     </div>

@@ -328,9 +328,9 @@ export default function ProfilePage() {
       {audioWorks.length === 0 ? (
         <div className="text-center py-10 text-muted-foreground">
           <p className="font-medium mb-2">还没有音频作品</p>
-          <p className="text-sm mb-4">先去音频任务台发布第一首作品。</p>
+          <p className="text-sm mb-4">先去音频创作页发布第一首作品。</p>
           <Link href="/creator/audio">
-            <Button variant="outline">打开音频任务台</Button>
+            <Button variant="outline">前往音频创作页</Button>
           </Link>
         </div>
       ) : (

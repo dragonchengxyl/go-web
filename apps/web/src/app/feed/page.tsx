@@ -208,7 +208,7 @@ export default function FeedPage() {
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-border bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
-            还没有公开音频作品，先去创作者音频任务台发布第一首。
+            还没有公开音频作品，去音频创作页发布第一首吧。
           </div>
         )}
       </section>
