@@ -25,13 +25,7 @@ import { useAssistantPageContext } from "@/contexts/assistant-page-context";
 const STORAGE_KEY = "furry_assistant_messages_v1";
 const CONVERSATION_KEY = "furry_assistant_current_conversation_v1";
 
-const QUICK_PROMPTS = [
-  "我第一次来，先逛哪里？",
-  "推荐几个有意思的圈子",
-  "最近有什么活动值得看？",
-  "怎么发布我的第一条动态？",
-  "推荐几个值得关注的用户",
-];
+const START_PROMPT = "能快速带我了解这个社区吗？";
 
 const WELCOME_CARDS: AssistantCard[] = [
   {
@@ -248,45 +242,6 @@ function AttachmentSection({
           {children}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function PromptDeck({
-  title,
-  prompts,
-  tone,
-  onPick,
-}: {
-  title: string;
-  prompts: string[];
-  tone: "context" | "default";
-  onPick: (prompt: string) => void;
-}) {
-  if (prompts.length === 0) return null;
-
-  const cardClassName =
-    tone === "context"
-      ? "border-cyan-200/80 bg-[linear-gradient(180deg,rgba(236,254,255,0.95),rgba(255,255,255,0.92))] hover:border-cyan-300 hover:bg-cyan-50/90 dark:border-cyan-900/40 dark:bg-[linear-gradient(180deg,rgba(8,47,73,0.24),rgba(15,23,42,0.52))] dark:hover:bg-cyan-950/30"
-      : "border-orange-200/80 bg-[linear-gradient(180deg,rgba(255,247,237,0.95),rgba(255,255,255,0.92))] hover:border-orange-300 hover:bg-orange-50 dark:border-orange-900/40 dark:bg-[linear-gradient(180deg,rgba(124,45,18,0.22),rgba(15,23,42,0.52))] dark:hover:bg-orange-950/30";
-
-  return (
-    <div className="space-y-2.5">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-        {title}
-      </p>
-      <div className="grid gap-2">
-        {prompts.map((prompt) => (
-          <button
-            key={`${title}-${prompt}`}
-            type="button"
-            onClick={() => onPick(prompt)}
-            className={`rounded-[22px] border px-3.5 py-3 text-left text-sm leading-6 text-slate-700 transition-all hover:-translate-y-0.5 dark:text-slate-200 ${cardClassName}`}
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -773,17 +728,32 @@ export function FurryAssistant() {
     }));
   }
 
+  function handlePanelWheel(event: React.WheelEvent<HTMLDivElement>) {
+    const container = scrollerRef.current;
+    const target = event.target as HTMLElement | null;
+    if (!container || !target || target.closest("textarea")) {
+      return;
+    }
+    if (container.scrollHeight <= container.clientHeight) {
+      return;
+    }
+    container.scrollTop += event.deltaY;
+    event.preventDefault();
+  }
+
   const userMessageCount = messages.filter((msg) => msg.role === "user").length;
   const sourceSummary = Object.entries(sourceCounts)
     .sort(([kindA], [kindB]) => kindA.localeCompare(kindB))
     .map(([kind, count]) => `${count} 个${SOURCE_KIND_LABELS[kind] || kind}`)
     .join(" · ");
-  const contextualPrompts = pageContext?.prompt_hints ?? [];
 
   return (
     <div className="pointer-events-none fixed bottom-5 right-4 z-[60] sm:bottom-6 sm:right-6">
       {open && (
-        <div className="pointer-events-auto relative mb-4 flex h-[min(84vh,820px)] w-[min(100vw-1rem,34rem)] flex-col overflow-hidden rounded-[32px] border border-orange-200/70 bg-[linear-gradient(180deg,rgba(255,248,240,0.96),rgba(255,255,255,0.92))] shadow-[0_32px_90px_rgba(15,23,42,0.24)] backdrop-blur dark:border-orange-900/50 dark:bg-[linear-gradient(180deg,rgba(17,24,39,0.98),rgba(2,6,23,0.94))] sm:w-[min(100vw-2rem,36rem)]">
+        <div
+          className="pointer-events-auto relative mb-4 flex h-[min(84vh,820px)] w-[min(100vw-1rem,34rem)] min-h-0 flex-col overflow-hidden rounded-[32px] border border-orange-200/70 bg-[linear-gradient(180deg,rgba(255,248,240,0.96),rgba(255,255,255,0.92))] shadow-[0_32px_90px_rgba(15,23,42,0.24)] backdrop-blur dark:border-orange-900/50 dark:bg-[linear-gradient(180deg,rgba(17,24,39,0.98),rgba(2,6,23,0.94))] sm:w-[min(100vw-2rem,36rem)]"
+          onWheelCapture={handlePanelWheel}
+        >
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.18),transparent_36%),radial-gradient(circle_at_top_left,rgba(34,211,238,0.12),transparent_28%)]" />
           <div className="relative border-b border-orange-200/70 bg-white/72 px-4 py-4 backdrop-blur-xl dark:border-orange-900/50 dark:bg-slate-950/60">
             <div className="flex items-start gap-3">
@@ -793,9 +763,6 @@ export function FurryAssistant() {
                   <div>
                     <p className="text-sm font-semibold tracking-[0.02em] text-slate-900 dark:text-slate-100">
                       霜牙
-                    </p>
-                    <p className="mt-1 max-w-[28rem] text-xs leading-5 text-slate-600 dark:text-slate-400">
-                      更像站内导览编辑台，不是客服话术窗。负责把页面、圈子、活动和可执行建议整理给你。
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -854,7 +821,7 @@ export function FurryAssistant() {
 
           <div
             ref={scrollerRef}
-            className="relative flex-1 space-y-5 overflow-y-auto px-4 pb-6 pt-4 overscroll-contain sm:px-5"
+            className="relative min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-6 pt-4 overscroll-contain sm:px-5"
           >
             {isLoggedIn && conversations.length > 0 && showConversationRail && (
               <div className="rounded-[24px] border border-slate-200/80 bg-white/72 p-3.5 shadow-[0_14px_32px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/40">
@@ -1018,26 +985,16 @@ export function FurryAssistant() {
 
             {!loading && userMessageCount === 0 && (
               <div className="space-y-3 rounded-[26px] border border-slate-200/80 bg-white/74 p-3.5 shadow-[0_16px_32px_rgba(15,23,42,0.06)] backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/40">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                    快速开始
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    先选一个入口，我会用更像导览页而不是客服对话的方式给你整理信息。
-                  </p>
-                </div>
-                <PromptDeck
-                  title="当前页面"
-                  prompts={contextualPrompts}
-                  tone="context"
-                  onPick={(prompt) => void askAssistant(prompt)}
-                />
-                <PromptDeck
-                  title="站内常用问题"
-                  prompts={QUICK_PROMPTS}
-                  tone="default"
-                  onPick={(prompt) => void askAssistant(prompt)}
-                />
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                  快速开始
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void askAssistant(START_PROMPT)}
+                  className="rounded-[22px] border border-orange-200/80 bg-[linear-gradient(180deg,rgba(255,247,237,0.95),rgba(255,255,255,0.92))] px-3.5 py-3 text-left text-sm leading-6 text-slate-700 transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-50 dark:border-orange-900/40 dark:bg-[linear-gradient(180deg,rgba(124,45,18,0.22),rgba(15,23,42,0.52))] dark:text-slate-200 dark:hover:bg-orange-950/30"
+                >
+                  {START_PROMPT}
+                </button>
               </div>
             )}
           </div>
@@ -1059,9 +1016,7 @@ export function FurryAssistant() {
               />
 
               <div className="flex items-center justify-between gap-3">
-                <p className="max-w-[18rem] text-[11px] leading-5 text-muted-foreground">
-                  回答会结合站内公开内容和当前页面上下文做整理。
-                </p>
+                <div />
                 {loading ? (
                   <Button
                     type="button"
