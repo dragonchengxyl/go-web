@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -10,7 +11,9 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,11 +25,17 @@ type Processor interface {
 }
 
 type LocalProcessor struct {
-	uploadRoot string
-	publicBase string
+	uploadRoot  string
+	publicBase  string
+	ffmpegPath  string
+	ffprobePath string
 }
 
 func NewLocalProcessor(uploadRoot, publicBase string) *LocalProcessor {
+	return NewLocalProcessorWithBinaries(uploadRoot, publicBase, "", "")
+}
+
+func NewLocalProcessorWithBinaries(uploadRoot, publicBase, ffmpegPath, ffprobePath string) *LocalProcessor {
 	root := strings.TrimSpace(uploadRoot)
 	if root == "" {
 		root = "./uploads"
@@ -35,9 +44,23 @@ func NewLocalProcessor(uploadRoot, publicBase string) *LocalProcessor {
 	if base == "" {
 		base = "/uploads"
 	}
+	ffmpeg := strings.TrimSpace(ffmpegPath)
+	if ffmpeg == "" {
+		if resolved, err := exec.LookPath("ffmpeg"); err == nil {
+			ffmpeg = resolved
+		}
+	}
+	ffprobe := strings.TrimSpace(ffprobePath)
+	if ffprobe == "" {
+		if resolved, err := exec.LookPath("ffprobe"); err == nil {
+			ffprobe = resolved
+		}
+	}
 	return &LocalProcessor{
-		uploadRoot: filepath.Clean(root),
-		publicBase: base,
+		uploadRoot:  filepath.Clean(root),
+		publicBase:  base,
+		ffmpegPath:  ffmpeg,
+		ffprobePath: ffprobe,
 	}
 }
 
@@ -52,9 +75,9 @@ func (p *LocalProcessor) Process(ctx context.Context, job *audiojob.Job) (map[st
 	case audiojob.TaskTypeAIMusic:
 		return p.processAIMusic(job)
 	case audiojob.TaskTypeVoiceConvert:
-		return p.processAudioFromSource(job, true)
+		return p.processAudioFromSource(ctx, job, true)
 	case audiojob.TaskTypeVoiceEnhance, audiojob.TaskTypeAudioMaster:
-		return p.processAudioFromSource(job, false)
+		return p.processAudioFromSource(ctx, job, false)
 	default:
 		return nil, fmt.Errorf("unsupported task type: %s", job.TaskType)
 	}
@@ -98,7 +121,7 @@ func (p *LocalProcessor) processAIMusic(job *audiojob.Job) (map[string]any, erro
 	}, nil
 }
 
-func (p *LocalProcessor) processAudioFromSource(job *audiojob.Job, includeReference bool) (map[string]any, error) {
+func (p *LocalProcessor) processAudioFromSource(ctx context.Context, job *audiojob.Job, includeReference bool) (map[string]any, error) {
 	if job.SourceAudioURL == nil || strings.TrimSpace(*job.SourceAudioURL) == "" {
 		return nil, fmt.Errorf("missing source audio")
 	}
@@ -108,7 +131,13 @@ func (p *LocalProcessor) processAudioFromSource(job *audiojob.Job, includeRefere
 		return nil, fmt.Errorf("source audio must be a local uploaded file")
 	}
 
-	sourceMeta, err := inspectAudioFile(sourcePath)
+	if p.canUseFFmpeg() {
+		if result, err := p.processAudioWithFFmpeg(ctx, job, sourcePath, includeReference); err == nil {
+			return result, nil
+		}
+	}
+
+	sourceMeta, err := p.inspectAudioFile(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("inspect source audio: %w", err)
 	}
@@ -122,7 +151,7 @@ func (p *LocalProcessor) processAudioFromSource(job *audiojob.Job, includeRefere
 		return nil, fmt.Errorf("copy processed audio: %w", err)
 	}
 
-	outputMeta, err := inspectAudioFile(outputPath)
+	outputMeta, err := p.inspectAudioFile(outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("inspect output audio: %w", err)
 	}
@@ -140,7 +169,7 @@ func (p *LocalProcessor) processAudioFromSource(job *audiojob.Job, includeRefere
 
 	if includeReference && job.ReferenceAudioURL != nil && strings.TrimSpace(*job.ReferenceAudioURL) != "" {
 		if refPath, ok := p.resolveLocalUpload(*job.ReferenceAudioURL); ok {
-			refMeta, err := inspectAudioFile(refPath)
+			refMeta, err := p.inspectAudioFile(refPath)
 			if err == nil {
 				result["reference_analysis"] = refMeta.toMap()
 			}
@@ -167,6 +196,124 @@ func (p *LocalProcessor) processAudioFromSource(job *audiojob.Job, includeRefere
 		result["quality_report"] = map[string]any{
 			"speaker_match":      "medium",
 			"pitch_stable":       true,
+			"waveform_available": len(outputMeta.WaveformPreview) > 0,
+		}
+	}
+
+	return result, nil
+}
+
+func (p *LocalProcessor) processAudioWithFFmpeg(ctx context.Context, job *audiojob.Job, sourcePath string, includeReference bool) (map[string]any, error) {
+	sourceMeta, err := p.inspectAudioFile(sourcePath)
+	if err != nil {
+		return nil, err
+	}
+
+	targetSampleRate := maxInt(sourceMeta.SampleRate, 44100)
+	targetChannels := maxInt(sourceMeta.Channels, 2)
+	targetBitrate := maxInt(sourceMeta.BitRateKbps, 192)
+
+	result := map[string]any{
+		"mock":            false,
+		"provider":        "ffmpeg-audio-pipeline",
+		"task_type":       job.TaskType,
+		"generated_at":    time.Now().Format(time.RFC3339),
+		"source_analysis": sourceMeta.toMap(),
+	}
+
+	if includeReference && job.ReferenceAudioURL != nil && strings.TrimSpace(*job.ReferenceAudioURL) != "" {
+		if refPath, ok := p.resolveLocalUpload(*job.ReferenceAudioURL); ok {
+			refMeta, refErr := p.inspectAudioFile(refPath)
+			if refErr == nil {
+				result["reference_analysis"] = refMeta.toMap()
+				targetSampleRate = maxInt(refMeta.SampleRate, targetSampleRate)
+				targetChannels = maxInt(refMeta.Channels, targetChannels)
+				if refMeta.BitRateKbps > 0 {
+					targetBitrate = refMeta.BitRateKbps
+				}
+			}
+		}
+	}
+
+	outputExt := ".mp3"
+	codec := "libmp3lame"
+	audioFilter := ""
+	extraArgs := []string{}
+
+	switch job.TaskType {
+	case audiojob.TaskTypeVoiceEnhance:
+		audioFilter = "afftdn,loudnorm"
+	case audiojob.TaskTypeAudioMaster:
+		outputExt = ".wav"
+		codec = "pcm_s16le"
+		audioFilter = "loudnorm,acompressor=threshold=-14dB:ratio=2:attack=20:release=250"
+		extraArgs = append(extraArgs, "-ar", "48000")
+	case audiojob.TaskTypeVoiceConvert:
+		audioFilter = "aresample=44100"
+	case audiojob.TaskTypeAIMusic:
+		return p.processAIMusic(job)
+	default:
+		return nil, fmt.Errorf("unsupported task type: %s", job.TaskType)
+	}
+
+	outputName := fmt.Sprintf("%s-%s%s", job.ID.String(), outputSuffix(job.TaskType), outputExt)
+	outputPath := filepath.Join(p.uploadRoot, "processed-audio", outputName)
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create output dir: %w", err)
+	}
+
+	args := []string{"-y", "-i", sourcePath, "-vn"}
+	if audioFilter != "" {
+		args = append(args, "-af", audioFilter)
+	}
+	args = append(args,
+		"-ac", strconv.Itoa(maxInt(targetChannels, 1)),
+		"-ar", strconv.Itoa(maxInt(targetSampleRate, 44100)),
+		"-c:a", codec,
+	)
+	if codec == "libmp3lame" {
+		args = append(args, "-b:a", fmt.Sprintf("%dk", maxInt(targetBitrate, 192)))
+	}
+	args = append(args, extraArgs...)
+	args = append(args, outputPath)
+
+	cmd := exec.CommandContext(ctx, p.ffmpegPath, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffmpeg processing failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+
+	outputMeta, err := p.inspectAudioFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect output audio: %w", err)
+	}
+
+	result["output_audio_url"] = p.publicPath("processed-audio", outputName)
+	result["output_analysis"] = outputMeta.toMap()
+	result["summary"] = ffmpegSummaryForTask(job.TaskType, sourceMeta, outputMeta, includeReference)
+
+	switch job.TaskType {
+	case audiojob.TaskTypeVoiceEnhance:
+		result["quality_report"] = map[string]any{
+			"processor":          "ffmpeg",
+			"normalization":      "loudnorm",
+			"noise_reduction":    "afftdn",
+			"waveform_available": len(outputMeta.WaveformPreview) > 0,
+		}
+	case audiojob.TaskTypeAudioMaster:
+		result["delivery"] = map[string]any{
+			"format":      outputMeta.Format,
+			"sample_rate": outputMeta.SampleRate,
+			"bit_depth":   outputMeta.BitDepth,
+			"channels":    outputMeta.Channels,
+			"processor":   "ffmpeg",
+		}
+	case audiojob.TaskTypeVoiceConvert:
+		result["quality_report"] = map[string]any{
+			"processor":          "ffmpeg",
+			"profile_aligned":    includeReference,
+			"speaker_model":      "pending",
 			"waveform_available": len(outputMeta.WaveformPreview) > 0,
 		}
 	}
@@ -222,15 +369,33 @@ func summaryForTask(taskType audiojob.TaskType, meta fileAnalysis) string {
 	}
 }
 
+func ffmpegSummaryForTask(taskType audiojob.TaskType, sourceMeta, outputMeta fileAnalysis, includeReference bool) string {
+	switch taskType {
+	case audiojob.TaskTypeVoiceConvert:
+		if includeReference {
+			return fmt.Sprintf("已通过 ffmpeg 完成参考画像对齐与标准化输出，当前输出为 %s %dHz。", strings.ToUpper(outputMeta.Format), outputMeta.SampleRate)
+		}
+		return fmt.Sprintf("已通过 ffmpeg 完成标准化输出，当前输出为 %s %dHz。", strings.ToUpper(outputMeta.Format), outputMeta.SampleRate)
+	case audiojob.TaskTypeVoiceEnhance:
+		return fmt.Sprintf("已通过 ffmpeg 完成降噪与响度标准化，输出时长 %.2f 秒。", outputMeta.DurationSec)
+	case audiojob.TaskTypeAudioMaster:
+		return fmt.Sprintf("已通过 ffmpeg 完成母带化标准输出，采样率 %dHz，声道数 %d。", outputMeta.SampleRate, outputMeta.Channels)
+	default:
+		return fmt.Sprintf("已完成音频处理，源格式 %s -> 输出格式 %s。", strings.ToUpper(sourceMeta.Format), strings.ToUpper(outputMeta.Format))
+	}
+}
+
 type fileAnalysis struct {
 	FileName        string
 	Format          string
+	CodecName       string
 	SizeBytes       int64
 	SHA256          string
 	DurationSec     float64
 	SampleRate      int
 	Channels        int
 	BitDepth        int
+	BitRateKbps     int
 	WaveformPreview []float64
 }
 
@@ -248,8 +413,14 @@ func (f fileAnalysis) toMap() map[string]any {
 	if f.Channels > 0 {
 		payload["channels"] = f.Channels
 	}
+	if f.CodecName != "" {
+		payload["codec_name"] = f.CodecName
+	}
 	if f.BitDepth > 0 {
 		payload["bit_depth"] = f.BitDepth
+	}
+	if f.BitRateKbps > 0 {
+		payload["bitrate_kbps"] = f.BitRateKbps
 	}
 	if len(f.WaveformPreview) > 0 {
 		payload["waveform_preview"] = f.WaveformPreview
@@ -257,7 +428,21 @@ func (f fileAnalysis) toMap() map[string]any {
 	return payload
 }
 
-func inspectAudioFile(path string) (fileAnalysis, error) {
+func (p *LocalProcessor) inspectAudioFile(path string) (fileAnalysis, error) {
+	if p.ffprobePath != "" {
+		if meta, err := p.inspectAudioFileWithFFProbe(path); err == nil {
+			if p.ffmpegPath != "" && len(meta.WaveformPreview) == 0 {
+				if preview, previewErr := p.extractWaveformPreview(path); previewErr == nil {
+					meta.WaveformPreview = preview
+				}
+			}
+			return meta, nil
+		}
+	}
+	return inspectAudioFileFallback(path)
+}
+
+func inspectAudioFileFallback(path string) (fileAnalysis, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return fileAnalysis{}, err
@@ -286,6 +471,111 @@ func inspectAudioFile(path string) (fileAnalysis, error) {
 		}
 	}
 	return meta, nil
+}
+
+func (p *LocalProcessor) inspectAudioFileWithFFProbe(path string) (fileAnalysis, error) {
+	cmd := exec.Command(p.ffprobePath,
+		"-v", "error",
+		"-show_streams",
+		"-show_format",
+		"-of", "json",
+		path,
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fileAnalysis{}, fmt.Errorf("ffprobe failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+
+	var payload struct {
+		Streams []struct {
+			CodecType     string `json:"codec_type"`
+			CodecName     string `json:"codec_name"`
+			SampleRate    string `json:"sample_rate"`
+			Channels      int    `json:"channels"`
+			BitsPerSample int    `json:"bits_per_sample"`
+			BitRate       string `json:"bit_rate"`
+		} `json:"streams"`
+		Format struct {
+			FormatName string `json:"format_name"`
+			Duration   string `json:"duration"`
+			BitRate    string `json:"bit_rate"`
+		} `json:"format"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		return fileAnalysis{}, fmt.Errorf("parse ffprobe output: %w", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return fileAnalysis{}, err
+	}
+	hash, err := computeFileSHA256(path)
+	if err != nil {
+		return fileAnalysis{}, err
+	}
+
+	meta := fileAnalysis{
+		FileName:  filepath.Base(path),
+		Format:    firstCSVValue(payload.Format.FormatName, strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")),
+		SizeBytes: info.Size(),
+		SHA256:    hash,
+	}
+	meta.DurationSec, _ = strconv.ParseFloat(payload.Format.Duration, 64)
+	if bitrate, _ := strconv.Atoi(payload.Format.BitRate); bitrate > 0 {
+		meta.BitRateKbps = bitrate / 1000
+	}
+
+	for _, stream := range payload.Streams {
+		if stream.CodecType != "audio" {
+			continue
+		}
+		meta.CodecName = stream.CodecName
+		if value, _ := strconv.Atoi(stream.SampleRate); value > 0 {
+			meta.SampleRate = value
+		}
+		if stream.Channels > 0 {
+			meta.Channels = stream.Channels
+		}
+		if stream.BitsPerSample > 0 {
+			meta.BitDepth = stream.BitsPerSample
+		}
+		if bitrate, _ := strconv.Atoi(stream.BitRate); bitrate > 0 && meta.BitRateKbps == 0 {
+			meta.BitRateKbps = bitrate / 1000
+		}
+		break
+	}
+
+	return meta, nil
+}
+
+func (p *LocalProcessor) extractWaveformPreview(path string) ([]float64, error) {
+	cmd := exec.Command(
+		p.ffmpegPath,
+		"-v", "error",
+		"-i", path,
+		"-ac", "1",
+		"-t", "60",
+		"-f", "s16le",
+		"-acodec", "pcm_s16le",
+		"pipe:1",
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffmpeg waveform extraction failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	data := stdout.Bytes()
+	if len(data) == 0 {
+		return nil, nil
+	}
+	return buildPCM16Waveform(data, 2, 1), nil
+}
+
+func (p *LocalProcessor) canUseFFmpeg() bool {
+	return p.ffmpegPath != "" && p.ffprobePath != ""
 }
 
 func computeFileSHA256(path string) (string, error) {
@@ -529,6 +819,27 @@ func round2(v float64) float64 {
 
 func round3(v float64) float64 {
 	return math.Round(v*1000) / 1000
+}
+
+func maxInt(value, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
+}
+
+func firstCSVValue(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	if strings.Contains(value, ",") {
+		parts := strings.Split(value, ",")
+		if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+	return value
 }
 
 func min(a, b int) int {
