@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -352,7 +353,7 @@ func runAssistantChatEval(ctx context.Context, client *http.Client, baseURL, tok
 					Message string `json:"message"`
 				}
 				_ = json.Unmarshal([]byte(data), &payload)
-				return meta, reply.String(), firstTokenMs, fmt.Errorf(firstNonEmptyCLI(payload.Message, "assistant stream returned error"))
+				return meta, reply.String(), firstTokenMs, errors.New(firstNonEmptyCLI(payload.Message, "assistant stream returned error"))
 			}
 		}
 	}

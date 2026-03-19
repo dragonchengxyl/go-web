@@ -7,6 +7,7 @@ import {
   X,
   Bell,
   MessageCircle,
+  AudioLines,
   Compass,
   PenSquare,
   LogOut,
@@ -30,6 +31,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const NAV_LINKS = [
   { href: "/feed", label: "动态" },
   { href: "/explore", label: "发现", icon: Compass },
+  { href: "/audio/works", label: "音频", icon: AudioLines },
   { href: "/groups", label: "圈子", icon: Users },
   { href: "/events", label: "活动", icon: Calendar },
   { href: "/leaderboard", label: "排行", icon: Trophy },

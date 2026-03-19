@@ -3,12 +3,14 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { apiClient, Post, Group, Event, LeaderboardEntry } from '@/lib/api-client';
+import { apiClient, Post, Group, Event, LeaderboardEntry, AudioWork } from '@/lib/api-client';
+import { AudioWorkCard } from '@/components/audio/audio-work-card';
 import { PostGalleryCard } from '@/components/post/post-gallery-card';
 import { Button } from '@/components/ui/button';
 import {
   Palette, Users, MessageSquare, Calendar, Trophy,
   ArrowRight, Zap, Flame, Star, Globe2, ChevronRight,
+  AudioLines,
 } from 'lucide-react';
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -265,6 +267,7 @@ export default function HomePage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [audioWorks, setAudioWorks] = useState<AudioWork[]>([]);
   const [topUsers, setTopUsers] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -273,11 +276,13 @@ export default function HomePage() {
       apiClient.getExplore(1, 18),
       apiClient.listGroups({ page_size: 6 }),
       apiClient.listEvents(1, 4),
+      apiClient.listAudioWorks({ page_size: 6 }),
       apiClient.getLeaderboard(5),
-    ]).then(([p, g, e, l]) => {
+    ]).then(([p, g, e, a, l]) => {
       if (p.status === 'fulfilled') setPosts(p.value.posts ?? []);
       if (g.status === 'fulfilled') setGroups(g.value.groups ?? []);
       if (e.status === 'fulfilled') setEvents(e.value.events ?? []);
+      if (a.status === 'fulfilled') setAudioWorks(a.value.items ?? []);
       if (l.status === 'fulfilled') setTopUsers((l.value ?? []).slice(0, 5));
       setLoading(false);
     });
@@ -499,6 +504,53 @@ export default function HomePage() {
                   style={{ background: 'linear-gradient(135deg, #7c3aed, #0ea5e9)' }}
                 >
                   发布动态
+                </button>
+              </Link>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── AUDIO WORKS ─────────────────────────────────────────── */}
+      <section className="py-24 px-4" style={{ background: BG, borderTop: `1px solid ${BORDER}` }}>
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-10">
+            <SectionLabel eyebrow="音频创作" title="最新作品" icon={AudioLines} iconColor="#10B981" />
+            <Link href="/audio/works">
+              <button
+                className="flex items-center gap-1 text-sm transition-colors hover:text-white"
+                style={{ color: 'rgba(255,255,255,0.3)' }}
+              >
+                全部 <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="rounded-2xl animate-pulse" style={{ height: 280, background: '#0d0d0d' }} />
+              ))}
+            </div>
+          ) : audioWorks.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {audioWorks.map((work) => (
+                <AudioWorkCard key={work.id} work={work} compact />
+              ))}
+            </div>
+          ) : (
+            <div
+              className="text-center py-20 rounded-2xl"
+              style={{ border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.25)' }}
+            >
+              <AudioLines className="h-10 w-10 mx-auto mb-4 opacity-30" />
+              <p className="text-sm mb-4">还没有公开音频作品，先去创作者音频任务台发布第一首。</p>
+              <Link href="/creator/audio">
+                <button
+                  className="px-6 py-2 rounded-lg text-sm font-medium text-white"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #06b6d4)' }}
+                >
+                  打开音频任务台
                 </button>
               </Link>
             </div>
