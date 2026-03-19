@@ -106,6 +106,49 @@ func (r *fakeAudioJobRepo) Update(_ context.Context, job *audiojob.Job) error {
 	return nil
 }
 
+func (r *fakeAudioJobRepo) ClaimForProcessing(_ context.Context, id uuid.UUID, now time.Time) (*audiojob.Job, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	job, ok := r.items[id]
+	if !ok {
+		return nil, false, nil
+	}
+	if job.Status != audiojob.StatusQueued {
+		return nil, false, nil
+	}
+	if job.NextRetryAt != nil && job.NextRetryAt.After(now) {
+		return nil, false, nil
+	}
+
+	claimed := cloneAudioJob(job)
+	claimed.Status = audiojob.StatusRunning
+	claimed.AttemptCount++
+	claimed.UpdatedAt = now
+	claimed.StartedAt = &now
+	claimed.NextRetryAt = nil
+	claimed.ErrorMessage = nil
+	r.items[id] = cloneAudioJob(claimed)
+	return claimed, true, nil
+}
+
+func (r *fakeAudioJobRepo) ListDueRetryIDs(_ context.Context, readyBefore time.Time, limit int) ([]uuid.UUID, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	ids := make([]uuid.UUID, 0, limit)
+	for id, job := range r.items {
+		if job.Status != audiojob.StatusQueued || job.NextRetryAt == nil || job.NextRetryAt.After(readyBefore) {
+			continue
+		}
+		ids = append(ids, id)
+		if limit > 0 && len(ids) >= limit {
+			break
+		}
+	}
+	return ids, nil
+}
+
 func cloneAudioJob(job *audiojob.Job) *audiojob.Job {
 	if job == nil {
 		return nil

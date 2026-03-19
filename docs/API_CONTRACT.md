@@ -87,9 +87,10 @@
 当前这条链路是一个可跑的 MVP：
 
 - 任务类型支持 `ai_music` / `voice_convert` / `voice_enhance` / `audio_master`
-- 状态流转为 `queued -> running -> succeeded / failed`
-- 主服务会发布 `audio.job.created` 到 Redis Streams，并由本地 consumer 自动走 mock 处理流程
+- 状态流转为 `queued -> running -> succeeded / failed / dead_lettered`
+- 主服务只负责创建任务和发布事件；独立 `audio-worker` 负责消费 `audio.job.created` 并处理任务
 - 对本地上传音频，当前会执行真实文件处理骨架：复制输出文件、计算哈希、提取基础元数据，WAV 还会解析时长 / 采样率 / 波形预览
+- 失败任务会自动退回队列并延迟重试；超过最大重试次数后进入 `dead_lettered`
 - 任务成功后可以直接发布为 `audio_work`，形成公开详情页和创作者作品列表
 - 处理结果统一回写到任务 `result` JSON，后续可以继续接真实 AI 音频引擎、转码服务和商业化流程
 

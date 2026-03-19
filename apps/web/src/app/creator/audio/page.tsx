@@ -73,6 +73,7 @@ const STATUS_LABELS: Record<AudioJobStatus, string> = {
   running: '处理中',
   succeeded: '已完成',
   failed: '失败',
+  dead_lettered: '死信',
 };
 
 function statusTone(status: AudioJobStatus) {
@@ -85,6 +86,8 @@ function statusTone(status: AudioJobStatus) {
       return 'bg-emerald-100 text-emerald-700 border-emerald-200';
     case 'failed':
       return 'bg-rose-100 text-rose-700 border-rose-200';
+    case 'dead_lettered':
+      return 'bg-amber-100 text-amber-800 border-amber-200';
     default:
       return 'bg-slate-100 text-slate-700 border-slate-200';
   }
@@ -99,6 +102,8 @@ function statusIcon(status: AudioJobStatus) {
     case 'succeeded':
       return CheckCircle2;
     case 'failed':
+      return AlertTriangle;
+    case 'dead_lettered':
       return AlertTriangle;
     default:
       return Clock3;
@@ -186,7 +191,7 @@ export default function CreatorAudioPage() {
     queued: jobs.filter((item) => item.status === 'queued').length,
     running: jobs.filter((item) => item.status === 'running').length,
     succeeded: jobs.filter((item) => item.status === 'succeeded').length,
-    failed: jobs.filter((item) => item.status === 'failed').length,
+    failed: jobs.filter((item) => item.status === 'failed' || item.status === 'dead_lettered').length,
   };
 
   const uploadMutation = useMutation({
@@ -490,6 +495,7 @@ export default function CreatorAudioPage() {
                   <option value="running">处理中</option>
                   <option value="succeeded">已完成</option>
                   <option value="failed">失败</option>
+                  <option value="dead_lettered">死信</option>
                 </select>
                 <select
                   value={taskFilter}
@@ -675,7 +681,7 @@ function JobCard({
           <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
         </div>
 
-        {job.status === 'failed' ? (
+        {job.status === 'failed' || job.status === 'dead_lettered' ? (
           <Button variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
             <RefreshCcw className="mr-2 h-4 w-4" />
             重试
@@ -702,8 +708,13 @@ function JobCard({
         </div>
         <div>
           <p>完成时间：{formatDateTime(job.finished_at)}</p>
-          {job.prompt ? <p className="truncate">Prompt：{job.prompt}</p> : <p>Prompt：—</p>}
+          <p>尝试次数：{job.attempt_count} / {job.max_attempts}</p>
         </div>
+      </div>
+
+      <div className="mt-2 text-sm text-muted-foreground">
+        {job.prompt ? <p className="truncate">Prompt：{job.prompt}</p> : null}
+        {job.next_retry_at ? <p>下次重试：{formatDateTime(job.next_retry_at)}</p> : null}
       </div>
 
       {summary ? (

@@ -1,4 +1,4 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-studio-cli build-all seed-dev frontend-lint frontend-typecheck frontend-build perf-db-report pprof-cpu pprof-heap ci-backend ci-frontend ci
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-audio-worker dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-audio-worker build-studio-cli build-all seed-dev frontend-lint frontend-typecheck frontend-build perf-db-report pprof-cpu pprof-heap ci-backend ci-frontend ci
 
 PPROF_URL ?= http://localhost:8080/debug/pprof
 PPROF_SECONDS ?= 30
@@ -30,6 +30,9 @@ build-moderation-svc: ## Build the moderation microservice
 build-notification-svc: ## Build the notification microservice
 	go build -o bin/notification-svc ./cmd/notification-svc
 
+build-audio-worker: ## Build the audio worker
+	go build -o bin/audio-worker ./cmd/audio-worker
+
 build-studio-cli: ## Build the operational CLI
 	go build -o bin/studio-cli ./cmd/studio-cli
 
@@ -38,6 +41,7 @@ build-all: ## Build all binaries
 	@make build-stats-svc
 	@make build-moderation-svc
 	@make build-notification-svc
+	@make build-audio-worker
 	@make build-studio-cli
 	@echo "✓ All binaries built successfully"
 
@@ -146,6 +150,9 @@ infra-down: ## Stop local Docker infra
 dev-backend: ## Run backend with LOCAL config
 	go run ./cmd/server/main.go -config configs/config.local.yaml
 
+dev-audio-worker: ## Run audio worker with LOCAL config
+	go run ./cmd/audio-worker/main.go -config configs/config.local.yaml
+
 prod-backend: ## Run backend with PRODUCTION config
 	go run ./cmd/server/main.go -config configs/config.prod.yaml
 
@@ -159,6 +166,7 @@ dev-all: ## Setup + start infra + print next steps
 	@echo ""
 	@echo "✓ Ready. Now run in separate terminals:"
 	@echo "  make dev-backend    # Go API (local config)"
+	@echo "  make dev-audio-worker # Audio worker"
 	@echo "  make dev-frontend   # Next.js"
 	@echo ""
 

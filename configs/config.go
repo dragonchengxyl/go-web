@@ -16,6 +16,7 @@ type Config struct {
 	Moderation ModerationConfig `mapstructure:"moderation"`
 	Sponsor    SponsorConfig    `mapstructure:"sponsor"`
 	GRPC       GRPCConfig       `mapstructure:"grpc"`
+	Audio      AudioConfig      `mapstructure:"audio"`
 	Assistant  AssistantConfig  `mapstructure:"assistant"`
 }
 
@@ -103,6 +104,13 @@ type SponsorConfig struct {
 	AlipayQRURL   string  `mapstructure:"alipay_qr_url"`
 	WechatQRURL   string  `mapstructure:"wechat_qr_url"`
 	Message       string  `mapstructure:"message"`
+}
+
+type AudioConfig struct {
+	MaxAttempts     int `mapstructure:"max_attempts"`
+	RetryBackoffSec int `mapstructure:"retry_backoff_sec"`
+	RetryPollSec    int `mapstructure:"retry_poll_sec"`
+	RetryBatchSize  int `mapstructure:"retry_batch_size"`
 }
 
 // GRPCConfig holds gRPC service addresses and ports.

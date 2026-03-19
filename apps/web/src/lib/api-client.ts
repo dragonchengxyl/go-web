@@ -302,7 +302,8 @@ export type AudioJobStatus =
   | "queued"
   | "running"
   | "succeeded"
-  | "failed";
+  | "failed"
+  | "dead_lettered";
 
 export interface AudioJob {
   id: string;
@@ -316,10 +317,15 @@ export interface AudioJob {
   params?: Record<string, unknown>;
   result?: Record<string, unknown>;
   error_message?: string;
+  attempt_count: number;
+  max_attempts: number;
   created_at: string;
   updated_at: string;
   started_at?: string;
   finished_at?: string;
+  next_retry_at?: string;
+  last_error_at?: string;
+  dead_lettered_at?: string;
 }
 
 export type AudioWorkVisibility = "public" | "private";

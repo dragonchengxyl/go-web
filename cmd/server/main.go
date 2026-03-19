@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -12,9 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/studio/platform/configs"
-	audioinfra "github.com/studio/platform/internal/infra/audio"
 	"github.com/studio/platform/internal/infra/embedding"
 	"github.com/studio/platform/internal/infra/grpcclient"
 	"github.com/studio/platform/internal/infra/llm"
@@ -191,13 +188,13 @@ func main() {
 
 	eventService := usecase.NewEventService(eventRepo)
 	groupService := usecase.NewGroupService(groupRepo)
-	audioProcessor := audioinfra.NewLocalProcessor("./uploads", "/uploads")
+	retryBackoff := time.Duration(audioRetryBackoffSec(cfg.Audio.RetryBackoffSec)) * time.Second
 	audioJobService := usecase.NewAudioJobService(
 		audioJobRepo,
 		usecase.WithAudioJobPublisher(publisher),
 		usecase.WithAudioJobLogger(logger),
 		usecase.WithAudioJobAllowedHosts(cfg.OSS.AllowedHosts),
-		usecase.WithAudioJobProcessor(audioProcessor),
+		usecase.WithAudioJobRetryPolicy(audioMaxAttempts(cfg.Audio.MaxAttempts), retryBackoff),
 	)
 	audioWorkService := usecase.NewAudioWorkService(
 		audioWorkRepo,
@@ -269,26 +266,6 @@ func main() {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 	go hub.Run(hubCtx)
-
-	audioJobConsumer := streams.NewConsumer(redisClient, logger, "audio-job-local-1")
-	go func() {
-		logger.Info("Starting audio job stream consumer")
-		_ = audioJobConsumer.Start(hubCtx, streams.GroupAudioJobs, func(ctx context.Context, ev streams.StreamEvent) error {
-			if ev.Type != streams.EventAudioJobCreated {
-				return nil
-			}
-
-			var payload streams.AudioJobCreatedPayload
-			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-				return fmt.Errorf("audio-job consumer: unmarshal payload: %w", err)
-			}
-			jobID, err := uuid.Parse(payload.JobID)
-			if err != nil {
-				return fmt.Errorf("audio-job consumer: invalid job_id: %w", err)
-			}
-			return audioJobService.ProcessJob(ctx, jobID)
-		})
-	}()
 
 	notificationService := usecase.NewNotificationService(notificationRepo, hub)
 
@@ -411,4 +388,18 @@ func initLogger(mode string) (*zap.Logger, error) {
 		return zap.NewProduction()
 	}
 	return zap.NewDevelopment()
+}
+
+func audioMaxAttempts(value int) int {
+	if value > 0 {
+		return value
+	}
+	return 3
+}
+
+func audioRetryBackoffSec(value int) int {
+	if value > 0 {
+		return value
+	}
+	return 10
 }

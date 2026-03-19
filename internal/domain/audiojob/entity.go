@@ -19,10 +19,11 @@ const (
 type Status string
 
 const (
-	StatusQueued    Status = "queued"
-	StatusRunning   Status = "running"
-	StatusSucceeded Status = "succeeded"
-	StatusFailed    Status = "failed"
+	StatusQueued       Status = "queued"
+	StatusRunning      Status = "running"
+	StatusSucceeded    Status = "succeeded"
+	StatusFailed       Status = "failed"
+	StatusDeadLettered Status = "dead_lettered"
 )
 
 type Job struct {
@@ -37,10 +38,15 @@ type Job struct {
 	Params            map[string]any `json:"params,omitempty"`
 	Result            map[string]any `json:"result,omitempty"`
 	ErrorMessage      *string        `json:"error_message,omitempty"`
+	AttemptCount      int            `json:"attempt_count"`
+	MaxAttempts       int            `json:"max_attempts"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
 	StartedAt         *time.Time     `json:"started_at,omitempty"`
 	FinishedAt        *time.Time     `json:"finished_at,omitempty"`
+	NextRetryAt       *time.Time     `json:"next_retry_at,omitempty"`
+	LastErrorAt       *time.Time     `json:"last_error_at,omitempty"`
+	DeadLetteredAt    *time.Time     `json:"dead_lettered_at,omitempty"`
 }
 
 type ListFilter struct {

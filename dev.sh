@@ -27,11 +27,13 @@ step()    { echo -e "\n${CYAN}▶ $*${NC}"; }
 
 # ── 清理函数（Ctrl+C 时自动停止子进程）────────────────
 BACKEND_PID=""
+WORKER_PID=""
 FRONTEND_PID=""
 cleanup() {
   echo ""
   step "正在停止所有服务..."
   [[ -n "$BACKEND_PID" ]]  && kill "$BACKEND_PID"  2>/dev/null && info "后端已停止"
+  [[ -n "$WORKER_PID" ]]   && kill "$WORKER_PID"   2>/dev/null && info "音频 Worker 已停止"
   [[ -n "$FRONTEND_PID" ]] && kill "$FRONTEND_PID" 2>/dev/null && info "前端已停止"
   info "日志保存在 $LOG_DIR"
   exit 0
@@ -74,6 +76,8 @@ for arg in "$@"; do
     --logs)
       echo "== 后端日志 =="
       tail -f "$LOG_DIR/backend.log" &
+      echo "== 音频 Worker 日志 =="
+      tail -f "$LOG_DIR/audio-worker.log" &
       echo "== 前端日志 =="
       tail -f "$LOG_DIR/frontend.log"
       exit 0
@@ -222,7 +226,24 @@ if [[ "$FRONTEND_ONLY" == false ]]; then
   fi
 fi
 
-# ── 8. 启动前端 ───────────────────────────────────────
+# ── 8. 启动音频 Worker ────────────────────────────────
+if [[ "$FRONTEND_ONLY" == false ]]; then
+  step "启动音频 Worker — Redis Streams consumer"
+  cd "$ROOT"
+  go run ./cmd/audio-worker/main.go > "$LOG_DIR/audio-worker.log" 2>&1 &
+  WORKER_PID=$!
+
+  info "等待音频 Worker 稳定运行..."
+  sleep 2
+  if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+    error "音频 Worker 启动失败！日志："
+    tail -30 "$LOG_DIR/audio-worker.log"
+    exit 1
+  fi
+  success "音频 Worker 已启动"
+fi
+
+# ── 9. 启动前端 ───────────────────────────────────────
 if [[ "$BACKEND_ONLY" == false ]]; then
   step "启动前端 (Next.js) — :3000"
   cd "$ROOT/apps/web"
@@ -244,13 +265,15 @@ if [[ "$BACKEND_ONLY" == false ]]; then
   done
 fi
 
-# ── 9. 完成 ───────────────────────────────────────────
+# ── 10. 完成 ──────────────────────────────────────────
 echo ""
 echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║            所有服务已启动！                   ║${NC}"
 echo -e "${GREEN}╠═══════════════════════════════════════════════╣${NC}"
 [[ "$FRONTEND_ONLY" == false ]] && \
 echo -e "${GREEN}║  后端 API  →  http://localhost:8080           ║${NC}"
+[[ "$FRONTEND_ONLY" == false ]] && \
+echo -e "${GREEN}║  Audio Worker →  已启动                        ║${NC}"
 [[ "$BACKEND_ONLY" == false ]] && \
 echo -e "${GREEN}║  前端页面  →  http://localhost:3000           ║${NC}"
 [[ "$FRONTEND_ONLY" == false ]] && \

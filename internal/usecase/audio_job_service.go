@@ -22,6 +22,8 @@ type AudioJobService struct {
 	logger       *zap.Logger
 	allowedHosts []string
 	processor    audioJobProcessor
+	maxAttempts  int
+	retryBackoff time.Duration
 }
 
 type AudioJobServiceOption func(*AudioJobService)
@@ -31,7 +33,11 @@ type audioJobProcessor interface {
 }
 
 func NewAudioJobService(repo audiojob.Repository, opts ...AudioJobServiceOption) *AudioJobService {
-	svc := &AudioJobService{repo: repo}
+	svc := &AudioJobService{
+		repo:         repo,
+		maxAttempts:  3,
+		retryBackoff: 10 * time.Second,
+	}
 	for _, opt := range opts {
 		opt(svc)
 	}
@@ -59,6 +65,17 @@ func WithAudioJobAllowedHosts(hosts []string) AudioJobServiceOption {
 func WithAudioJobProcessor(processor audioJobProcessor) AudioJobServiceOption {
 	return func(s *AudioJobService) {
 		s.processor = processor
+	}
+}
+
+func WithAudioJobRetryPolicy(maxAttempts int, retryBackoff time.Duration) AudioJobServiceOption {
+	return func(s *AudioJobService) {
+		if maxAttempts > 0 {
+			s.maxAttempts = maxAttempts
+		}
+		if retryBackoff > 0 {
+			s.retryBackoff = retryBackoff
+		}
 	}
 }
 
@@ -96,14 +113,15 @@ func (s *AudioJobService) CreateJob(ctx context.Context, input CreateAudioJobInp
 
 	now := time.Now()
 	job := &audiojob.Job{
-		ID:        uuid.New(),
-		UserID:    input.UserID,
-		Title:     strings.TrimSpace(input.Title),
-		TaskType:  input.TaskType,
-		Status:    audiojob.StatusQueued,
-		Params:    cloneMap(input.Params),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          uuid.New(),
+		UserID:      input.UserID,
+		Title:       strings.TrimSpace(input.Title),
+		TaskType:    input.TaskType,
+		Status:      audiojob.StatusQueued,
+		Params:      cloneMap(input.Params),
+		MaxAttempts: s.maxAttempts,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	if sourceURL != "" {
 		job.SourceAudioURL = &sourceURL
@@ -156,16 +174,20 @@ func (s *AudioJobService) RetryJob(ctx context.Context, userID, jobID uuid.UUID)
 	if err != nil {
 		return nil, err
 	}
-	if job.Status != audiojob.StatusFailed {
-		return nil, apperr.BadRequest("只有失败的任务可以重试")
+	if job.Status != audiojob.StatusFailed && job.Status != audiojob.StatusDeadLettered {
+		return nil, apperr.BadRequest("只有失败或死信任务可以重试")
 	}
 
 	now := time.Now()
 	job.Status = audiojob.StatusQueued
 	job.ErrorMessage = nil
 	job.Result = nil
+	job.AttemptCount = 0
 	job.StartedAt = nil
 	job.FinishedAt = nil
+	job.NextRetryAt = nil
+	job.LastErrorAt = nil
+	job.DeadLetteredAt = nil
 	job.UpdatedAt = now
 
 	if err := s.repo.Update(ctx, job); err != nil {
@@ -180,24 +202,12 @@ func (s *AudioJobService) RetryJob(ctx context.Context, userID, jobID uuid.UUID)
 }
 
 func (s *AudioJobService) ProcessJob(ctx context.Context, jobID uuid.UUID) error {
-	job, err := s.repo.GetByID(ctx, jobID)
+	job, claimed, err := s.repo.ClaimForProcessing(ctx, jobID, time.Now())
 	if err != nil {
-		if errors.Is(err, audiojob.ErrNotFound) {
-			return nil
-		}
-		return fmt.Errorf("load audio job: %w", err)
+		return fmt.Errorf("claim audio job: %w", err)
 	}
-	if job.Status != audiojob.StatusQueued {
+	if !claimed {
 		return nil
-	}
-
-	now := time.Now()
-	job.Status = audiojob.StatusRunning
-	job.StartedAt = &now
-	job.UpdatedAt = now
-	job.ErrorMessage = nil
-	if err := s.repo.Update(ctx, job); err != nil {
-		return fmt.Errorf("mark audio job running: %w", err)
 	}
 
 	result, err := s.processJobResult(ctx, job)
@@ -207,12 +217,25 @@ func (s *AudioJobService) ProcessJob(ctx context.Context, jobID uuid.UUID) error
 
 	if err != nil {
 		msg := err.Error()
-		job.Status = audiojob.StatusFailed
+		job.LastErrorAt = &finishedAt
 		job.ErrorMessage = &msg
 		job.Result = nil
+		if job.AttemptCount >= job.MaxAttempts {
+			job.Status = audiojob.StatusDeadLettered
+			job.DeadLetteredAt = &finishedAt
+			job.NextRetryAt = nil
+		} else {
+			job.Status = audiojob.StatusQueued
+			nextRetryAt := finishedAt.Add(s.retryDelay(job.AttemptCount))
+			job.NextRetryAt = &nextRetryAt
+			job.DeadLetteredAt = nil
+		}
 	} else {
 		job.Status = audiojob.StatusSucceeded
 		job.ErrorMessage = nil
+		job.LastErrorAt = nil
+		job.NextRetryAt = nil
+		job.DeadLetteredAt = nil
 		job.Result = result
 	}
 
@@ -220,6 +243,14 @@ func (s *AudioJobService) ProcessJob(ctx context.Context, jobID uuid.UUID) error
 		return fmt.Errorf("finalize audio job: %w", err)
 	}
 	return nil
+}
+
+func (s *AudioJobService) ListDueRetryIDs(ctx context.Context, limit int) ([]uuid.UUID, error) {
+	ids, err := s.repo.ListDueRetryIDs(ctx, time.Now(), limit)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "查询待重试音频任务失败", err)
+	}
+	return ids, nil
 }
 
 func (s *AudioJobService) enqueueJob(ctx context.Context, jobID uuid.UUID) {
@@ -389,6 +420,13 @@ func (s *AudioJobService) processJobResult(ctx context.Context, job *audiojob.Jo
 		}
 	}
 	return buildMockAudioResult(job)
+}
+
+func (s *AudioJobService) retryDelay(attempt int) time.Duration {
+	if attempt <= 1 {
+		return s.retryBackoff
+	}
+	return time.Duration(attempt) * s.retryBackoff
 }
 
 func cloneMap(input map[string]any) map[string]any {

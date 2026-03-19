@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -24,10 +25,12 @@ func NewAudioJobRepository(pool *pgxpool.Pool) *AudioJobRepository {
 const createAudioJobSQL = `
 	INSERT INTO audio_jobs (
 		id, user_id, title, task_type, status, source_audio_url, reference_audio_url,
-		prompt, params, result, error_message, created_at, updated_at, started_at, finished_at
+		prompt, params, result, error_message, attempt_count, max_attempts,
+		created_at, updated_at, started_at, finished_at, next_retry_at, last_error_at, dead_lettered_at
 	) VALUES (
 		$1, $2, $3, $4, $5, $6, $7,
-		$8, $9, $10, $11, $12, $13, $14, $15
+		$8, $9, $10, $11, $12, $13,
+		$14, $15, $16, $17, $18, $19, $20
 	)
 `
 
@@ -53,10 +56,15 @@ func (r *AudioJobRepository) Create(ctx context.Context, job *audiojob.Job) erro
 		paramsJSON,
 		resultJSON,
 		job.ErrorMessage,
+		job.AttemptCount,
+		job.MaxAttempts,
 		job.CreatedAt,
 		job.UpdatedAt,
 		job.StartedAt,
 		job.FinishedAt,
+		job.NextRetryAt,
+		job.LastErrorAt,
+		job.DeadLetteredAt,
 	)
 	if err != nil {
 		return fmt.Errorf("create audio job: %w", err)
@@ -66,7 +74,8 @@ func (r *AudioJobRepository) Create(ctx context.Context, job *audiojob.Job) erro
 
 const getAudioJobByIDSQL = `
 	SELECT id, user_id, title, task_type, status, source_audio_url, reference_audio_url,
-	       prompt, params, result, error_message, created_at, updated_at, started_at, finished_at
+	       prompt, params, result, error_message, attempt_count, max_attempts,
+	       created_at, updated_at, started_at, finished_at, next_retry_at, last_error_at, dead_lettered_at
 	FROM audio_jobs
 	WHERE id = $1
 `
@@ -114,7 +123,8 @@ func (r *AudioJobRepository) ListByUser(ctx context.Context, filter audiojob.Lis
 
 	query := fmt.Sprintf(`
 		SELECT id, user_id, title, task_type, status, source_audio_url, reference_audio_url,
-		       prompt, params, result, error_message, created_at, updated_at, started_at, finished_at,
+		       prompt, params, result, error_message, attempt_count, max_attempts,
+		       created_at, updated_at, started_at, finished_at, next_retry_at, last_error_at, dead_lettered_at,
 		       COUNT(*) OVER() AS total_count
 		FROM audio_jobs
 		WHERE %s
@@ -155,9 +165,14 @@ const updateAudioJobSQL = `
 	    params = $8,
 	    result = $9,
 	    error_message = $10,
-	    updated_at = $11,
-	    started_at = $12,
-	    finished_at = $13
+	    attempt_count = $11,
+	    max_attempts = $12,
+	    updated_at = $13,
+	    started_at = $14,
+	    finished_at = $15,
+	    next_retry_at = $16,
+	    last_error_at = $17,
+	    dead_lettered_at = $18
 	WHERE id = $1
 `
 
@@ -182,9 +197,14 @@ func (r *AudioJobRepository) Update(ctx context.Context, job *audiojob.Job) erro
 		paramsJSON,
 		resultJSON,
 		job.ErrorMessage,
+		job.AttemptCount,
+		job.MaxAttempts,
 		job.UpdatedAt,
 		job.StartedAt,
 		job.FinishedAt,
+		job.NextRetryAt,
+		job.LastErrorAt,
+		job.DeadLetteredAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update audio job: %w", err)
@@ -218,10 +238,15 @@ func scanAudioJob(scanner audioJobScanner) (*audiojob.Job, error) {
 		&paramsJSON,
 		&resultJSON,
 		&job.ErrorMessage,
+		&job.AttemptCount,
+		&job.MaxAttempts,
 		&job.CreatedAt,
 		&job.UpdatedAt,
 		&job.StartedAt,
 		&job.FinishedAt,
+		&job.NextRetryAt,
+		&job.LastErrorAt,
+		&job.DeadLetteredAt,
 	)
 	if err != nil {
 		return nil, err
@@ -258,10 +283,15 @@ func scanAudioJobWithTotal(rows pgx.Rows) (*audiojob.Job, int64, error) {
 		&paramsJSON,
 		&resultJSON,
 		&job.ErrorMessage,
+		&job.AttemptCount,
+		&job.MaxAttempts,
 		&job.CreatedAt,
 		&job.UpdatedAt,
 		&job.StartedAt,
 		&job.FinishedAt,
+		&job.NextRetryAt,
+		&job.LastErrorAt,
+		&job.DeadLetteredAt,
 		&total,
 	)
 	if err != nil {
@@ -298,4 +328,66 @@ func unmarshalJSONMap(raw []byte) (map[string]any, error) {
 		return nil, fmt.Errorf("unmarshal json map: %w", err)
 	}
 	return payload, nil
+}
+
+const claimAudioJobSQL = `
+	UPDATE audio_jobs
+	SET status = 'running',
+	    attempt_count = attempt_count + 1,
+	    updated_at = $2,
+	    started_at = $2,
+	    finished_at = NULL,
+	    next_retry_at = NULL,
+	    error_message = NULL
+	WHERE id = $1
+	  AND status = 'queued'
+	  AND (next_retry_at IS NULL OR next_retry_at <= $2)
+	RETURNING id, user_id, title, task_type, status, source_audio_url, reference_audio_url,
+	          prompt, params, result, error_message, attempt_count, max_attempts,
+	          created_at, updated_at, started_at, finished_at, next_retry_at, last_error_at, dead_lettered_at
+`
+
+func (r *AudioJobRepository) ClaimForProcessing(ctx context.Context, id uuid.UUID, now time.Time) (*audiojob.Job, bool, error) {
+	job, err := scanAudioJob(r.pool.QueryRow(ctx, claimAudioJobSQL, id, now))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("claim audio job: %w", err)
+	}
+	return job, true, nil
+}
+
+const listDueRetryIDsSQL = `
+	SELECT id
+	FROM audio_jobs
+	WHERE status = 'queued'
+	  AND next_retry_at IS NOT NULL
+	  AND next_retry_at <= $1
+	ORDER BY next_retry_at ASC
+	LIMIT $2
+`
+
+func (r *AudioJobRepository) ListDueRetryIDs(ctx context.Context, readyBefore time.Time, limit int) ([]uuid.UUID, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := r.pool.Query(ctx, listDueRetryIDsSQL, readyBefore, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list due retry ids: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0, limit)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan due retry id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate due retry ids: %w", err)
+	}
+	return ids, nil
 }
