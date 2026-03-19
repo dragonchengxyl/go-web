@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/smtp"
 	"strings"
+	"time"
 
 	"github.com/studio/platform/configs"
 )
@@ -56,6 +57,20 @@ func (s *Sender) SendEmailVerification(to, username, verifyURL string) error {
 		"Hello %s,\r\n\r\nWelcome to Furry Community.\r\n\r\nOpen the link below to verify your email address:\r\n%s\r\n\r\nIf you did not create this account, you can ignore this email.\r\n",
 		username,
 		verifyURL,
+	)
+
+	return s.send(to, subject, body)
+}
+
+func (s *Sender) SendTest(to string) error {
+	if !s.Enabled() {
+		return fmt.Errorf("email sender is not configured")
+	}
+
+	subject := "Furry Community SMTP delivery test"
+	body := fmt.Sprintf(
+		"This is a test email sent at %s.\r\n\r\nIf you received this message, the configured SMTP delivery path is working.\r\n",
+		time.Now().Format(time.RFC3339),
 	)
 
 	return s.send(to, subject, body)

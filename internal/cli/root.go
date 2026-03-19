@@ -40,6 +40,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(
 		newAdminCmd(opts),
 		newAssistantCmd(opts),
+		newEmailCmd(opts),
 		newHealthCmd(opts),
 		newPerfCmd(opts),
 		newPprofCmd(opts),

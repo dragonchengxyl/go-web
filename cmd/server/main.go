@@ -135,7 +135,23 @@ func main() {
 	userOpts := make([]usecase.UserServiceOption, 0, 1)
 	if emailSender.Enabled() && frontendURL != "" {
 		userOpts = append(userOpts, usecase.WithEmailSender(emailSender, frontendURL))
-		logger.Info("Account email delivery enabled", zap.String("frontend_url", frontendURL))
+		logger.Info(
+			"Account email delivery enabled",
+			zap.String("frontend_url", frontendURL),
+			zap.String("smtp_host", cfg.Email.Host),
+			zap.Int("smtp_port", cfg.Email.Port),
+			zap.String("email_from", cfg.Email.From),
+		)
+	} else {
+		logger.Warn(
+			"Account email delivery disabled",
+			zap.String("frontend_url", frontendURL),
+			zap.String("smtp_host", cfg.Email.Host),
+			zap.Int("smtp_port", cfg.Email.Port),
+			zap.String("email_from", cfg.Email.From),
+			zap.Bool("smtp_configured", emailSender.Enabled()),
+			zap.Bool("has_frontend_url", frontendURL != ""),
+		)
 	}
 
 	// Initialize services

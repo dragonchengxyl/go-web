@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,7 +75,9 @@ func (s *UserService) Register(ctx context.Context, input RegisterInput) (*AuthO
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建用户失败", err)
 	}
 
-	_ = s.sendVerificationEmail(ctx, u)
+	if err := s.sendVerificationEmail(ctx, u); err != nil {
+		fmt.Printf("[Register] failed to prepare verification email for %s: %v\n", u.Email, err)
+	}
 
 	tokens, err := s.generateTokens(ctx, u, input.Device, input.IP)
 	if err != nil {
