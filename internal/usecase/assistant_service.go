@@ -431,17 +431,17 @@ func (s *AssistantService) buildPromptContext(ctx context.Context, userID uuid.U
 	if bookmarkContext := s.buildBookmarkContext(ctx, userID); bookmarkContext != "" {
 		contextParts = append(contextParts, bookmarkContext)
 	}
-	if len(cards) > 0 {
-		var itemLines []string
-		for _, card := range cards {
-			ref := card.Ref
-			if ref == "" {
-				ref = "R?"
-			}
-			line := fmt.Sprintf("[%s] [%s] %s - %s (链接: %s)", ref, card.Kind, card.Title, card.Summary, card.Href)
-			if card.Meta != "" {
-				line += " | " + card.Meta
-			}
+		if len(cards) > 0 {
+			var itemLines []string
+			for _, card := range cards {
+				ref := card.Ref
+				if ref == "" {
+					ref = "R?"
+				}
+				line := fmt.Sprintf("[%s] [%s] %s - %s", ref, card.Kind, card.Title, card.Summary)
+				if card.Meta != "" {
+					line += " | " + card.Meta
+				}
 			if card.Reason != "" {
 				line += " | 推荐理由: " + card.Reason
 			}
@@ -768,19 +768,19 @@ func (s *AssistantService) buildSystemPrompt(contextText string, settings *assis
 	base := strings.TrimSpace(fmt.Sprintf(`
 你是 %s，一位帅气、可靠、语气自然的 Furry 社区 AI 导览助手。
 
-你的职责：
-1. 用简体中文回答，优先帮助用户理解这个网站有什么、去哪里、值得看什么。
-2. 只根据给定的站内上下文和通用产品常识回答，不要编造不存在的页面、功能、活动或数据。
-3. 如果上下文里已经有推荐内容，优先围绕这些内容给出建议。
-4. 语气友好、干练，不要油腻，不要过度卖萌，不要把自己说成真人。
-5. 回答尽量简洁，通常 2 到 5 段即可；必要时优先用短 Markdown 列表。
-6. 如果用户的问题超出站内信息范围，要明确说明你主要负责本网站导览与推荐。
-7. 当你推荐具体内容时，尽量说明推荐理由，并写清楚用户该从哪个入口进入。
-8. 只要使用了给定来源中的具体内容或做出具体推荐，就在对应句末附上来源引用，例如 [R1]、[R2]。
-9. 不要伪造引用编号；只能使用给定上下文里出现的引用编号。
-10. 如果给定上下文里存在“用户最近收藏偏好”，优先结合这些偏好做个性化推荐。
-11. 如果上下文里存在“当前页面 Copilot 工具结果”，优先把这些结果转成直接可执行的建议，例如标题备选、标签建议、规则摘要、准备清单。
-12. 这些 Copilot 工具只提供只读分析和草稿建议；不要承诺替用户自动发帖、自动加入圈子或自动报名。
+	你的职责：
+	1. 用简体中文回答，优先帮助用户理解这个网站有什么、去哪里、值得看什么。
+	2. 只根据给定的站内上下文和通用产品常识回答，不要编造不存在的页面、功能、活动或数据。
+	3. 如果上下文里已经有推荐内容，优先围绕这些内容给出建议。
+	4. 语气友好、干练，不要油腻，不要过度卖萌，不要把自己说成真人。
+	5. 回答尽量简洁，通常 2 到 5 段即可；必要时优先用短 Markdown 列表。
+	6. 如果用户的问题超出站内信息范围，要明确说明你主要负责本网站导览与推荐。
+	7. 当你推荐具体内容时，尽量说明推荐理由，并直接写页面或功能名称。
+	8. 默认不要输出内部路由、URL 或括号里的路径，例如 /feed、/explore、/groups；如果需要让用户跳转，优先通过来源引用 [R1]、[R2] 承载。
+	9. 不要伪造引用编号；只能使用给定上下文里出现的引用编号。
+	10. 如果给定上下文里存在“用户最近收藏偏好”，优先结合这些偏好做个性化推荐。
+	11. 如果上下文里存在“当前页面 Copilot 工具结果”，优先把这些结果转成直接可执行的建议，例如标题备选、标签建议、规则摘要、准备清单。
+	12. 这些 Copilot 工具只提供只读分析和草稿建议；不要承诺替用户自动发帖、自动加入圈子或自动报名。
 
 以下是你可用的站内信息：
 %s
@@ -802,16 +802,16 @@ func siteOverviewContext() string {
 - 私信聊天、查看通知、举报与屏蔽。
 - 创作者可以查看数据面板和赞助页。
 关键页面：
-- /feed 关注动态
-- /explore 发现页
-- /search 搜索
-- /groups 圈子
-- /events 活动
-- /posts/create 发布动态
-- /creator 创作者面板
-- /notifications 通知中心
-- /reports 我的举报
-`)
+- 关注动态
+- 发现页
+- 搜索
+- 圈子广场
+- 活动广场
+- 发布动态
+- 创作者面板
+- 通知中心
+- 我的举报
+	`)
 }
 
 func buildFallbackAnswer(personaName, query string, cards []AssistantCard, copilotText string) string {
@@ -827,7 +827,7 @@ func buildFallbackAnswer(personaName, query string, cards []AssistantCard, copil
 
 	if len(cards) == 0 {
 		if strings.TrimSpace(copilotText) == "" {
-			b.WriteString("我先给你一个站内导航建议：如果你是第一次来，建议先看“发现页 /explore”、再逛“圈子 /groups”和“活动 /events”，想发内容就去“/posts/create”。")
+			b.WriteString("我先给你一个站内导航建议：如果你是第一次来，可以先看发现页，再逛圈子广场和活动广场；想发内容时就去发布动态。")
 		}
 		return b.String()
 	}
@@ -942,60 +942,54 @@ func filterEvents(items []*event.Event, query string) []*event.Event {
 
 func recommendPageCards() []AssistantCard {
 	return []AssistantCard{
+			{
+				Kind:    "page",
+				Title:   "发现页",
+				Summary: "看热门动态、标签和创作者，适合第一次来先逛。",
+				Href:    "/explore",
+				Reason:  "适合第一次来快速熟悉社区内容结构",
+				Source:  "站内固定导航",
+			},
 		{
-			Kind:    "page",
-			Title:   "发现页",
-			Summary: "看热门动态、标签和创作者，适合第一次来先逛。",
-			Href:    "/explore",
-			Meta:    "/explore",
-			Reason:  "适合第一次来快速熟悉社区内容结构",
-			Source:  "站内固定导航",
-		},
+				Kind:    "page",
+				Title:   "关注动态",
+				Summary: "查看你关注对象的最新内容和互动。",
+				Href:    "/feed",
+				Reason:  "如果你已经关注了一些人，这里最能体现个性化内容",
+				Source:  "站内固定导航",
+			},
 		{
-			Kind:    "page",
-			Title:   "关注动态",
-			Summary: "查看你关注对象的最新内容和互动。",
-			Href:    "/feed",
-			Meta:    "/feed",
-			Reason:  "如果你已经关注了一些人，这里最能体现个性化内容",
-			Source:  "站内固定导航",
-		},
+				Kind:    "page",
+				Title:   "发布动态",
+				Summary: "支持图文发布、图片上传、AI 内容标记和可见性设置。",
+				Href:    "/posts/create",
+				Reason:  "适合想马上开始发内容的用户",
+				Source:  "站内固定导航",
+			},
 		{
-			Kind:    "page",
-			Title:   "发布动态",
-			Summary: "支持图文发布、图片上传、AI 内容标记和可见性设置。",
-			Href:    "/posts/create",
-			Meta:    "/posts/create",
-			Reason:  "适合想马上开始发内容的用户",
-			Source:  "站内固定导航",
-		},
+				Kind:    "page",
+				Title:   "圈子广场",
+				Summary: "按兴趣找同好、加入圈子、看成员和帖子数。",
+				Href:    "/groups",
+				Reason:  "适合按兴趣主题找社区和同好",
+				Source:  "站内固定导航",
+			},
 		{
-			Kind:    "page",
-			Title:   "圈子广场",
-			Summary: "按兴趣找同好、加入圈子、看成员和帖子数。",
-			Href:    "/groups",
-			Meta:    "/groups",
-			Reason:  "适合按兴趣主题找社区和同好",
-			Source:  "站内固定导航",
-		},
+				Kind:    "page",
+				Title:   "活动广场",
+				Summary: "查看近期线上线下活动，支持报名参加。",
+				Href:    "/events",
+				Reason:  "适合找近期活动或线下聚会信息",
+				Source:  "站内固定导航",
+			},
 		{
-			Kind:    "page",
-			Title:   "活动广场",
-			Summary: "查看近期线上线下活动，支持报名参加。",
-			Href:    "/events",
-			Meta:    "/events",
-			Reason:  "适合找近期活动或线下聚会信息",
-			Source:  "站内固定导航",
-		},
-		{
-			Kind:    "page",
-			Title:   "创作者面板",
-			Summary: "查看帖子、粉丝、互动和打赏数据。",
-			Href:    "/creator",
-			Meta:    "/creator",
-			Reason:  "适合已经在创作或打算持续运营内容的用户",
-			Source:  "站内固定导航",
-		},
+				Kind:    "page",
+				Title:   "创作者面板",
+				Summary: "查看帖子、粉丝、互动和打赏数据。",
+				Href:    "/creator",
+				Reason:  "适合已经在创作或打算持续运营内容的用户",
+				Source:  "站内固定导航",
+			},
 	}
 }
 

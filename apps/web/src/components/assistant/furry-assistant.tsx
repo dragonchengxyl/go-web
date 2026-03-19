@@ -113,51 +113,6 @@ function MascotAvatar({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function CardList({ cards }: { cards?: AssistantCard[] }) {
-  if (!cards || cards.length === 0) return null;
-
-  return (
-    <div className="grid gap-2.5">
-      {cards.map((card) => (
-        <Link
-          key={`${card.kind}-${card.href}-${card.title}`}
-          id={card.ref ? `ref-${card.ref}` : undefined}
-          href={card.href}
-          className="group rounded-[22px] border border-slate-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,247,237,0.86))] p-3.5 transition-all hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-[0_16px_30px_rgba(251,146,60,0.16)] dark:border-slate-800 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.94),rgba(15,23,42,0.72))] dark:hover:border-orange-500/50"
-        >
-          <div className="mb-2 flex items-center gap-2">
-            {card.ref && (
-              <span className="rounded-full bg-slate-950 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white dark:bg-orange-500 dark:text-slate-950">
-                {card.ref}
-              </span>
-            )}
-            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-700 dark:bg-orange-950/70 dark:text-orange-300">
-              {SOURCE_KIND_LABELS[card.kind] || card.kind}
-            </span>
-            {card.meta && (
-              <span className="truncate text-[11px] text-muted-foreground">
-                {card.meta}
-              </span>
-            )}
-          </div>
-          <p className="text-sm font-semibold text-slate-900 transition-colors group-hover:text-orange-700 dark:text-slate-100 dark:group-hover:text-orange-200">
-            {card.title}
-          </p>
-          <p className="mt-1.5 text-xs leading-5 text-slate-600 dark:text-slate-400">
-            {card.summary}
-          </p>
-          {(card.reason || card.source) && (
-            <div className="mt-3 space-y-1 border-t border-orange-100/80 pt-3 text-[11px] leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
-              {card.reason ? <p>推荐理由：{card.reason}</p> : null}
-              {card.source ? <p>来源：{card.source}</p> : null}
-            </div>
-          )}
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 function InsightList({ insights }: { insights?: AssistantInsight[] }) {
   if (!insights || insights.length === 0) return null;
 
@@ -246,7 +201,10 @@ function AttachmentSection({
   );
 }
 
-function renderInlineMarkdown(text: string): ReactNode[] {
+function renderInlineMarkdown(
+  text: string,
+  citationLinks: Record<string, AssistantCard>,
+): ReactNode[] {
   const nodes: ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -279,14 +237,25 @@ function renderInlineMarkdown(text: string): ReactNode[] {
 
     if (match[0] === citationMatch?.[0]) {
       const ref = citationMatch?.[1] ?? "";
+      const card = citationLinks[ref];
       nodes.push(
-        <a
-          key={`cite-${key++}`}
-          href={`#ref-${ref}`}
-          className="mx-0.5 inline-flex rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-800 no-underline dark:bg-orange-950/60 dark:text-orange-200"
-        >
-          {ref}
-        </a>,
+        card ? (
+          <Link
+            key={`cite-${key++}`}
+            href={card.href}
+            className="mx-0.5 inline-flex rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-800 no-underline transition-colors hover:bg-orange-200 dark:bg-orange-950/60 dark:text-orange-200 dark:hover:bg-orange-900/70"
+            title={card.title}
+          >
+            {ref}
+          </Link>
+        ) : (
+          <span
+            key={`cite-${key++}`}
+            className="mx-0.5 inline-flex rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-orange-800 dark:bg-orange-950/60 dark:text-orange-200"
+          >
+            {ref}
+          </span>
+        ),
       );
     } else if (match[0] === linkMatch?.[0]) {
       const href = linkMatch?.[2] ?? "#";
@@ -327,8 +296,21 @@ function renderInlineMarkdown(text: string): ReactNode[] {
   return nodes;
 }
 
-function AssistantMarkdown({ text }: { text: string }) {
+function AssistantMarkdown({
+  text,
+  cards,
+}: {
+  text: string;
+  cards?: AssistantCard[];
+}) {
   const blocks = text.split(/\n{2,}/).filter((item) => item.trim());
+  const citationLinks = Object.fromEntries(
+    (cards ?? [])
+      .filter((card): card is AssistantCard & { ref: string } =>
+        Boolean(card.ref && card.href),
+      )
+      .map((card) => [card.ref, card]),
+  );
 
   return (
     <div className="space-y-4 text-[15px] leading-7">
@@ -350,7 +332,7 @@ function AssistantMarkdown({ text }: { text: string }) {
                   key={`item-${blockIndex}-${lineIndex}`}
                   className="list-disc"
                 >
-                  {renderInlineMarkdown(line.trim().slice(2))}
+                  {renderInlineMarkdown(line.trim().slice(2), citationLinks)}
                 </li>
               ))}
             </ul>
@@ -361,7 +343,7 @@ function AssistantMarkdown({ text }: { text: string }) {
           <p key={`p-${blockIndex}`} className="text-[15px] leading-7 text-inherit">
             {lines.map((line, lineIndex) => (
               <span key={`line-${blockIndex}-${lineIndex}`}>
-                {renderInlineMarkdown(line)}
+                {renderInlineMarkdown(line, citationLinks)}
                 {lineIndex < lines.length - 1 && <br />}
               </span>
             ))}
@@ -898,7 +880,7 @@ export function FurryAssistant() {
                   )}
                   {message.role === "assistant" ? (
                     message.content ? (
-                      <AssistantMarkdown text={message.content} />
+                      <AssistantMarkdown text={message.content} cards={message.cards} />
                     ) : loading && index === messages.length - 1 ? (
                       <p className="whitespace-pre-wrap break-words text-[15px] leading-7">
                         正在整理站内信息...
@@ -923,20 +905,6 @@ export function FurryAssistant() {
                       }
                     >
                       <InsightList insights={message.insights} />
-                    </AttachmentSection>
-                  ) : null}
-                  {message.role === "assistant" && message.cards?.length ? (
-                    <AttachmentSection
-                      title="相关入口"
-                      summary="需要时再展开看来源和可点击入口，阅读正文时不再堆满整屏。"
-                      badge={`${message.cards.length} 个`}
-                      expanded={
-                        expandedSections[`cards-${message.id || index}`] ??
-                        userMessageCount === 0
-                      }
-                      onToggle={() => toggleSection(`cards-${message.id || index}`)}
-                    >
-                      <CardList cards={message.cards} />
                     </AttachmentSection>
                   ) : null}
                   {message.role === "assistant" && message.id && message.content && (
