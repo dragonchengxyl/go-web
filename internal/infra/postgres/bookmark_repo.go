@@ -33,6 +33,13 @@ func (r *BookmarkRepository) Delete(ctx context.Context, userID uuid.UUID, targe
 	return err
 }
 
+func (r *BookmarkRepository) DeleteForTarget(ctx context.Context, targetType bookmark.TargetType, targetID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM user_bookmarks WHERE target_type = $1 AND target_id = $2
+	`, string(targetType), targetID)
+	return err
+}
+
 func (r *BookmarkRepository) DeleteBatch(ctx context.Context, userID uuid.UUID, targetType bookmark.TargetType, targetIDs []uuid.UUID) error {
 	if len(targetIDs) == 0 {
 		return nil

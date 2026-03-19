@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { apiClient, Post, FollowStats } from '@/lib/api-client'
+import { apiClient, AudioWork, Post, FollowStats } from '@/lib/api-client'
+import { AudioWorkCard } from '@/components/audio/audio-work-card'
 import { PostGalleryCard } from '@/components/post/post-gallery-card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,6 +54,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState<FollowStats | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
+  const [audioWorks, setAudioWorks] = useState<AudioWork[]>([])
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -82,12 +84,14 @@ export default function ProfilePage() {
         furry_name: u.furry_name || '',
         species: u.species || '',
       })
-      const [statsData, postsData] = await Promise.all([
+      const [statsData, postsData, audioWorksData] = await Promise.all([
         apiClient.getFollowStats(u.id).catch(() => null),
         apiClient.getUserPosts(u.id, 1, 30).catch(() => ({ posts: [] })),
+        apiClient.listMyAudioWorks({ page: 1, page_size: 6 }).catch(() => ({ items: [] })),
       ])
       setStats(statsData)
       setPosts(postsData.posts ?? [])
+      setAudioWorks(audioWorksData.items ?? [])
     }).catch(() => router.push('/login')).finally(() => setLoading(false))
   }, [router])
 
@@ -314,6 +318,28 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Posts gallery */}
+      <div className="flex items-center gap-2 mb-5">
+        <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="font-semibold">我的音频作品</h2>
+      </div>
+
+      {audioWorks.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground">
+          <p className="font-medium mb-2">还没有音频作品</p>
+          <p className="text-sm mb-4">先去音频任务台发布第一首作品。</p>
+          <Link href="/creator/audio">
+            <Button variant="outline">打开音频任务台</Button>
+          </Link>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+          {audioWorks.map(work => (
+            <AudioWorkCard key={work.id} work={work} compact />
+          ))}
+        </div>
+      )}
 
       {/* Posts gallery */}
       <div className="flex items-center gap-2 mb-5">

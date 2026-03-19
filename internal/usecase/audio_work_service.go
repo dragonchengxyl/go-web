@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/audiojob"
 	"github.com/studio/platform/internal/domain/audiowork"
+	"github.com/studio/platform/internal/domain/bookmark"
+	"github.com/studio/platform/internal/domain/comment"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
@@ -17,6 +19,8 @@ type AudioWorkService struct {
 	workRepo     audiowork.Repository
 	audioJobRepo audiojob.Repository
 	allowedHosts []string
+	bookmarkRepo bookmark.Repository
+	commentRepo  comment.Repository
 }
 
 type AudioWorkServiceOption func(*AudioWorkService)
@@ -38,6 +42,13 @@ func WithAudioWorkAllowedHosts(hosts []string) AudioWorkServiceOption {
 	}
 }
 
+func WithAudioWorkCleanup(bookmarkRepo bookmark.Repository, commentRepo comment.Repository) AudioWorkServiceOption {
+	return func(s *AudioWorkService) {
+		s.bookmarkRepo = bookmarkRepo
+		s.commentRepo = commentRepo
+	}
+}
+
 type PublishAudioWorkInput struct {
 	UserID        uuid.UUID
 	JobID         uuid.UUID
@@ -51,6 +62,16 @@ type PublishAudioWorkInput struct {
 type ListAudioWorksInput struct {
 	Page     int
 	PageSize int
+}
+
+type UpdateAudioWorkInput struct {
+	UserID        uuid.UUID
+	WorkID        uuid.UUID
+	Title         string
+	Description   string
+	CoverImageURL string
+	Visibility    audiowork.Visibility
+	Tags          []string
 }
 
 func (s *AudioWorkService) PublishFromJob(ctx context.Context, input PublishAudioWorkInput) (*audiowork.Work, error) {
@@ -157,6 +178,20 @@ func (s *AudioWorkService) ListMyWorks(ctx context.Context, userID uuid.UUID, in
 	return items, total, nil
 }
 
+func (s *AudioWorkService) ListUserPublicWorks(ctx context.Context, userID uuid.UUID, input ListAudioWorksInput) ([]*audiowork.Work, int64, error) {
+	visibility := audiowork.VisibilityPublic
+	items, total, err := s.workRepo.List(ctx, audiowork.ListFilter{
+		AuthorID:   &userID,
+		Visibility: &visibility,
+		Page:       input.Page,
+		PageSize:   input.PageSize,
+	})
+	if err != nil {
+		return nil, 0, apperr.Wrap(apperr.CodeInternalError, "查询用户音频作品失败", err)
+	}
+	return items, total, nil
+}
+
 func (s *AudioWorkService) GetPublicWork(ctx context.Context, workID uuid.UUID) (*audiowork.Work, error) {
 	work, err := s.workRepo.GetByID(ctx, workID)
 	if err != nil {
@@ -180,6 +215,85 @@ func (s *AudioWorkService) GetByID(ctx context.Context, workID uuid.UUID) (*audi
 		return nil, apperr.Wrap(apperr.CodeInternalError, "查询音频作品失败", err)
 	}
 	return work, nil
+}
+
+func (s *AudioWorkService) UpdateWork(ctx context.Context, input UpdateAudioWorkInput) (*audiowork.Work, error) {
+	work, err := s.GetByID(ctx, input.WorkID)
+	if err != nil {
+		return nil, err
+	}
+	if work.AuthorID != input.UserID {
+		return nil, apperr.ErrForbidden
+	}
+
+	title := strings.TrimSpace(input.Title)
+	if title == "" {
+		return nil, apperr.BadRequest("作品标题不能为空")
+	}
+	if err := s.validateCoverURL(input.CoverImageURL); err != nil {
+		return nil, err
+	}
+
+	visibility := input.Visibility
+	if visibility == "" {
+		visibility = work.Visibility
+	}
+	if visibility != audiowork.VisibilityPublic && visibility != audiowork.VisibilityPrivate {
+		return nil, apperr.BadRequest("无效的作品可见性")
+	}
+
+	work.Title = title
+	work.Visibility = visibility
+	work.Tags = normalizeTags(input.Tags)
+	work.UpdatedAt = time.Now()
+
+	description := strings.TrimSpace(input.Description)
+	if description == "" {
+		work.Description = nil
+	} else {
+		work.Description = &description
+	}
+	if cover := strings.TrimSpace(input.CoverImageURL); cover == "" {
+		work.CoverImageURL = nil
+	} else {
+		work.CoverImageURL = &cover
+	}
+
+	if err := s.workRepo.Update(ctx, work); err != nil {
+		if errors.Is(err, audiowork.ErrNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.Wrap(apperr.CodeInternalError, "更新音频作品失败", err)
+	}
+	return work, nil
+}
+
+func (s *AudioWorkService) DeleteWork(ctx context.Context, userID, workID uuid.UUID) error {
+	work, err := s.GetByID(ctx, workID)
+	if err != nil {
+		return err
+	}
+	if work.AuthorID != userID {
+		return apperr.ErrForbidden
+	}
+
+	if s.commentRepo != nil {
+		if err := s.commentRepo.DeleteByTarget(ctx, comment.CommentableTypeAudioWork, workID); err != nil {
+			return apperr.Wrap(apperr.CodeInternalError, "清理音频作品评论失败", err)
+		}
+	}
+	if s.bookmarkRepo != nil {
+		if err := s.bookmarkRepo.DeleteForTarget(ctx, bookmark.TargetAudioWork, workID); err != nil {
+			return apperr.Wrap(apperr.CodeInternalError, "清理音频作品收藏失败", err)
+		}
+	}
+	if err := s.workRepo.Delete(ctx, workID); err != nil {
+		if errors.Is(err, audiowork.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return apperr.Wrap(apperr.CodeInternalError, "删除音频作品失败", err)
+	}
+	return nil
 }
 
 func (s *AudioWorkService) LikeWork(ctx context.Context, userID, workID uuid.UUID) error {
@@ -343,4 +457,21 @@ func mergeWorkTags(tags []string, payload map[string]any) []string {
 		}
 	}
 	return merged
+}
+
+func normalizeTags(tags []string) []string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		result = append(result, tag)
+	}
+	return result
 }

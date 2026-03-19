@@ -68,6 +68,25 @@ func (h *AudioWorkHandler) ListMyWorks(c *gin.Context) {
 	response.SuccessWithPagination(c, items, int(total), page, pageSize)
 }
 
+// ListUserWorks handles GET /api/v1/users/:id/audio/works.
+func (h *AudioWorkHandler) ListUserWorks(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的用户ID"))
+		return
+	}
+	page, pageSize := getPageParams(c)
+	items, total, err := h.service.ListUserPublicWorks(c.Request.Context(), userID, usecase.ListAudioWorksInput{
+		Page:     page,
+		PageSize: pageSize,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.SuccessWithPagination(c, items, int(total), page, pageSize)
+}
+
 // PublishFromJob handles POST /api/v1/audio/jobs/:id/publish.
 func (h *AudioWorkHandler) PublishFromJob(c *gin.Context) {
 	userID, ok := getUserID(c)
@@ -107,6 +126,66 @@ func (h *AudioWorkHandler) PublishFromJob(c *gin.Context) {
 		return
 	}
 	response.Success(c, work)
+}
+
+// UpdateWork handles PUT /api/v1/audio/works/:id.
+func (h *AudioWorkHandler) UpdateWork(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的音频作品ID"))
+		return
+	}
+
+	var req struct {
+		Title         string   `json:"title" binding:"required"`
+		Description   string   `json:"description"`
+		CoverImageURL string   `json:"cover_image_url"`
+		Visibility    string   `json:"visibility"`
+		Tags          []string `json:"tags"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	work, err := h.service.UpdateWork(c.Request.Context(), usecase.UpdateAudioWorkInput{
+		UserID:        userID,
+		WorkID:        workID,
+		Title:         req.Title,
+		Description:   req.Description,
+		CoverImageURL: req.CoverImageURL,
+		Visibility:    audiowork.Visibility(req.Visibility),
+		Tags:          req.Tags,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, work)
+}
+
+// DeleteWork handles DELETE /api/v1/audio/works/:id.
+func (h *AudioWorkHandler) DeleteWork(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的音频作品ID"))
+		return
+	}
+	if err := h.service.DeleteWork(c.Request.Context(), userID, workID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "音频作品已删除"})
 }
 
 // LikeWork handles POST /api/v1/audio/works/:id/like.

@@ -85,6 +85,18 @@ func (r *CommentRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (r *CommentRepository) DeleteByTarget(ctx context.Context, commentableType comment.CommentableType, commentableID uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE comments
+		SET is_deleted = true, updated_at = NOW()
+		WHERE commentable_type = $1 AND commentable_id = $2
+	`, commentableType, commentableID)
+	if err != nil {
+		return fmt.Errorf("failed to delete comments by target: %w", err)
+	}
+	return nil
+}
+
 func (r *CommentRepository) List(ctx context.Context, filter comment.ListFilter) ([]*comment.Comment, int64, error) {
 	query := `
 		SELECT c.id, c.user_id, c.commentable_type, c.commentable_id, c.parent_id, c.content,

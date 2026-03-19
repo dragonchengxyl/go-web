@@ -10,6 +10,8 @@ type Repository interface {
 	Create(ctx context.Context, work *Work) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Work, error)
 	List(ctx context.Context, filter ListFilter) ([]*Work, int64, error)
+	Update(ctx context.Context, work *Work) error
+	Delete(ctx context.Context, id uuid.UUID) error
 	Like(ctx context.Context, userID, workID uuid.UUID) error
 	Unlike(ctx context.Context, userID, workID uuid.UUID) error
 	HasLiked(ctx context.Context, userID, workID uuid.UUID) (bool, error)

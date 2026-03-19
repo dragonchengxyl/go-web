@@ -163,6 +163,51 @@ func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFil
 	return items, total, nil
 }
 
+const updateAudioWorkSQL = `
+	UPDATE audio_works
+	SET title = $2,
+	    description = $3,
+	    cover_image_url = $4,
+	    visibility = $5,
+	    tags = $6,
+	    updated_at = $7
+	WHERE id = $1
+`
+
+func (r *AudioWorkRepository) Update(ctx context.Context, work *audiowork.Work) error {
+	tagsJSON, err := json.Marshal(work.Tags)
+	if err != nil {
+		return fmt.Errorf("marshal audio work tags: %w", err)
+	}
+	result, err := r.pool.Exec(ctx, updateAudioWorkSQL,
+		work.ID,
+		work.Title,
+		work.Description,
+		work.CoverImageURL,
+		work.Visibility,
+		tagsJSON,
+		work.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("update audio work: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return audiowork.ErrNotFound
+	}
+	return nil
+}
+
+func (r *AudioWorkRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	result, err := r.pool.Exec(ctx, `DELETE FROM audio_works WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete audio work: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return audiowork.ErrNotFound
+	}
+	return nil
+}
+
 type audioWorkScanner interface {
 	Scan(dest ...any) error
 }

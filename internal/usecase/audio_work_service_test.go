@@ -97,6 +97,23 @@ func (r *fakeAudioWorkRepo) List(_ context.Context, filter audiowork.ListFilter)
 	return items, int64(len(items)), nil
 }
 
+func (r *fakeAudioWorkRepo) Update(_ context.Context, work *audiowork.Work) error {
+	if _, ok := r.items[work.ID]; !ok {
+		return audiowork.ErrNotFound
+	}
+	copyWork := *work
+	r.items[work.ID] = &copyWork
+	return nil
+}
+
+func (r *fakeAudioWorkRepo) Delete(_ context.Context, id uuid.UUID) error {
+	if _, ok := r.items[id]; !ok {
+		return audiowork.ErrNotFound
+	}
+	delete(r.items, id)
+	return nil
+}
+
 func (r *fakeAudioWorkRepo) Like(_ context.Context, userID, workID uuid.UUID) error {
 	work, ok := r.items[workID]
 	if !ok {

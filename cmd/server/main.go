@@ -81,6 +81,7 @@ func main() {
 	albumRepo := postgres.NewAlbumRepository(pool)
 	trackRepo := postgres.NewTrackRepository(pool)
 	commentRepo := postgres.NewCommentRepository(pool)
+	bookmarkRepo := postgres.NewBookmarkRepository(pool)
 	orderRepo := postgres.NewOrderRepository(pool)
 	achievementRepo := postgres.NewAchievementRepository(pool)
 	postRepo := postgres.NewPostRepository(pool)
@@ -199,6 +200,7 @@ func main() {
 		audioWorkRepo,
 		audioJobRepo,
 		usecase.WithAudioWorkAllowedHosts(cfg.OSS.AllowedHosts),
+		usecase.WithAudioWorkCleanup(bookmarkRepo, commentRepo),
 	)
 	commentService := usecase.NewCommentService(
 		commentRepo,
@@ -208,7 +210,6 @@ func main() {
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
 	assistantRepo := postgres.NewAssistantRepository(pool)
-	bookmarkRepo := postgres.NewBookmarkRepository(pool)
 	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService, audioWorkService)
 	auditRepo := postgres.NewAuditRepository(pool)
 	auditService := usecase.NewAuditService(auditRepo)

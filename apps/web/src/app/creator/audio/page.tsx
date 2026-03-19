@@ -10,9 +10,11 @@ import {
   Clock3,
   Loader2,
   Mic2,
+  PencilLine,
   PlayCircle,
   RefreshCcw,
   Sparkles,
+  Trash2,
   UploadCloud,
   Wand2,
   Waves,
@@ -158,6 +160,14 @@ export default function CreatorAudioPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | AudioJobStatus>('all');
   const [taskFilter, setTaskFilter] = useState<'all' | AudioJobTaskType>('all');
   const [submitError, setSubmitError] = useState('');
+  const [editingWorkId, setEditingWorkId] = useState<string | null>(null);
+  const [workForm, setWorkForm] = useState({
+    title: '',
+    description: '',
+    cover_image_url: '',
+    visibility: 'public' as 'public' | 'private',
+    tags: '',
+  });
 
   const jobsQuery = useQuery({
     queryKey: ['audio-jobs', statusFilter, taskFilter],
@@ -274,6 +284,35 @@ export default function CreatorAudioPage() {
     },
   });
 
+  const updateWorkMutation = useMutation({
+    mutationFn: () => {
+      if (!editingWorkId) {
+        throw new Error('missing work id');
+      }
+      return apiClient.updateAudioWork(editingWorkId, {
+        title: workForm.title,
+        description: workForm.description || undefined,
+        cover_image_url: workForm.cover_image_url || undefined,
+        visibility: workForm.visibility,
+        tags: workForm.tags.split(',').map((item) => item.trim()).filter(Boolean),
+      });
+    },
+    onSuccess: () => {
+      setEditingWorkId(null);
+      queryClient.invalidateQueries({ queryKey: ['my-audio-works'] });
+      queryClient.invalidateQueries({ queryKey: ['audio-works-public'] });
+      queryClient.invalidateQueries({ queryKey: ['audio-work'] });
+    },
+  });
+
+  const deleteWorkMutation = useMutation({
+    mutationFn: (workId: string) => apiClient.deleteAudioWork(workId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-audio-works'] });
+      queryClient.invalidateQueries({ queryKey: ['audio-works-public'] });
+    },
+  });
+
   const currentTask = taskMeta(taskType);
   const CurrentTaskIcon = currentTask.icon;
 
@@ -294,6 +333,28 @@ export default function CreatorAudioPage() {
     event.preventDefault();
     setSubmitError('');
     createMutation.mutate();
+  }
+
+  function beginEditWork(work: AudioWork) {
+    setEditingWorkId(work.id);
+    setWorkForm({
+      title: work.title,
+      description: work.description ?? '',
+      cover_image_url: work.cover_image_url ?? '',
+      visibility: work.visibility,
+      tags: (work.tags ?? []).join(', '),
+    });
+  }
+
+  function cancelEditWork() {
+    setEditingWorkId(null);
+    setWorkForm({
+      title: '',
+      description: '',
+      cover_image_url: '',
+      visibility: 'public',
+      tags: '',
+    });
   }
 
   if (loading) {
@@ -551,9 +612,91 @@ export default function CreatorAudioPage() {
                 <PlayCircle className="h-5 w-5 text-emerald-500" />
                 已发布作品
               </CardTitle>
-              <CardDescription>这里展示已经从任务发布出去的音频作品。现在它们已经有独立详情页，下一步可以继续接推荐、打赏和活动投稿。</CardDescription>
+              <CardDescription>这里展示已经从任务发布出去的音频作品。现在可以继续编辑标题、描述、标签和可见性，也可以删除作品。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 p-6">
+              {editingWorkId ? (
+                <div className="rounded-2xl border border-border/70 bg-muted/10 p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">编辑音频作品</p>
+                      <p className="text-sm text-muted-foreground">修改展示信息，不会影响原始音频输出。</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={cancelEditWork}>
+                      取消
+                    </Button>
+                  </div>
+
+                  <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      updateWorkMutation.mutate();
+                    }}
+                  >
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-foreground">标题</label>
+                        <Input
+                          value={workForm.title}
+                          onChange={(event) => setWorkForm((prev) => ({ ...prev, title: event.target.value }))}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-foreground">可见性</label>
+                        <select
+                          value={workForm.visibility}
+                          onChange={(event) => setWorkForm((prev) => ({ ...prev, visibility: event.target.value as 'public' | 'private' }))}
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                          <option value="public">公开</option>
+                          <option value="private">私密</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-foreground">简介</label>
+                      <Textarea
+                        value={workForm.description}
+                        onChange={(event) => setWorkForm((prev) => ({ ...prev, description: event.target.value }))}
+                        className="min-h-[100px]"
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-foreground">封面地址</label>
+                        <Input
+                          value={workForm.cover_image_url}
+                          onChange={(event) => setWorkForm((prev) => ({ ...prev, cover_image_url: event.target.value }))}
+                          placeholder="/uploads/images/..."
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-foreground">标签</label>
+                        <Input
+                          value={workForm.tags}
+                          onChange={(event) => setWorkForm((prev) => ({ ...prev, tags: event.target.value }))}
+                          placeholder="ambient, night, vocal"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <Button type="submit" disabled={updateWorkMutation.isPending}>
+                        {updateWorkMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PencilLine className="mr-2 h-4 w-4" />}
+                        保存修改
+                      </Button>
+                      <Button type="button" variant="outline" onClick={cancelEditWork}>
+                        取消
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              ) : null}
+
               {worksQuery.isLoading ? (
                 <div className="space-y-3">
                   {[0, 1].map((item) => (
@@ -568,7 +711,17 @@ export default function CreatorAudioPage() {
               ) : (
                 <div className="space-y-3">
                   {works.map((work) => (
-                    <PublishedWorkCard key={work.id} work={work} />
+                    <PublishedWorkCard
+                      key={work.id}
+                      work={work}
+                      onEdit={() => beginEditWork(work)}
+                      onDelete={() => {
+                        if (window.confirm(`确认删除作品《${work.title}》吗？`)) {
+                          deleteWorkMutation.mutate(work.id);
+                        }
+                      }}
+                      deleting={deleteWorkMutation.isPending}
+                    />
                   ))}
                 </div>
               )}
@@ -762,7 +915,17 @@ function JobCard({
   );
 }
 
-function PublishedWorkCard({ work }: { work: AudioWork }) {
+function PublishedWorkCard({
+  work,
+  onEdit,
+  onDelete,
+  deleting,
+}: {
+  work: AudioWork;
+  onEdit: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
   return (
     <div className="rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -792,6 +955,17 @@ function PublishedWorkCard({ work }: { work: AudioWork }) {
             {tag}
           </Badge>
         ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={onEdit}>
+          <PencilLine className="mr-2 h-4 w-4" />
+          编辑
+        </Button>
+        <Button variant="outline" size="sm" onClick={onDelete} disabled={deleting} className="border-rose-200 text-rose-700 hover:bg-rose-50">
+          {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+          删除
+        </Button>
       </div>
     </div>
   );

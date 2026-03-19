@@ -1100,8 +1100,43 @@ class ApiClient {
     }>(`/audio/works?${q.toString()}`);
   }
 
+  async listUserAudioWorks(
+    userId: string,
+    options?: {
+      page?: number;
+      page_size?: number;
+    },
+  ) {
+    const q = new URLSearchParams();
+    if (options?.page) q.set("page", String(options.page));
+    if (options?.page_size) q.set("page_size", String(options.page_size));
+    return this.get<{
+      items: AudioWork[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/users/${userId}/audio/works?${q.toString()}`);
+  }
+
   async getAudioWork(id: string) {
     return this.get<AudioWork>(`/audio/works/${id}`);
+  }
+
+  async updateAudioWork(
+    id: string,
+    data: {
+      title: string;
+      description?: string;
+      cover_image_url?: string;
+      visibility?: AudioWorkVisibility;
+      tags?: string[];
+    },
+  ) {
+    return this.put<AudioWork>(`/audio/works/${id}`, data);
+  }
+
+  async deleteAudioWork(id: string) {
+    return this.delete<{ message: string }>(`/audio/works/${id}`);
   }
 
   async getAudioWorkMeState(id: string) {

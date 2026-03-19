@@ -233,6 +233,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		v1.GET("/users/:id/follow-stats", followHandler.GetFollowStats)
 		v1.GET("/users/:id/posts", postHandler.ListUserPosts)
 		v1.GET("/users/:id/tips/received", tipHandler.ListReceivedTips)
+		if audioWorkHandler != nil {
+			v1.GET("/users/:id/audio/works", audioWorkHandler.ListUserWorks)
+		}
 		v1.GET("/users/:id", userHandler.GetUserByID)
 
 		// ── Authenticated routes ────────────────────────────────────────
@@ -371,6 +374,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			if audioWorkHandler != nil {
 				protected.POST("/audio/jobs/:id/publish", audioWorkHandler.PublishFromJob)
 				protected.GET("/users/me/audio/works", audioWorkHandler.ListMyWorks)
+				protected.PUT("/audio/works/:id", audioWorkHandler.UpdateWork)
+				protected.DELETE("/audio/works/:id", audioWorkHandler.DeleteWork)
 				protected.GET("/audio/works/:id/me-state", audioWorkHandler.GetMeState)
 				protected.POST("/audio/works/:id/like", audioWorkHandler.LikeWork)
 				protected.DELETE("/audio/works/:id/like", audioWorkHandler.UnlikeWork)

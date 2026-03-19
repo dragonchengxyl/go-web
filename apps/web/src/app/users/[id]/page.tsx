@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { UserPlus, UserMinus, MessageCircle, MapPin, Globe, ShieldX, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PostGalleryCard } from '@/components/post/post-gallery-card';
-import { apiClient, Post, FollowStats } from '@/lib/api-client';
+import { AudioWorkCard } from '@/components/audio/audio-work-card';
+import { apiClient, AudioWork, Post, FollowStats } from '@/lib/api-client';
 
 interface UserProfile {
   id: string
@@ -53,6 +54,7 @@ export default function UserProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<FollowStats | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [audioWorks, setAudioWorks] = useState<AudioWork[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
@@ -73,14 +75,16 @@ export default function UserProfilePage() {
 
   async function loadProfile() {
     try {
-      const [profileData, statsData, postsData] = await Promise.all([
+      const [profileData, statsData, postsData, audioWorksData] = await Promise.all([
         apiClient.getUser(userId),
         apiClient.getFollowStats(userId),
         apiClient.getUserPosts(userId, 1, 30),
+        apiClient.listUserAudioWorks(userId, { page: 1, page_size: 6 }).catch(() => ({ items: [] })),
       ]);
       setProfile(profileData);
       setStats(statsData);
       setPosts(postsData.posts ?? []);
+      setAudioWorks(audioWorksData.items ?? []);
 
       if (apiClient.getToken()) {
         try {
@@ -314,6 +318,24 @@ export default function UserProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Posts gallery */}
+      <div className="flex items-center gap-2 mb-5">
+        <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="font-semibold">TA 的音频作品</h2>
+      </div>
+
+      {audioWorks.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground">
+          <p>暂无公开音频作品</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+          {audioWorks.map(work => (
+            <AudioWorkCard key={work.id} work={work} compact />
+          ))}
+        </div>
+      )}
 
       {/* Posts gallery */}
       <div className="flex items-center gap-2 mb-5">

@@ -30,6 +30,9 @@ type Repository interface {
 	// Delete deletes a comment (soft delete)
 	Delete(ctx context.Context, id uuid.UUID) error
 
+	// DeleteByTarget soft deletes comments for a given target.
+	DeleteByTarget(ctx context.Context, commentableType CommentableType, commentableID uuid.UUID) error
+
 	// List retrieves comments with pagination and filters
 	List(ctx context.Context, filter ListFilter) ([]*Comment, int64, error)
 

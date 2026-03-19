@@ -81,8 +81,16 @@
 - `POST /api/v1/audio/jobs/:id/retry`
 - `POST /api/v1/audio/jobs/:id/publish`
 - `GET /api/v1/users/me/audio/works`
+- `GET /api/v1/users/:id/audio/works`
 - `GET /api/v1/audio/works`
 - `GET /api/v1/audio/works/:id`
+- `PUT /api/v1/audio/works/:id`
+- `DELETE /api/v1/audio/works/:id`
+- `GET /api/v1/audio/works/:id/me-state`
+- `POST /api/v1/audio/works/:id/like`
+- `DELETE /api/v1/audio/works/:id/like`
+- `POST /api/v1/audio/works/:id/bookmark`
+- `DELETE /api/v1/audio/works/:id/bookmark`
 
 当前这条链路是一个可跑的 MVP：
 
