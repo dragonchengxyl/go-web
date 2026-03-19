@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowLeft, AudioLines, Bookmark, Clock3, Heart, MessageCircle, Send, UserRound, Waves } from 'lucide-react';
+import { ArrowLeft, AudioLines, Bookmark, Clock3, Heart, MessageCircle, Play, Pause, Send, UserRound, Waves } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { audioWorkToPlayerTrack, usePlayerStore } from '@/components/music-player';
 import { useAuth } from '@/contexts/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ export default function AudioWorkDetailPage() {
   const workId = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const { isLoggedIn, loading: authLoading } = useAuth();
   const [commentDraft, setCommentDraft] = useState('');
+  const { currentTrack, isPlaying, setTrack, togglePlay } = usePlayerStore();
 
   const workQuery = useQuery({
     queryKey: ['audio-work', workId],
@@ -113,6 +115,7 @@ export default function AudioWorkDetailPage() {
   const waveform = work.waveform_preview ?? [];
   const comments = commentsQuery.data?.comments ?? [];
   const meState = meStateQuery.data;
+  const isCurrentTrack = currentTrack?.id === work.id;
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-12 pt-20">
@@ -181,6 +184,19 @@ export default function AudioWorkDetailPage() {
               {isLoggedIn ? (
                 <div className="flex flex-wrap gap-3">
                   <Button
+                    variant={isCurrentTrack && isPlaying ? 'default' : 'outline'}
+                    onClick={() => {
+                      if (isCurrentTrack) {
+                        togglePlay();
+                      } else {
+                        setTrack(audioWorkToPlayerTrack(work));
+                      }
+                    }}
+                  >
+                    {isCurrentTrack && isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+                    {isCurrentTrack && isPlaying ? '暂停全局播放' : '全局播放'}
+                  </Button>
+                  <Button
                     variant={meState?.liked ? 'default' : 'outline'}
                     onClick={() => likeMutation.mutate()}
                     disabled={likeMutation.isPending}
@@ -198,7 +214,22 @@ export default function AudioWorkDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <p className="text-sm text-slate-300">登录后可以点赞、评论和收藏这首作品。</p>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant={isCurrentTrack && isPlaying ? 'default' : 'outline'}
+                    onClick={() => {
+                      if (isCurrentTrack) {
+                        togglePlay();
+                      } else {
+                        setTrack(audioWorkToPlayerTrack(work));
+                      }
+                    }}
+                  >
+                    {isCurrentTrack && isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+                    {isCurrentTrack && isPlaying ? '暂停全局播放' : '全局播放'}
+                  </Button>
+                  <p className="self-center text-sm text-slate-300">登录后可以点赞、评论和收藏这首作品。</p>
+                </div>
               )}
 
               {waveform.length > 0 ? (

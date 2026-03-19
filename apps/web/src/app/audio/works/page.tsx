@@ -1,18 +1,41 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AudioLines, Disc3 } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, type AudioWork } from '@/lib/api-client';
 import { AudioWorkCard } from '@/components/audio/audio-work-card';
 import { Skeleton } from '@/components/ui/skeleton';
 
+const EMPTY_WORKS: AudioWork[] = [];
+
 export default function AudioWorksPage() {
+  const [sort, setSort] = useState<'latest' | 'oldest' | 'popular'>('latest');
+  const [tag, setTag] = useState('all');
+
   const worksQuery = useQuery({
     queryKey: ['audio-works-public'],
-    queryFn: () => apiClient.listAudioWorks({ page: 1, page_size: 24 }),
+    queryFn: () => apiClient.listAudioWorks({ page: 1, page_size: 60 }),
   });
 
-  const works = worksQuery.data?.items ?? [];
+  const works = worksQuery.data?.items ?? EMPTY_WORKS;
+  const tags = useMemo(() => {
+    const set = new Set<string>();
+    works.forEach((work) => (work.tags ?? []).forEach((item) => set.add(item)));
+    return ['all', ...Array.from(set).sort()];
+  }, [works]);
+  const filteredWorks = useMemo(() => {
+    const byTag = tag === 'all' ? works : works.filter((work) => (work.tags ?? []).includes(tag));
+    const sorted = [...byTag];
+    if (sort === 'oldest') {
+      sorted.sort((a, b) => new Date(a.published_at).getTime() - new Date(b.published_at).getTime());
+    } else if (sort === 'popular') {
+      sorted.sort((a, b) => b.like_count - a.like_count || b.comment_count - a.comment_count);
+    } else {
+      sorted.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
+    }
+    return sorted;
+  }, [works, sort, tag]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-12 pt-20">
@@ -34,7 +57,36 @@ export default function AudioWorksPage() {
           </div>
           <h2 className="text-2xl font-semibold">最新公开作品</h2>
         </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value as 'latest' | 'oldest' | 'popular')}
+            className="rounded-lg border bg-background px-3 py-2 text-sm"
+          >
+            <option value="latest">最新发布</option>
+            <option value="oldest">最早发布</option>
+            <option value="popular">最受欢迎</option>
+          </select>
+        </div>
       </div>
+
+      {tags.length > 1 ? (
+        <div className="mb-6 flex flex-wrap gap-2">
+          {tags.map((item) => (
+            <button
+              key={item}
+              onClick={() => setTag(item)}
+              className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                tag === item
+                  ? 'border-transparent bg-emerald-500 text-white'
+                  : 'border-border bg-background text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {item === 'all' ? '全部标签' : item}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {worksQuery.isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -47,15 +99,15 @@ export default function AudioWorksPage() {
             </div>
           ))}
         </div>
-      ) : works.length === 0 ? (
+      ) : filteredWorks.length === 0 ? (
         <div className="rounded-[24px] border border-dashed border-border bg-muted/10 px-6 py-14 text-center">
           <AudioLines className="mx-auto mb-4 h-10 w-10 text-muted-foreground/50" />
-          <p className="text-base font-medium">还没有公开音频作品</p>
-          <p className="mt-2 text-sm text-muted-foreground">先从创作者任务台发布第一批作品，这里会自动出现公开内容。</p>
+          <p className="text-base font-medium">当前筛选条件下没有作品</p>
+          <p className="mt-2 text-sm text-muted-foreground">换个排序或标签试试看。</p>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {works.map((work) => (
+          {filteredWorks.map((work) => (
             <AudioWorkCard key={work.id} work={work} />
           ))}
         </div>

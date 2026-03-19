@@ -1,24 +1,28 @@
 'use client'
 
 import { create } from 'zustand'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
+import { AudioLines, Pause, Play, Waves } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { type AudioWork } from '@/lib/api-client'
 
-interface Track {
-  id: number
+export interface PlayerTrack {
+  id: string
   title: string
   artist: string
-  cover: string
+  cover?: string
   audioUrl: string
+  kind: 'audio_work'
 }
 
 interface PlayerState {
-  currentTrack: Track | null
+  currentTrack: PlayerTrack | null
   isPlaying: boolean
   volume: number
   currentTime: number
   duration: number
-  setTrack: (track: Track) => void
+  setTrack: (track: PlayerTrack) => void
+  clearTrack: () => void
   play: () => void
   pause: () => void
   togglePlay: () => void
@@ -35,6 +39,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   currentTime: 0,
   duration: 0,
   setTrack: (track) => set({ currentTrack: track, isPlaying: true, currentTime: 0 }),
+  clearTrack: () => set({ currentTrack: null, isPlaying: false, currentTime: 0, duration: 0 }),
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
   togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
@@ -44,6 +49,17 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   setDuration: (duration) => set({ duration }),
 }))
 
+export function audioWorkToPlayerTrack(work: AudioWork): PlayerTrack {
+  return {
+    id: work.id,
+    title: work.title,
+    artist: work.author_username ? `@${work.author_username}` : work.author_id,
+    cover: work.cover_image_url,
+    audioUrl: work.audio_url,
+    kind: 'audio_work',
+  }
+}
+
 export function MusicPlayer() {
   const audioRef = useRef<HTMLAudioElement>(null)
   const {
@@ -52,11 +68,11 @@ export function MusicPlayer() {
     volume,
     currentTime,
     duration,
-    play,
     pause,
     togglePlay,
     setCurrentTime,
     setDuration,
+    clearTrack,
   } = usePlayerStore()
 
   useEffect(() => {
@@ -118,32 +134,48 @@ export function MusicPlayer() {
         onEnded={() => pause()}
       />
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-50">
+      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-slate-950/92 text-white shadow-2xl backdrop-blur-xl">
         <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center gap-4">
-            <img
-              src={currentTrack.cover}
-              alt={currentTrack.title}
-              className="w-14 h-14 rounded object-cover"
-            />
-
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{currentTrack.title}</p>
-              <p className="text-sm text-gray-500 truncate">{currentTrack.artist}</p>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-emerald-500/30 to-cyan-500/20"
+              style={
+                currentTrack.cover
+                  ? {
+                      backgroundImage: `url(${currentTrack.cover})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }
+                  : undefined
+              }
+            >
+              {!currentTrack.cover ? <AudioLines className="h-5 w-5 text-white/80" /> : null}
             </div>
 
-            <div className="flex items-center gap-4 flex-1">
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate">{currentTrack.title}</p>
+              <div className="mt-1 flex items-center gap-2 text-sm text-slate-300">
+                <span className="truncate">{currentTrack.artist}</span>
+                <span className="text-slate-600">·</span>
+                <span className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.18em] text-emerald-300">
+                  <Waves className="h-3 w-3" />
+                  Audio Work
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 md:w-[460px]">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={togglePlay}
-                className="w-20"
+                className="w-20 bg-white/10 text-white hover:bg-white/20"
               >
-                {isPlaying ? '暂停' : '播放'}
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               </Button>
 
-              <div className="flex-1 flex items-center gap-2">
-                <span className="text-xs text-gray-500 w-10 text-right">
+              <div className="flex flex-1 items-center gap-2">
+                <span className="w-10 text-right text-xs text-slate-400">
                   {formatTime(currentTime)}
                 </span>
                 <input
@@ -152,12 +184,21 @@ export function MusicPlayer() {
                   max={duration || 0}
                   value={currentTime}
                   onChange={handleSeek}
-                  className="flex-1"
+                  className="flex-1 accent-emerald-400"
                 />
-                <span className="text-xs text-gray-500 w-10">
+                <span className="w-10 text-xs text-slate-400">
                   {formatTime(duration)}
                 </span>
               </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearTrack}
+                className="text-slate-300 hover:bg-white/10 hover:text-white"
+              >
+                关闭
+              </Button>
             </div>
           </div>
         </div>

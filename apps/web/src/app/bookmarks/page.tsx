@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ElementType } from "react";
 import { Bookmark, Calendar, Users, FileText, Trash2 } from "lucide-react";
-import { apiClient, Event, Group, Post } from "@/lib/api-client";
+import { apiClient, AudioWork, Event, Group, Post } from "@/lib/api-client";
+import { AudioWorkCard } from "@/components/audio/audio-work-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PostCard } from "@/components/post/post-card";
 import { Button } from "@/components/ui/button";
 
-type TabKey = "posts" | "groups" | "events";
+type TabKey = "posts" | "groups" | "events" | "audio";
 type SortKey = "latest" | "oldest";
 
 export default function BookmarksPage() {
@@ -18,6 +19,7 @@ export default function BookmarksPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [audioWorks, setAudioWorks] = useState<AudioWork[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,11 +39,15 @@ export default function BookmarksPage() {
       apiClient
         .getBookmarkedEventsWithSort(1, 20, sort)
         .catch(() => ({ events: [] })),
+      apiClient
+        .getBookmarkedAudioWorksWithSort(1, 20, sort)
+        .catch(() => ({ works: [] })),
     ])
-      .then(([postsRes, groupsRes, eventsRes]) => {
+      .then(([postsRes, groupsRes, eventsRes, audioWorksRes]) => {
         setPosts(postsRes.posts ?? []);
         setGroups(groupsRes.groups ?? []);
         setEvents(eventsRes.events ?? []);
+        setAudioWorks(audioWorksRes.works ?? []);
       })
       .finally(() => setLoading(false));
   }, [sort]);
@@ -59,7 +65,7 @@ export default function BookmarksPage() {
   async function handleBatchRemove() {
     if (selectedIds.length === 0) return;
     const targetType =
-      tab === "posts" ? "post" : tab === "groups" ? "group" : "event";
+      tab === "posts" ? "post" : tab === "groups" ? "group" : tab === "events" ? "event" : "audio_work";
 
     await apiClient.batchDeleteBookmarks(targetType, selectedIds);
 
@@ -69,8 +75,12 @@ export default function BookmarksPage() {
       setGroups((prev) =>
         prev.filter((item) => !selectedIds.includes(item.id)),
       );
-    } else {
+    } else if (tab === "events") {
       setEvents((prev) =>
+        prev.filter((item) => !selectedIds.includes(item.id)),
+      );
+    } else {
+      setAudioWorks((prev) =>
         prev.filter((item) => !selectedIds.includes(item.id)),
       );
     }
@@ -121,6 +131,9 @@ export default function BookmarksPage() {
           </TabsTrigger>
           <TabsTrigger value="events" className="flex-1">
             活动
+          </TabsTrigger>
+          <TabsTrigger value="audio" className="flex-1">
+            音频
           </TabsTrigger>
         </TabsList>
 
@@ -252,6 +265,43 @@ export default function BookmarksPage() {
                       {event.is_online ? "线上" : event.location || "线下"}
                     </p>
                   </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="audio">
+          {loading ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="h-36 rounded-xl bg-muted animate-pulse"
+                />
+              ))}
+            </div>
+          ) : audioWorks.length === 0 ? (
+            <EmptyState
+              icon={Bookmark}
+              title="还没有收藏任何音频作品"
+              description="把想反复回听的作品收藏起来，之后在这里统一管理。"
+              href="/audio/works"
+              action="去逛音频作品"
+            />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {audioWorks.map((work) => (
+                <div key={work.id} className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(work.id)}
+                      onChange={() => toggleSelected(work.id)}
+                    />
+                    选择这个作品
+                  </label>
+                  <AudioWorkCard work={work} compact />
                 </div>
               ))}
             </div>
