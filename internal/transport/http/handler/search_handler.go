@@ -11,18 +11,20 @@ import (
 )
 
 type SearchHandler struct {
-	musicService  *usecase.MusicService
-	searchService *usecase.SearchService
-	postService   *usecase.PostService
-	userService   *usecase.UserService
+	musicService     *usecase.MusicService
+	searchService    *usecase.SearchService
+	postService      *usecase.PostService
+	userService      *usecase.UserService
+	audioWorkService *usecase.AudioWorkService
 }
 
-func NewSearchHandler(musicService *usecase.MusicService, searchService *usecase.SearchService, postService *usecase.PostService, userService *usecase.UserService) *SearchHandler {
+func NewSearchHandler(musicService *usecase.MusicService, searchService *usecase.SearchService, postService *usecase.PostService, userService *usecase.UserService, audioWorkService *usecase.AudioWorkService) *SearchHandler {
 	return &SearchHandler{
-		musicService:  musicService,
-		searchService: searchService,
-		postService:   postService,
-		userService:   userService,
+		musicService:     musicService,
+		searchService:    searchService,
+		postService:      postService,
+		userService:      userService,
+		audioWorkService: audioWorkService,
 	}
 }
 
@@ -34,7 +36,7 @@ func (h *SearchHandler) SearchAll(c *gin.Context) {
 		return
 	}
 
-	var posts, users, albums any
+	var posts, users, albums, audioWorks any
 
 	if h.postService != nil {
 		p, _ := h.postService.SearchPosts(c.Request.Context(), query, 20)
@@ -48,12 +50,22 @@ func (h *SearchHandler) SearchAll(c *gin.Context) {
 		a, _ := h.musicService.SearchAlbums(c.Request.Context(), query, 10)
 		albums = a
 	}
+	if h.audioWorkService != nil {
+		w, _, _ := h.audioWorkService.ListPublicWorks(c.Request.Context(), usecase.ListAudioWorksInput{
+			Search:   query,
+			Sort:     "recommended",
+			Page:     1,
+			PageSize: 10,
+		})
+		audioWorks = w
+	}
 
 	response.Success(c, gin.H{
-		"posts":  posts,
-		"users":  users,
-		"albums": albums,
-		"query":  query,
+		"posts":       posts,
+		"users":       users,
+		"albums":      albums,
+		"audio_works": audioWorks,
+		"query":       query,
 	})
 }
 

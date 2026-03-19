@@ -899,6 +899,7 @@ class ApiClient {
       albums: any[];
       users?: any[];
       posts?: any[];
+      audio_works?: AudioWork[];
       query: string;
     }>(`/search?q=${encodeURIComponent(query)}`);
   }
@@ -1090,10 +1091,16 @@ class ApiClient {
   async listAudioWorks(options?: {
     page?: number;
     page_size?: number;
+    search?: string;
+    tag?: string;
+    sort?: "latest" | "oldest" | "popular" | "recommended";
   }) {
     const q = new URLSearchParams();
     if (options?.page) q.set("page", String(options.page));
     if (options?.page_size) q.set("page_size", String(options.page_size));
+    if (options?.search) q.set("q", options.search);
+    if (options?.tag) q.set("tag", options.tag);
+    if (options?.sort) q.set("sort", options.sort);
     return this.get<{
       items: AudioWork[];
       total: number;

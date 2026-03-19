@@ -45,6 +45,9 @@ type ListFilter struct {
 	AuthorID         *uuid.UUID
 	Visibility       *Visibility
 	ModerationStatus *post.ModerationStatus
+	Search           string
+	Tag              string
+	Sort             string
 	Page             int
 	PageSize         int
 }

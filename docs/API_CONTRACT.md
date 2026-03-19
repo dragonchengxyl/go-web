@@ -92,6 +92,15 @@
 - `POST /api/v1/audio/works/:id/bookmark`
 - `DELETE /api/v1/audio/works/:id/bookmark`
 
+音频作品发现能力当前已补齐：
+
+- 全局搜索 `/api/v1/search?q=...` 已返回 `audio_works`
+- `/api/v1/audio/works` 支持服务端排序与筛选
+- 目前支持的查询参数：
+  - `q`
+  - `tag`
+  - `sort=latest|oldest|popular|recommended`
+
 当前这条链路是一个可跑的 MVP：
 
 - 任务类型支持 `ai_music` / `voice_convert` / `voice_enhance` / `audio_master`

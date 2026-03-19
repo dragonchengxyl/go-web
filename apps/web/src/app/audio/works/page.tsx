@@ -14,8 +14,14 @@ export default function AudioWorksPage() {
   const [tag, setTag] = useState('all');
 
   const worksQuery = useQuery({
-    queryKey: ['audio-works-public'],
-    queryFn: () => apiClient.listAudioWorks({ page: 1, page_size: 60 }),
+    queryKey: ['audio-works-public', sort, tag],
+    queryFn: () =>
+      apiClient.listAudioWorks({
+        page: 1,
+        page_size: 60,
+        sort,
+        tag: tag === 'all' ? undefined : tag,
+      }),
   });
 
   const works = worksQuery.data?.items ?? EMPTY_WORKS;
@@ -24,18 +30,6 @@ export default function AudioWorksPage() {
     works.forEach((work) => (work.tags ?? []).forEach((item) => set.add(item)));
     return ['all', ...Array.from(set).sort()];
   }, [works]);
-  const filteredWorks = useMemo(() => {
-    const byTag = tag === 'all' ? works : works.filter((work) => (work.tags ?? []).includes(tag));
-    const sorted = [...byTag];
-    if (sort === 'oldest') {
-      sorted.sort((a, b) => new Date(a.published_at).getTime() - new Date(b.published_at).getTime());
-    } else if (sort === 'popular') {
-      sorted.sort((a, b) => b.like_count - a.like_count || b.comment_count - a.comment_count);
-    } else {
-      sorted.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
-    }
-    return sorted;
-  }, [works, sort, tag]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-12 pt-20">
@@ -99,7 +93,7 @@ export default function AudioWorksPage() {
             </div>
           ))}
         </div>
-      ) : filteredWorks.length === 0 ? (
+      ) : works.length === 0 ? (
         <div className="rounded-[24px] border border-dashed border-border bg-muted/10 px-6 py-14 text-center">
           <AudioLines className="mx-auto mb-4 h-10 w-10 text-muted-foreground/50" />
           <p className="text-base font-medium">当前筛选条件下没有作品</p>
@@ -107,7 +101,7 @@ export default function AudioWorksPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredWorks.map((work) => (
+          {works.map((work) => (
             <AudioWorkCard key={work.id} work={work} />
           ))}
         </div>

@@ -3,9 +3,10 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiClient, Post, Group } from '@/lib/api-client';
+import { apiClient, AudioWork, Post, Group } from '@/lib/api-client';
+import { AudioWorkCard } from '@/components/audio/audio-work-card';
 import { PostCard } from '@/components/post/post-card';
-import { Users, FileText } from 'lucide-react';
+import { Users, FileText, AudioLines } from 'lucide-react';
 
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query.trim() || !text) return <>{text}</>;
@@ -39,7 +40,7 @@ interface UserResult {
   bio?: string;
 }
 
-type TabType = 'posts' | 'users' | 'groups' | 'albums';
+type TabType = 'posts' | 'users' | 'groups' | 'albums' | 'audio';
 
 const GRADIENTS = [
   'from-purple-500 to-teal-400',
@@ -65,6 +66,7 @@ function SearchContent() {
   const [users, setUsers] = useState<UserResult[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [albums, setAlbums] = useState<any[]>([]);
+  const [audioWorks, setAudioWorks] = useState<AudioWork[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -77,13 +79,14 @@ function SearchContent() {
     setLoading(true);
 
     Promise.all([
-      apiClient.searchAll(query).catch(() => ({ albums: [], users: [], posts: [], query })),
+      apiClient.searchAll(query).catch(() => ({ albums: [], users: [], posts: [], audio_works: [], query })),
       apiClient.listGroups({ search: query, page: 1, page_size: 20 }).catch(() => ({ groups: [] })),
     ]).then(([res, groupRes]) => {
       setPosts((res.posts as Post[]) || []);
       setUsers((res.users as UserResult[]) || []);
       setGroups(groupRes.groups || []);
       setAlbums(res.albums || []);
+      setAudioWorks(res.audio_works || []);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [query]);
 
@@ -107,6 +110,7 @@ function SearchContent() {
     { id: 'users', label: '用户', count: users.length },
     { id: 'groups', label: '圈子', count: groups.length },
     { id: 'albums', label: '音乐', count: albums.length },
+    { id: 'audio', label: '音频', count: audioWorks.length },
   ];
 
   return (
@@ -231,6 +235,23 @@ function SearchContent() {
                     </div>
                   </article>
                 ))
+              )}
+            </div>
+          )}
+
+          {tab === 'audio' && (
+            <div className="space-y-4">
+              {audioWorks.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground">
+                  <AudioLines className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p>未找到相关音频作品</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {audioWorks.map((work) => (
+                    <AudioWorkCard key={work.id} work={work} compact />
+                  ))}
+                </div>
               )}
             </div>
           )}

@@ -38,7 +38,7 @@ export default function ExplorePage() {
     if (token) { apiClient.setToken(token); }
     apiClient.getHotTags().then(setHotTags).catch(() => {});
     apiClient
-      .listAudioWorks({ page: 1, page_size: 4 })
+      .listAudioWorks({ page: 1, page_size: 4, sort: 'recommended' })
       .then((res) => setAudioWorks(res.items ?? []))
       .catch(() => setAudioWorks([]))
       .finally(() => setAudioLoading(false));

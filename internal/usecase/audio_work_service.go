@@ -61,6 +61,9 @@ type PublishAudioWorkInput struct {
 }
 
 type ListAudioWorksInput struct {
+	Search   string
+	Tag      string
+	Sort     string
 	Page     int
 	PageSize int
 }
@@ -161,6 +164,9 @@ func (s *AudioWorkService) ListPublicWorks(ctx context.Context, input ListAudioW
 	items, total, err := s.workRepo.List(ctx, audiowork.ListFilter{
 		Visibility:       &visibility,
 		ModerationStatus: &status,
+		Search:           input.Search,
+		Tag:              input.Tag,
+		Sort:             input.Sort,
 		Page:             input.Page,
 		PageSize:         input.PageSize,
 	})
@@ -172,7 +178,10 @@ func (s *AudioWorkService) ListPublicWorks(ctx context.Context, input ListAudioW
 
 func (s *AudioWorkService) ListMyWorks(ctx context.Context, userID uuid.UUID, input ListAudioWorksInput) ([]*audiowork.Work, int64, error) {
 	items, total, err := s.workRepo.List(ctx, audiowork.ListFilter{
-		AuthorID: &userID,
+		AuthorID: userIDPtr(userID),
+		Search:   input.Search,
+		Tag:      input.Tag,
+		Sort:     input.Sort,
 		Page:     input.Page,
 		PageSize: input.PageSize,
 	})
@@ -189,6 +198,9 @@ func (s *AudioWorkService) ListUserPublicWorks(ctx context.Context, userID uuid.
 		AuthorID:         &userID,
 		Visibility:       &visibility,
 		ModerationStatus: &status,
+		Search:           input.Search,
+		Tag:              input.Tag,
+		Sort:             input.Sort,
 		Page:             input.Page,
 		PageSize:         input.PageSize,
 	})
@@ -508,4 +520,8 @@ func normalizeTags(tags []string) []string {
 		result = append(result, tag)
 	}
 	return result
+}
+
+func userIDPtr(id uuid.UUID) *uuid.UUID {
+	return &id
 }

@@ -276,7 +276,7 @@ export default function HomePage() {
       apiClient.getExplore(1, 18),
       apiClient.listGroups({ page_size: 6 }),
       apiClient.listEvents(1, 4),
-      apiClient.listAudioWorks({ page_size: 6 }),
+      apiClient.listAudioWorks({ page_size: 6, sort: 'popular' }),
       apiClient.getLeaderboard(5),
     ]).then(([p, g, e, a, l]) => {
       if (p.status === 'fulfilled') setPosts(p.value.posts ?? []);

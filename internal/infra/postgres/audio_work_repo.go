@@ -127,6 +127,14 @@ func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFil
 		args = append(args, *filter.ModerationStatus)
 		conditions = append(conditions, fmt.Sprintf("w.moderation_status = $%d", len(args)))
 	}
+	if strings.TrimSpace(filter.Search) != "" {
+		args = append(args, "%"+strings.TrimSpace(filter.Search)+"%")
+		conditions = append(conditions, fmt.Sprintf("(w.title ILIKE $%d OR COALESCE(w.description, '') ILIKE $%d OR COALESCE(w.tags::text, '') ILIKE $%d)", len(args), len(args), len(args)))
+	}
+	if strings.TrimSpace(filter.Tag) != "" {
+		args = append(args, strings.TrimSpace(filter.Tag))
+		conditions = append(conditions, fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements_text(w.tags) AS tag WHERE tag = $%d)", len(args)))
+	}
 	if len(conditions) == 0 {
 		conditions = append(conditions, "TRUE")
 	}
@@ -136,6 +144,16 @@ func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFil
 	limitPos := len(args) - 1
 	offsetPos := len(args)
 
+	orderBy := "w.published_at DESC"
+	switch filter.Sort {
+	case "oldest":
+		orderBy = "w.published_at ASC"
+	case "popular":
+		orderBy = "w.like_count DESC, w.comment_count DESC, w.published_at DESC"
+	case "recommended":
+		orderBy = "w.like_count DESC, w.comment_count DESC, w.published_at DESC"
+	}
+
 	query := fmt.Sprintf(`
 		SELECT w.id, w.author_id, w.source_job_id, w.title, w.description, w.cover_image_url, w.audio_url,
 		       w.duration_sec, w.visibility, w.moderation_status, w.moderation_note, w.like_count, w.comment_count, w.tags, w.waveform_preview, w.metadata,
@@ -144,9 +162,9 @@ func (r *AudioWorkRepository) List(ctx context.Context, filter audiowork.ListFil
 		FROM audio_works w
 		LEFT JOIN users u ON u.id = w.author_id
 		WHERE %s
-		ORDER BY w.published_at DESC
+		ORDER BY %s
 		LIMIT $%d OFFSET $%d
-	`, strings.Join(conditions, " AND "), limitPos, offsetPos)
+	`, strings.Join(conditions, " AND "), orderBy, limitPos, offsetPos)
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
