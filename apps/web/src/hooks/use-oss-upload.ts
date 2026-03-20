@@ -35,14 +35,46 @@ export function useOSSUpload() {
         return
       }
 
+      const uploadViaLocalAPI = async () => {
+        const result = await apiClient.uploadFile('/upload/image', file)
+        return result.url
+      }
+
       let policy
       try {
         policy = await apiClient.getOSSPolicy(purpose)
-      } catch (err: any) {
-        const msg = err?.message ?? '获取上传凭证失败'
-        setError(msg)
-        reject(new Error(msg))
-        return
+      } catch {
+        try {
+          setUploading(true)
+          const localURL = await uploadViaLocalAPI()
+          setUploading(false)
+          setProgress(100)
+          resolve(localURL)
+          return
+        } catch (localErr: any) {
+          setUploading(false)
+          const msg = localErr?.message ?? '获取上传凭证失败'
+          setError(msg)
+          reject(new Error(msg))
+          return
+        }
+      }
+
+      if (!policy?.host || !policy?.dir) {
+        try {
+          setUploading(true)
+          const localURL = await uploadViaLocalAPI()
+          setUploading(false)
+          setProgress(100)
+          resolve(localURL)
+          return
+        } catch (localErr: any) {
+          setUploading(false)
+          const msg = localErr?.message ?? '上传凭证无效'
+          setError(msg)
+          reject(new Error(msg))
+          return
+        }
       }
 
       const key = generateKey(policy.dir, file)
@@ -65,6 +97,22 @@ export function useOSSUpload() {
         }
       }
 
+      const fallbackToLocal = async () => {
+        try {
+          const localURL = await uploadViaLocalAPI()
+          setUploading(false)
+          abortRef.current = null
+          setProgress(100)
+          resolve(localURL)
+        } catch (localErr: any) {
+          setUploading(false)
+          abortRef.current = null
+          const msg = localErr?.message ?? '上传失败'
+          setError(msg)
+          reject(new Error(msg))
+        }
+      }
+
       xhr.onload = () => {
         setUploading(false)
         abortRef.current = null
@@ -72,27 +120,17 @@ export function useOSSUpload() {
           setProgress(100)
           resolve(`${policy.host}/${key}`)
         } else {
-          const msg = `上传失败 (${xhr.status})`
-          setError(msg)
-          reject(new Error(msg))
+          void fallbackToLocal()
         }
       }
 
       xhr.onerror = () => {
-        setUploading(false)
-        abortRef.current = null
-        const msg = '网络错误，上传失败'
-        setError(msg)
-        reject(new Error(msg))
+        void fallbackToLocal()
       }
 
       xhr.timeout = 30000
       xhr.ontimeout = () => {
-        setUploading(false)
-        abortRef.current = null
-        const msg = '上传超时'
-        setError(msg)
-        reject(new Error(msg))
+        void fallbackToLocal()
       }
 
       xhr.open('POST', policy.host)

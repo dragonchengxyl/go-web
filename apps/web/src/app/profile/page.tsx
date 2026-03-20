@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { useOSSUpload } from '@/hooks/use-oss-upload'
 import { Camera, Loader2, MapPin, Globe, Edit2, Grid3X3, Heart, MessageCircle } from 'lucide-react'
 
 interface UserProfile {
@@ -51,6 +52,7 @@ const STATUS_NOTICE: Record<string, string> = {
 export default function ProfilePage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { upload: uploadImage } = useOSSUpload()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState<FollowStats | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
@@ -100,7 +102,7 @@ export default function ProfilePage() {
     if (!file) return
     setAvatarUploading(true)
     try {
-      const { url } = await apiClient.uploadFile('/upload/image', file)
+      const url = await uploadImage(file, 'avatar')
       const updated = await apiClient.updateProfile({ avatar_key: url })
       setProfile(updated)
     } catch (e: any) {

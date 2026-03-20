@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/audiowork"
 	"github.com/studio/platform/internal/domain/bookmark"
+	"github.com/studio/platform/internal/observability/audiometrics"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -81,6 +82,54 @@ func (h *AudioWorkHandler) ListRelatedWorks(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"items": items})
+}
+
+// RecordPlaybackEvent handles POST /api/v1/audio/works/:id/playback-events.
+func (h *AudioWorkHandler) RecordPlaybackEvent(c *gin.Context) {
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的音频作品ID"))
+		return
+	}
+
+	var req struct {
+		Event       string  `json:"event" binding:"required"`
+		PositionSec float64 `json:"position_sec"`
+		SourceKind  string  `json:"source_kind"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	allowed := map[string]struct{}{
+		"open":          {},
+		"play":          {},
+		"pause":         {},
+		"seek":          {},
+		"complete":      {},
+		"skip_next":     {},
+		"skip_previous": {},
+	}
+	if _, ok := allowed[req.Event]; !ok {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "无效的播放事件"))
+		return
+	}
+
+	var viewerID *uuid.UUID
+	authenticated := false
+	if value, ok := getUserID(c); ok {
+		viewerID = &value
+		authenticated = true
+	}
+
+	if _, err := h.service.GetWorkForViewer(c.Request.Context(), workID, viewerID); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	audiometrics.RecordPlaybackEvent(req.Event, req.SourceKind, authenticated, req.PositionSec)
+	response.Success(c, gin.H{"recorded": true})
 }
 
 // ListMyWorks handles GET /api/v1/users/me/audio/works.

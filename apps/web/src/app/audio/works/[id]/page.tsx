@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
@@ -123,6 +123,7 @@ export default function AudioWorkDetailPage() {
   const pathname = usePathname();
   const workId = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const { isLoggedIn, loading: authLoading } = useAuth();
+  const openedEventRef = useRef<string | null>(null);
   const [commentDraft, setCommentDraft] = useState('');
   const [reportReason, setReportReason] = useState('违规内容');
   const [reportDescription, setReportDescription] = useState('');
@@ -228,6 +229,17 @@ export default function AudioWorkDetailPage() {
       setShowReportForm(false);
     },
   });
+
+  useEffect(() => {
+    const openedWorkId = workQuery.data?.id;
+    if (!openedWorkId || openedEventRef.current === openedWorkId) return;
+    openedEventRef.current = openedWorkId;
+    void apiClient.recordAudioPlaybackEvent(openedWorkId, {
+      event: 'open',
+      position_sec: 0,
+      source_kind: session?.sourceContext?.kind || 'audio_work_detail',
+    }).catch(() => undefined);
+  }, [session?.sourceContext?.kind, workQuery.data?.id]);
 
   if (workQuery.isLoading) {
     return (
@@ -340,6 +352,11 @@ export default function AudioWorkDetailPage() {
 
     const targetIndex = chooseQueueIndex(displayedQueue.length, playbackReferenceIndex, 'previous', repeatMode, shuffle);
     if (targetIndex >= 0) {
+      void apiClient.recordAudioPlaybackEvent(work.id, {
+        event: 'skip_previous',
+        position_sec: activeCurrentTime,
+        source_kind: sourceContext?.kind,
+      }).catch(() => undefined);
       startDetailQueueAt(targetIndex);
     }
   }
@@ -347,6 +364,11 @@ export default function AudioWorkDetailPage() {
   function handleNext() {
     const targetIndex = chooseQueueIndex(displayedQueue.length, playbackReferenceIndex, 'next', repeatMode, shuffle);
     if (targetIndex >= 0) {
+      void apiClient.recordAudioPlaybackEvent(work.id, {
+        event: 'skip_next',
+        position_sec: activeCurrentTime,
+        source_kind: sourceContext?.kind,
+      }).catch(() => undefined);
       startDetailQueueAt(targetIndex);
     }
   }

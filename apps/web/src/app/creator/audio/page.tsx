@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRight,
@@ -21,6 +21,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { useOSSUpload } from '@/hooks/use-oss-upload';
 import { apiClient, type AudioJob, type AudioJobStatus, type AudioJobTaskType, type AudioWork } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -147,6 +148,8 @@ function readRecord(record: Record<string, unknown> | undefined, key: string) {
 export default function CreatorAudioPage() {
   const queryClient = useQueryClient();
   const { isLoggedIn, loading } = useAuth();
+  const coverImageInputRef = useRef<HTMLInputElement>(null);
+  const { upload: uploadCoverImage, uploading: coverUploading, error: coverUploadError } = useOSSUpload();
 
   const [title, setTitle] = useState('');
   const [taskType, setTaskType] = useState<AudioJobTaskType>('ai_music');
@@ -355,6 +358,20 @@ export default function CreatorAudioPage() {
       visibility: 'public',
       tags: '',
     });
+  }
+
+  async function handleCoverImageChange(file?: File | null) {
+    if (!file) return;
+    try {
+      const url = await uploadCoverImage(file, 'audio-cover');
+      setWorkForm((prev) => ({ ...prev, cover_image_url: url }));
+    } catch {
+      // hook already stores upload error for display
+    } finally {
+      if (coverImageInputRef.current) {
+        coverImageInputRef.current.value = '';
+      }
+    }
   }
 
   if (loading) {
@@ -666,11 +683,38 @@ export default function CreatorAudioPage() {
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <label className="mb-2 block text-sm font-medium text-foreground">封面地址</label>
-                        <Input
-                          value={workForm.cover_image_url}
-                          onChange={(event) => setWorkForm((prev) => ({ ...prev, cover_image_url: event.target.value }))}
-                          placeholder="/uploads/images/..."
-                        />
+                        <div className="space-y-2">
+                          <Input
+                            value={workForm.cover_image_url}
+                            onChange={(event) => setWorkForm((prev) => ({ ...prev, cover_image_url: event.target.value }))}
+                            placeholder="/uploads/images/... 或对象存储地址"
+                          />
+                          <div className="flex items-center gap-3">
+                            <input
+                              ref={coverImageInputRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(event) => void handleCoverImageChange(event.target.files?.[0])}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => coverImageInputRef.current?.click()}
+                              disabled={coverUploading}
+                            >
+                              {coverUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                              上传封面
+                            </Button>
+                            {workForm.cover_image_url ? (
+                              <span className="line-clamp-1 text-xs text-muted-foreground">已选择封面地址</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">支持 OSS 直传，失败时回退到本地上传</span>
+                            )}
+                          </div>
+                          {coverUploadError ? <p className="text-xs text-rose-600">{coverUploadError}</p> : null}
+                        </div>
                       </div>
                       <div>
                         <label className="mb-2 block text-sm font-medium text-foreground">标签</label>

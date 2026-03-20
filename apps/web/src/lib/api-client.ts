@@ -1137,6 +1137,17 @@ class ApiClient {
     return this.get<{ items: AudioWork[] }>(`/audio/works/${id}/related?${q.toString()}`);
   }
 
+  async recordAudioPlaybackEvent(
+    id: string,
+    payload: {
+      event: "open" | "play" | "pause" | "seek" | "complete" | "skip_next" | "skip_previous";
+      position_sec?: number;
+      source_kind?: string;
+    },
+  ) {
+    return this.post<{ recorded: boolean }>(`/audio/works/${id}/playback-events`, payload);
+  }
+
   async updateAudioWork(
     id: string,
     data: {

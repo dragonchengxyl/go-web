@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import { useEffect, useRef } from 'react'
 import { AudioLines, Pause, Play, Waves } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { type AudioWork } from '@/lib/api-client'
+import { apiClient, type AudioWork } from '@/lib/api-client'
 
 export interface PlayerTrack {
   id: string
@@ -502,8 +502,11 @@ export function audioWorksToPlayerTracks(works: AudioWork[]) {
 export function MusicPlayer() {
   const audioRef = useRef<HTMLAudioElement>(null)
   const hydratedHistoryRef = useRef(false)
+  const previousTrackIdRef = useRef<string | null>(null)
+  const previousPlayingRef = useRef(false)
   const {
     currentTrack,
+    sourceContext,
     isPlaying,
     volume,
     currentTime,
@@ -554,6 +557,37 @@ export function MusicPlayer() {
   }, [currentTrack, rememberTrack])
 
   useEffect(() => {
+    if (!currentTrack) {
+      previousTrackIdRef.current = null
+      previousPlayingRef.current = false
+      return
+    }
+
+    const trackChanged = previousTrackIdRef.current !== currentTrack.id
+    const resumed = !previousPlayingRef.current && isPlaying
+    const paused = previousPlayingRef.current && !isPlaying
+
+    if ((trackChanged && isPlaying) || (!trackChanged && resumed)) {
+      void apiClient.recordAudioPlaybackEvent(currentTrack.id, {
+        event: 'play',
+        position_sec: currentTime,
+        source_kind: sourceContext?.kind,
+      }).catch(() => undefined)
+    }
+
+    if (paused) {
+      void apiClient.recordAudioPlaybackEvent(currentTrack.id, {
+        event: 'pause',
+        position_sec: currentTime,
+        source_kind: sourceContext?.kind,
+      }).catch(() => undefined)
+    }
+
+    previousTrackIdRef.current = currentTrack.id
+    previousPlayingRef.current = isPlaying
+  }, [currentTime, currentTrack, isPlaying, sourceContext?.kind])
+
+  useEffect(() => {
     if (!audioRef.current || !Number.isFinite(currentTime)) return
     if (Math.abs(audioRef.current.currentTime - currentTime) > 0.5) {
       audioRef.current.currentTime = currentTime
@@ -577,6 +611,13 @@ export function MusicPlayer() {
     if (audioRef.current) {
       audioRef.current.currentTime = time
       setCurrentTime(time)
+      if (currentTrack) {
+        void apiClient.recordAudioPlaybackEvent(currentTrack.id, {
+          event: 'seek',
+          position_sec: time,
+          source_kind: sourceContext?.kind,
+        }).catch(() => undefined)
+      }
     }
   }
 
@@ -595,7 +636,16 @@ export function MusicPlayer() {
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
-        onEnded={handleTrackEnded}
+        onEnded={() => {
+          if (currentTrack) {
+            void apiClient.recordAudioPlaybackEvent(currentTrack.id, {
+              event: 'complete',
+              position_sec: duration,
+              source_kind: sourceContext?.kind,
+            }).catch(() => undefined)
+          }
+          handleTrackEnded()
+        }}
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-slate-950/92 text-white shadow-2xl backdrop-blur-xl">

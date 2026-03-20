@@ -185,6 +185,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			audioWorks.GET("", audioWorkHandler.ListPublicWorks)
 			audioWorks.GET("/:id/related", audioWorkHandler.ListRelatedWorks)
 			audioWorks.GET("/:id", audioWorkHandler.GetPublicWork)
+			audioWorks.POST("/:id/playback-events", audioWorkHandler.RecordPlaybackEvent)
 		}
 
 		// Comments (public list)
