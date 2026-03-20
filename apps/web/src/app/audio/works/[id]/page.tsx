@@ -133,6 +133,7 @@ export default function AudioWorkDetailPage() {
     isPlaying,
     session,
     queue,
+    history,
     currentIndex,
     repeatMode,
     shuffle,
@@ -173,7 +174,7 @@ export default function AudioWorkDetailPage() {
 
   const recommendationsQuery = useQuery({
     queryKey: ['audio-work-recommendations', workId],
-    queryFn: () => apiClient.listAudioWorks({ page: 1, page_size: 10, sort: 'popular' }),
+    queryFn: () => apiClient.getRelatedAudioWorks(workId as string, 8),
     enabled: !!workId,
   });
 
@@ -295,9 +296,8 @@ export default function AudioWorkDetailPage() {
       };
 
   const creatorOtherWorks = detailQueueWorks.filter((item) => item.id !== work.id).slice(0, 5);
-  const recommendedWorks = (recommendationsQuery.data?.items ?? [])
-    .filter((item) => item.id !== work.id && item.author_id !== work.author_id)
-    .slice(0, 5);
+  const recommendedWorks = (recommendationsQuery.data?.items ?? []).slice(0, 5);
+  const recentHistory = history.filter((track) => track.id !== work.id).slice(0, 5);
 
   function startDetailQueueAt(index: number) {
     const track = displayedQueue[index];
@@ -705,7 +705,7 @@ export default function AudioWorkDetailPage() {
                 <Sparkles className="h-5 w-5 text-fuchsia-500" />
                 推荐继续收听
               </CardTitle>
-              <CardDescription>基于公开作品热度给你更多可连续播放的内容。</CardDescription>
+              <CardDescription>专门的相关推荐接口会优先返回同作者和相近标签的公开作品。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4">
               {recommendationsQuery.isLoading ? (
@@ -735,6 +735,49 @@ export default function AudioWorkDetailPage() {
                       </Link>
                     </div>
                   </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden rounded-[28px] border-border/70 bg-card/95 shadow-sm">
+            <CardHeader className="border-b border-border/60 bg-muted/20">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <AudioLines className="h-5 w-5 text-amber-500" />
+                最近收听
+              </CardTitle>
+              <CardDescription>本地记录最近播放过的音频作品，为后续“继续收听”打基础。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 p-4">
+              {recentHistory.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/10 px-4 py-6 text-sm text-muted-foreground">
+                  暂时还没有最近收听记录。
+                </div>
+              ) : (
+                recentHistory.map((track) => (
+                  <button
+                    key={track.id}
+                    type="button"
+                    onClick={() => {
+                      setTrack(track, {
+                        queue: [track],
+                        currentIndex: 0,
+                        sourceContext: { kind: 'recent_history', label: '最近收听', href: `/audio/works/${track.id}` },
+                        openedFrom: pathname,
+                        autoplay: true,
+                      });
+                      router.push(`/audio/works/${track.id}`);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-border/70 bg-background px-4 py-3 text-left transition-colors hover:bg-muted/40"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted">
+                      <Play className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{track.title}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{track.artist}</p>
+                    </div>
+                  </button>
                 ))
               )}
             </CardContent>

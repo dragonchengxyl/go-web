@@ -55,10 +55,14 @@ export interface SetTrackOptions {
   autoplay?: boolean
 }
 
+const PLAYER_HISTORY_KEY = 'audio_player_history'
+const MAX_PLAYER_HISTORY = 12
+
 interface PlayerState {
   session: PlayerSession | null
   currentTrack: PlayerTrack | null
   queue: PlayerTrack[]
+  history: PlayerTrack[]
   currentIndex: number
   repeatMode: PlayerRepeatMode
   shuffle: boolean
@@ -73,6 +77,8 @@ interface PlayerState {
   setTrack: (track: PlayerTrack, options?: SetTrackOptions) => void
   replaceQueue: (queue: PlayerTrack[], options?: Omit<PlayerSessionInput, 'queue'>) => void
   selectTrack: (trackId: string) => void
+  hydrateHistory: (tracks: PlayerTrack[]) => void
+  rememberTrack: (track: PlayerTrack) => void
   clearTrack: () => void
   play: () => void
   pause: () => void
@@ -90,6 +96,43 @@ interface PlayerState {
 }
 
 const DEFAULT_REPEAT_MODE: PlayerRepeatMode = 'off'
+
+function readStoredHistory(): PlayerTrack[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(PLAYER_HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is PlayerTrack => {
+      return (
+        !!item &&
+        typeof item === 'object' &&
+        typeof item.id === 'string' &&
+        typeof item.title === 'string' &&
+        typeof item.artist === 'string' &&
+        typeof item.audioUrl === 'string' &&
+        item.kind === 'audio_work'
+      )
+    })
+  } catch {
+    return []
+  }
+}
+
+function writeStoredHistory(history: PlayerTrack[]) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PLAYER_HISTORY_KEY, JSON.stringify(history))
+  } catch {
+    // ignore local persistence failures
+  }
+}
+
+function updateHistory(history: PlayerTrack[], track: PlayerTrack) {
+  const next = [track, ...history.filter((item) => item.id !== track.id)]
+  return next.slice(0, MAX_PLAYER_HISTORY)
+}
 
 function clampIndex(index: number | undefined, queueLength: number) {
   if (queueLength <= 0) return -1
@@ -211,6 +254,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   session: null,
   currentTrack: null,
   queue: [],
+  history: [],
   currentIndex: -1,
   repeatMode: DEFAULT_REPEAT_MODE,
   shuffle: false,
@@ -319,6 +363,15 @@ export const usePlayerStore = create<PlayerState>((set) => ({
           playbackVersion: state.playbackVersion + 1,
         }),
       }
+    }),
+
+  hydrateHistory: (tracks) => set({ history: tracks.slice(0, MAX_PLAYER_HISTORY) }),
+
+  rememberTrack: (track) =>
+    set((state) => {
+      const nextHistory = updateHistory(state.history, track)
+      writeStoredHistory(nextHistory)
+      return { history: nextHistory }
     }),
 
   clearTrack: () =>
@@ -448,6 +501,7 @@ export function audioWorksToPlayerTracks(works: AudioWork[]) {
 
 export function MusicPlayer() {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const hydratedHistoryRef = useRef(false)
   const {
     currentTrack,
     isPlaying,
@@ -457,10 +511,18 @@ export function MusicPlayer() {
     togglePlay,
     setCurrentTime,
     setDuration,
+    hydrateHistory,
+    rememberTrack,
     clearTrack,
     handleTrackEnded,
     playbackVersion,
   } = usePlayerStore()
+
+  useEffect(() => {
+    if (hydratedHistoryRef.current) return
+    hydratedHistoryRef.current = true
+    hydrateHistory(readStoredHistory())
+  }, [hydrateHistory])
 
   useEffect(() => {
     if (!audioRef.current) return
@@ -485,6 +547,11 @@ export function MusicPlayer() {
       void audioRef.current.play().catch(() => undefined)
     }
   }, [currentTrack, isPlaying, playbackVersion])
+
+  useEffect(() => {
+    if (!currentTrack) return
+    rememberTrack(currentTrack)
+  }, [currentTrack, rememberTrack])
 
   useEffect(() => {
     if (!audioRef.current || !Number.isFinite(currentTime)) return

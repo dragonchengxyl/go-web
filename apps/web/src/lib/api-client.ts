@@ -1131,6 +1131,12 @@ class ApiClient {
     return this.get<AudioWork>(`/audio/works/${id}`);
   }
 
+  async getRelatedAudioWorks(id: string, limit = 6) {
+    const q = new URLSearchParams();
+    if (limit > 0) q.set("limit", String(limit));
+    return this.get<{ items: AudioWork[] }>(`/audio/works/${id}/related?${q.toString()}`);
+  }
+
   async updateAudioWork(
     id: string,
     data: {

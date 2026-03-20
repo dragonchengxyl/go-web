@@ -210,6 +210,96 @@ func (s *AudioWorkService) ListUserPublicWorks(ctx context.Context, userID uuid.
 	return items, total, nil
 }
 
+func (s *AudioWorkService) ListRelatedWorks(ctx context.Context, workID uuid.UUID, viewerID *uuid.UUID, limit int) ([]*audiowork.Work, error) {
+	if limit <= 0 {
+		limit = 6
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	work, err := s.GetWorkForViewer(ctx, workID, viewerID)
+	if err != nil {
+		return nil, err
+	}
+
+	related := make([]*audiowork.Work, 0, limit)
+	seen := map[uuid.UUID]struct{}{
+		work.ID: {},
+	}
+
+	appendUnique := func(items []*audiowork.Work) {
+		for _, item := range items {
+			if item == nil {
+				continue
+			}
+			if _, exists := seen[item.ID]; exists {
+				continue
+			}
+			seen[item.ID] = struct{}{}
+			related = append(related, item)
+			if len(related) >= limit {
+				return
+			}
+		}
+	}
+
+	authorItems, _, err := s.ListUserPublicWorks(ctx, work.AuthorID, ListAudioWorksInput{
+		Page:     1,
+		PageSize: limit + 1,
+		Sort:     "popular",
+	})
+	if err != nil {
+		return nil, err
+	}
+	appendUnique(authorItems)
+
+	if len(related) < limit {
+		seenTags := make(map[string]struct{})
+		for _, tag := range work.Tags {
+			normalized := strings.TrimSpace(tag)
+			if normalized == "" {
+				continue
+			}
+			if _, exists := seenTags[normalized]; exists {
+				continue
+			}
+			seenTags[normalized] = struct{}{}
+
+			items, _, tagErr := s.ListPublicWorks(ctx, ListAudioWorksInput{
+				Tag:      normalized,
+				Sort:     "recommended",
+				Page:     1,
+				PageSize: limit,
+			})
+			if tagErr != nil {
+				return nil, tagErr
+			}
+			appendUnique(items)
+			if len(related) >= limit {
+				break
+			}
+		}
+	}
+
+	if len(related) < limit {
+		popularItems, _, err := s.ListPublicWorks(ctx, ListAudioWorksInput{
+			Sort:     "popular",
+			Page:     1,
+			PageSize: limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		appendUnique(popularItems)
+	}
+
+	if len(related) > limit {
+		related = related[:limit]
+	}
+	return related, nil
+}
+
 func (s *AudioWorkService) GetWorkForViewer(ctx context.Context, workID uuid.UUID, viewerID *uuid.UUID) (*audiowork.Work, error) {
 	work, err := s.workRepo.GetByID(ctx, workID)
 	if err != nil {

@@ -183,6 +183,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			audioWorks := v1.Group("/audio/works")
 			audioWorks.Use(authMiddleware.OptionalAuthenticate())
 			audioWorks.GET("", audioWorkHandler.ListPublicWorks)
+			audioWorks.GET("/:id/related", audioWorkHandler.ListRelatedWorks)
 			audioWorks.GET("/:id", audioWorkHandler.GetPublicWork)
 		}
 

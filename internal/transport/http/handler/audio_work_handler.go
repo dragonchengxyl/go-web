@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/audiowork"
@@ -51,6 +53,34 @@ func (h *AudioWorkHandler) GetPublicWork(c *gin.Context) {
 		return
 	}
 	response.Success(c, work)
+}
+
+// ListRelatedWorks handles GET /api/v1/audio/works/:id/related.
+func (h *AudioWorkHandler) ListRelatedWorks(c *gin.Context) {
+	workID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的音频作品ID"))
+		return
+	}
+
+	limit := 6
+	if raw := c.DefaultQuery("limit", "6"); raw != "" {
+		if value, atoiErr := strconv.Atoi(raw); atoiErr == nil && value > 0 {
+			limit = value
+		}
+	}
+
+	var viewerID *uuid.UUID
+	if value, ok := getUserID(c); ok {
+		viewerID = &value
+	}
+
+	items, err := h.service.ListRelatedWorks(c.Request.Context(), workID, viewerID, limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"items": items})
 }
 
 // ListMyWorks handles GET /api/v1/users/me/audio/works.
