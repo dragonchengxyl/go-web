@@ -332,7 +332,13 @@ export default function UserProfilePage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
           {audioWorks.map(work => (
-            <AudioWorkCard key={work.id} work={work} compact />
+            <AudioWorkCard
+              key={work.id}
+              work={work}
+              compact
+              queueWorks={audioWorks}
+              sourceContext={{ kind: 'user_audio', label: '创作者音频作品', href: `/users/${userId}`, entityId: userId }}
+            />
           ))}
         </div>
       )}

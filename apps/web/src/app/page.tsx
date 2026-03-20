@@ -535,7 +535,13 @@ export default function HomePage() {
           ) : audioWorks.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {audioWorks.map((work) => (
-                <AudioWorkCard key={work.id} work={work} compact />
+                <AudioWorkCard
+                  key={work.id}
+                  work={work}
+                  compact
+                  queueWorks={audioWorks}
+                  sourceContext={{ kind: 'home_latest_audio', label: '首页最新作品', href: '/' }}
+                />
               ))}
             </div>
           ) : (

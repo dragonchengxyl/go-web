@@ -301,7 +301,12 @@ export default function BookmarksPage() {
                     />
                     选择这个作品
                   </label>
-                  <AudioWorkCard work={work} compact />
+                  <AudioWorkCard
+                    work={work}
+                    compact
+                    queueWorks={audioWorks}
+                    sourceContext={{ kind: 'bookmark_audio', label: '收藏音频', href: '/bookmarks' }}
+                  />
                 </div>
               ))}
             </div>

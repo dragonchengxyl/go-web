@@ -203,7 +203,13 @@ export default function FeedPage() {
         ) : audioWorks.length > 0 ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {audioWorks.map((work) => (
-              <AudioWorkCard key={work.id} work={work} compact />
+              <AudioWorkCard
+                key={work.id}
+                work={work}
+                compact
+                queueWorks={audioWorks}
+                sourceContext={{ kind: 'feed_audio', label: '关注流音频', href: '/feed' }}
+              />
             ))}
           </div>
         ) : (

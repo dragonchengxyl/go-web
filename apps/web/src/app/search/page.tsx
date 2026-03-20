@@ -249,7 +249,17 @@ function SearchContent() {
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {audioWorks.map((work) => (
-                    <AudioWorkCard key={work.id} work={work} compact />
+                    <AudioWorkCard
+                      key={work.id}
+                      work={work}
+                      compact
+                      queueWorks={audioWorks}
+                      sourceContext={{
+                        kind: 'search_audio',
+                        label: `搜索结果：${query}`,
+                        href: `/search?q=${encodeURIComponent(query)}&tab=audio`,
+                      }}
+                    />
                   ))}
                 </div>
               )}

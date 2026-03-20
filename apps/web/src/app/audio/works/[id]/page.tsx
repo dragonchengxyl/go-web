@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { ArrowLeft, AudioLines, Bookmark, Clock3, Flag, Heart, MessageCircle, Play, Pause, Send, UserRound, Waves } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
@@ -21,13 +21,14 @@ function formatDateTime(value?: string) {
 export default function AudioWorkDetailPage() {
   const queryClient = useQueryClient();
   const params = useParams<{ id: string }>();
+  const pathname = usePathname();
   const workId = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const { isLoggedIn, loading: authLoading } = useAuth();
   const [commentDraft, setCommentDraft] = useState('');
   const [reportReason, setReportReason] = useState('违规内容');
   const [reportDescription, setReportDescription] = useState('');
   const [showReportForm, setShowReportForm] = useState(false);
-  const { currentTrack, isPlaying, setTrack, togglePlay } = usePlayerStore();
+  const { currentTrack, isPlaying, session, selectTrack, setTrack, togglePlay } = usePlayerStore();
 
   const workQuery = useQuery({
     queryKey: ['audio-work', workId],
@@ -130,6 +131,13 @@ export default function AudioWorkDetailPage() {
   const comments = commentsQuery.data?.comments ?? [];
   const meState = meStateQuery.data;
   const isCurrentTrack = currentTrack?.id === work.id;
+  const sessionContainsWork = !!session?.queue.some((track) => track.id === work.id);
+  const detailSourceContext = {
+    kind: 'audio_work_detail',
+    label: '作品播放页',
+    href: `/audio/works/${work.id}`,
+    entityId: work.id,
+  } as const;
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-12 pt-20">
@@ -207,8 +215,15 @@ export default function AudioWorkDetailPage() {
                     onClick={() => {
                       if (isCurrentTrack) {
                         togglePlay();
+                      } else if (sessionContainsWork) {
+                        selectTrack(work.id);
                       } else {
-                        setTrack(audioWorkToPlayerTrack(work));
+                        setTrack(audioWorkToPlayerTrack(work), {
+                          queue: [audioWorkToPlayerTrack(work)],
+                          currentIndex: 0,
+                          sourceContext: detailSourceContext,
+                          openedFrom: pathname,
+                        });
                       }
                     }}
                   >
@@ -246,8 +261,15 @@ export default function AudioWorkDetailPage() {
                     onClick={() => {
                       if (isCurrentTrack) {
                         togglePlay();
+                      } else if (sessionContainsWork) {
+                        selectTrack(work.id);
                       } else {
-                        setTrack(audioWorkToPlayerTrack(work));
+                        setTrack(audioWorkToPlayerTrack(work), {
+                          queue: [audioWorkToPlayerTrack(work)],
+                          currentIndex: 0,
+                          sourceContext: detailSourceContext,
+                          openedFrom: pathname,
+                        });
                       }
                     }}
                   >

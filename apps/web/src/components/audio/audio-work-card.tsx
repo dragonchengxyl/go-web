@@ -1,8 +1,9 @@
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { AudioLines, Heart, MessageCircle, Pause, Play, PlayCircle, UserRound, Waves } from 'lucide-react';
 import { type AudioWork } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
-import { audioWorkToPlayerTrack, usePlayerStore } from '@/components/music-player';
+import { audioWorkToPlayerTrack, audioWorksToPlayerTracks, type PlayerSourceContext, usePlayerStore } from '@/components/music-player';
 
 const GRADIENTS = [
   'from-emerald-500 to-cyan-500',
@@ -41,14 +42,21 @@ function moderationLabel(status: AudioWork["moderation_status"]) {
 export function AudioWorkCard({
   work,
   compact = false,
+  queueWorks,
+  sourceContext,
 }: {
   work: AudioWork;
   compact?: boolean;
+  queueWorks?: AudioWork[];
+  sourceContext?: PlayerSourceContext;
 }) {
+  const pathname = usePathname();
   const { currentTrack, isPlaying, setTrack, togglePlay } = usePlayerStore();
   const gradient = hashGradient(work.id);
   const bars = work.waveform_preview?.length ? work.waveform_preview : [0.16, 0.3, 0.42, 0.58, 0.74, 0.48, 0.34, 0.2];
   const isCurrent = currentTrack?.id === work.id;
+  const queueTracks = audioWorksToPlayerTracks(queueWorks?.length ? queueWorks : [work]);
+  const currentIndex = Math.max(0, queueTracks.findIndex((item) => item.id === work.id));
 
   return (
     <Link href={`/audio/works/${work.id}`} className="group block">
@@ -100,7 +108,12 @@ export function AudioWorkCard({
               if (isCurrent) {
                 togglePlay();
               } else {
-                setTrack(audioWorkToPlayerTrack(work));
+                setTrack(audioWorkToPlayerTrack(work), {
+                  queue: queueTracks,
+                  currentIndex,
+                  sourceContext,
+                  openedFrom: pathname,
+                });
               }
             }}
             className="absolute bottom-3 right-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-950 shadow-lg transition-transform duration-200 hover:scale-105"

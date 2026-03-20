@@ -99,7 +99,12 @@ export default function AudioWorksPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {works.map((work) => (
-            <AudioWorkCard key={work.id} work={work} />
+            <AudioWorkCard
+              key={work.id}
+              work={work}
+              queueWorks={works}
+              sourceContext={{ kind: 'audio_works_public', label: '社区音频作品', href: '/audio/works' }}
+            />
           ))}
         </div>
       )}
