@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -97,14 +98,21 @@ func main() {
 	tokenStore := redis.NewTokenStore(redisClient)
 	leaderboard := redis.NewLeaderboard(redisClient)
 
-	// Initialize storage service (R2 preferred, fallback to Aliyun)
+	// Initialize storage service.
 	var storageService oss.StorageService
-	if cfg.OSS.Provider == "r2" {
+	switch strings.ToLower(strings.TrimSpace(cfg.OSS.Provider)) {
+	case "local":
+		storageService = oss.NewLocalStorage(cfg.OSS)
+		logger.Info("Using local media storage")
+	case "r2":
 		storageService = oss.NewCloudflareR2(cfg.OSS)
 		logger.Info("Using Cloudflare R2 storage")
-	} else {
+	case "", "aliyun":
 		storageService = oss.NewAliyunOSS(cfg.OSS)
 		logger.Info("Using Aliyun OSS storage")
+	default:
+		storageService = oss.NewAliyunOSS(cfg.OSS)
+		logger.Warn("unknown OSS provider, defaulting to Aliyun OSS", zap.String("provider", cfg.OSS.Provider))
 	}
 
 	// Initialize payment gateways (fall back to mock if credentials not configured)

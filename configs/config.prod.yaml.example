@@ -32,7 +32,7 @@ jwt:
   refresh_expiry: 720h
 
 oss:
-  # aliyun | r2
+  # local | aliyun | r2
   provider: r2
   access_key_id: CHANGE_ME
   access_key_secret: CHANGE_ME

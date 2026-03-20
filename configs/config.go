@@ -46,7 +46,7 @@ type JWTConfig struct {
 }
 
 type OSSConfig struct {
-	Provider        string   `mapstructure:"provider"` // "aliyun" or "r2"
+	Provider        string   `mapstructure:"provider"` // "local", "aliyun", or "r2"
 	AccessKeyID     string   `mapstructure:"access_key_id"`
 	AccessKeySecret string   `mapstructure:"access_key_secret"`
 	Bucket          string   `mapstructure:"bucket"`
