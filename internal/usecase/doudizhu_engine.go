@@ -3,6 +3,7 @@ package usecase
 import (
 	"math/rand"
 	"sort"
+	"time"
 
 	"github.com/studio/platform/internal/domain/doudizhu"
 )
@@ -20,6 +21,8 @@ type DoudizhuBidRecord struct {
 type DoudizhuRoundState struct {
 	Seed          int64                  `json:"seed"`
 	Phase         doudizhu.RoundPhase    `json:"phase"`
+	StartedAt     time.Time              `json:"started_at"`
+	FinishedAt    *time.Time             `json:"finished_at,omitempty"`
 	Hands         [3][]doudizhu.Card     `json:"hands"`
 	BottomCards   []doudizhu.Card        `json:"bottom_cards"`
 	CurrentBidder doudizhu.Seat          `json:"current_bidder"`
@@ -91,6 +94,7 @@ func NewDoudizhuRound(seed int64, matchMode doudizhu.MatchMode, startingSeat dou
 	state := &DoudizhuRoundState{
 		Seed:          seed,
 		Phase:         doudizhu.RoundPhaseBidding,
+		StartedAt:     time.Now(),
 		Hands:         deal.Hands,
 		BottomCards:   deal.Bottom,
 		CurrentBidder: startingSeat,

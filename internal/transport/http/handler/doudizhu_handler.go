@@ -3,6 +3,8 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +139,70 @@ func (h *DoudizhuHandler) CreateDemoRoom(c *gin.Context) {
 		return
 	}
 	response.Success(c, room)
+}
+
+func (h *DoudizhuHandler) ListLeaderboard(c *gin.Context) {
+	limit := 10
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	items, err := h.service.ListLeaderboard(c.Request.Context(), limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"entries": items})
+}
+
+func (h *DoudizhuHandler) ListRecentMatches(c *gin.Context) {
+	limit := 8
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	items, err := h.service.ListRecentMatches(c.Request.Context(), limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"matches": items})
+}
+
+func (h *DoudizhuHandler) ListMyRecentMatches(c *gin.Context) {
+	userID := middlewareUserID(c)
+	if userID == nil {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+	limit := 8
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	items, err := h.service.ListUserRecentMatches(c.Request.Context(), *userID, limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"matches": items})
+}
+
+func (h *DoudizhuHandler) GetReplay(c *gin.Context) {
+	matchID, err := uuid.Parse(c.Param("match_id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的对局 ID"))
+		return
+	}
+	replay, err := h.service.GetReplay(c.Request.Context(), matchID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, replay)
 }
 
 func (h *DoudizhuHandler) ServeWS(c *gin.Context) {

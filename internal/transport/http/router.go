@@ -267,6 +267,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			games.Use(authMiddleware.OptionalAuthenticate())
 			games.GET("/rooms", doudizhuHandler.ListRooms)
 			games.GET("/rooms/:id", doudizhuHandler.GetRoom)
+			games.GET("/leaderboard", doudizhuHandler.ListLeaderboard)
+			games.GET("/matches", doudizhuHandler.ListRecentMatches)
+			games.GET("/matches/:match_id/replay", doudizhuHandler.GetReplay)
 			games.POST("/rooms", doudizhuHandler.CreateRoom)
 			games.POST("/rooms/demo", doudizhuHandler.CreateDemoRoom)
 		}
@@ -420,6 +423,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 			if gameHandler != nil {
 				protected.GET("/games/hex-blitz/matches/me", gameHandler.ListMyHexBlitzRecentMatches)
+			}
+			if doudizhuHandler != nil {
+				protected.GET("/games/dou-dizhu/matches/me", doudizhuHandler.ListMyRecentMatches)
 			}
 
 			// Reports

@@ -187,6 +187,90 @@ type ActionResult struct {
 	Message     string      `json:"message,omitempty"`
 }
 
+type Match struct {
+	ID           uuid.UUID           `json:"id"`
+	RoomID       uuid.UUID           `json:"room_id"`
+	RoomCode     string              `json:"room_code"`
+	RoomTitle    string              `json:"room_title"`
+	MatchMode    MatchMode           `json:"match_mode"`
+	StartedAt    time.Time           `json:"started_at"`
+	FinishedAt   time.Time           `json:"finished_at"`
+	LandlordSeat Seat                `json:"landlord_seat"`
+	WinnerSide   PlayerRole          `json:"winner_side"`
+	Multiplier   int                 `json:"multiplier"`
+	BombCount    int                 `json:"bomb_count"`
+	Spring       bool                `json:"spring"`
+	AntiSpring   bool                `json:"anti_spring"`
+	CreatedAt    time.Time           `json:"created_at"`
+	Results      []MatchPlayerResult `json:"results,omitempty"`
+}
+
+type MatchPlayerResult struct {
+	ID          uuid.UUID  `json:"id"`
+	MatchID     uuid.UUID  `json:"match_id"`
+	SessionID   string     `json:"session_id"`
+	UserID      *uuid.UUID `json:"user_id,omitempty"`
+	IsBot       bool       `json:"is_bot"`
+	BotLevel    string     `json:"bot_level,omitempty"`
+	Seat        Seat       `json:"seat"`
+	PlayerName  string     `json:"player_name"`
+	DisplayName string     `json:"display_name"`
+	Role        PlayerRole `json:"role"`
+	BidScore    int        `json:"bid_score"`
+	CardsLeft   int        `json:"cards_left"`
+	IsWinner    bool       `json:"is_winner"`
+	ScoreDelta  int        `json:"score_delta"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type ActionEvent struct {
+	ID              uuid.UUID  `json:"id"`
+	MatchID         uuid.UUID  `json:"match_id"`
+	TurnNo          int        `json:"turn_no"`
+	ActionIndex     int        `json:"action_index"`
+	SessionID       string     `json:"session_id"`
+	UserID          *uuid.UUID `json:"user_id,omitempty"`
+	PlayerName      string     `json:"player_name"`
+	DisplayName     string     `json:"display_name"`
+	Seat            Seat       `json:"seat"`
+	ActionType      string     `json:"action_type"`
+	Cards           []Card     `json:"cards,omitempty"`
+	Combo           *Combo     `json:"combo,omitempty"`
+	MultiplierAfter int        `json:"multiplier_after"`
+	OccurredAt      time.Time  `json:"occurred_at"`
+}
+
+type MatchSummary struct {
+	MatchID      uuid.UUID           `json:"match_id"`
+	RoomID       uuid.UUID           `json:"room_id"`
+	RoomCode     string              `json:"room_code"`
+	RoomTitle    string              `json:"room_title"`
+	MatchMode    MatchMode           `json:"match_mode"`
+	FinishedAt   time.Time           `json:"finished_at"`
+	WinnerSide   PlayerRole          `json:"winner_side"`
+	LandlordSeat Seat                `json:"landlord_seat"`
+	Multiplier   int                 `json:"multiplier"`
+	PlayerCount  int                 `json:"player_count"`
+	TopResults   []MatchPlayerResult `json:"top_results"`
+}
+
+type MatchReplay struct {
+	Match   *Match              `json:"match"`
+	Results []MatchPlayerResult `json:"results"`
+	Events  []ActionEvent       `json:"events"`
+}
+
+type LeaderboardEntry struct {
+	Rank        int64      `json:"rank"`
+	UserID      *uuid.UUID `json:"user_id,omitempty"`
+	PlayerName  string     `json:"player_name"`
+	DisplayName string     `json:"display_name"`
+	Matches     int        `json:"matches"`
+	Wins        int        `json:"wins"`
+	TotalScore  int        `json:"total_score"`
+	LastPlayed  time.Time  `json:"last_played"`
+}
+
 var (
 	ErrInvalidSeat          = errors.New("invalid doudizhu seat")
 	ErrInvalidBidScore      = errors.New("invalid doudizhu bid score")

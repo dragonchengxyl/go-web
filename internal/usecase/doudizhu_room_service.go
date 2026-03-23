@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ type DoudizhuRoomService struct {
 	rooms         map[uuid.UUID]*doudizhuRoomState
 	sessionToRoom map[string]uuid.UUID
 	logger        *zap.Logger
+	repo          doudizhu.Repository
 	turnDuration  time.Duration
 	notifier      func(uuid.UUID)
 	seedSource    func() int64
@@ -72,25 +74,32 @@ type ToggleDoudizhuAutoPlayInput struct {
 	Enabled   *bool
 }
 
+type doudizhuPersistPayload struct {
+	match   *doudizhu.Match
+	results []doudizhu.MatchPlayerResult
+	events  []doudizhu.ActionEvent
+}
+
 type doudizhuRoomState struct {
-	id            uuid.UUID
-	code          string
-	title         string
-	matchMode     doudizhu.MatchMode
-	status        doudizhu.RoundPhase
-	hostSessionID string
-	players       map[doudizhu.Seat]*doudizhuPlayerState
-	sessionSeat   map[string]doudizhu.Seat
-	round         *DoudizhuRoundState
-	lastPlay      *doudizhu.Combo
-	lastPlayCards []doudizhu.Card
-	lastPlaySeat  *doudizhu.Seat
-	passCount     int
-	winningSide   *doudizhu.PlayerRole
-	actions       []doudizhu.ActionRecord
-	createdAt     time.Time
-	updatedAt     time.Time
-	turnExpiresAt *time.Time
+	id             uuid.UUID
+	code           string
+	title          string
+	matchMode      doudizhu.MatchMode
+	status         doudizhu.RoundPhase
+	hostSessionID  string
+	players        map[doudizhu.Seat]*doudizhuPlayerState
+	sessionSeat    map[string]doudizhu.Seat
+	round          *DoudizhuRoundState
+	lastPlay       *doudizhu.Combo
+	lastPlayCards  []doudizhu.Card
+	lastPlaySeat   *doudizhu.Seat
+	passCount      int
+	winningSide    *doudizhu.PlayerRole
+	actions        []doudizhu.ActionRecord
+	matchPersisted bool
+	createdAt      time.Time
+	updatedAt      time.Time
+	turnExpiresAt  *time.Time
 }
 
 type doudizhuPlayerState struct {
@@ -149,10 +158,48 @@ func WithDoudizhuSeedSource(seedSource func() int64) DoudizhuRoomServiceOption {
 	}
 }
 
+func WithDoudizhuRepository(repo doudizhu.Repository) DoudizhuRoomServiceOption {
+	return func(s *DoudizhuRoomService) {
+		s.repo = repo
+	}
+}
+
 func (s *DoudizhuRoomService) SetNotifier(notifier func(uuid.UUID)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.notifier = notifier
+}
+
+func (s *DoudizhuRoomService) ListLeaderboard(ctx context.Context, limit int) ([]*doudizhu.LeaderboardEntry, error) {
+	if s.repo == nil {
+		return []*doudizhu.LeaderboardEntry{}, nil
+	}
+	return s.repo.ListLeaderboard(ctx, limit)
+}
+
+func (s *DoudizhuRoomService) ListRecentMatches(ctx context.Context, limit int) ([]*doudizhu.MatchSummary, error) {
+	if s.repo == nil {
+		return []*doudizhu.MatchSummary{}, nil
+	}
+	return s.repo.ListRecentMatches(ctx, limit)
+}
+
+func (s *DoudizhuRoomService) ListUserRecentMatches(ctx context.Context, userID uuid.UUID, limit int) ([]*doudizhu.MatchSummary, error) {
+	if s.repo == nil {
+		return []*doudizhu.MatchSummary{}, nil
+	}
+	return s.repo.ListUserRecentMatches(ctx, userID, limit)
+}
+
+func (s *DoudizhuRoomService) GetReplay(ctx context.Context, matchID uuid.UUID) (*doudizhu.MatchReplay, error) {
+	if s.repo == nil {
+		return nil, apperr.ErrNotFound
+	}
+	replay, err := s.repo.GetReplay(ctx, matchID)
+	if err != nil {
+		return nil, err
+	}
+	return replay, nil
 }
 
 func (s *DoudizhuRoomService) ListRooms() []*doudizhu.Room {
@@ -420,7 +467,9 @@ func (s *DoudizhuRoomService) DisconnectSession(sessionID string) {
 	room.updatedAt = player.updatedAt
 
 	s.drainAutoActorsLocked(room)
+	persist := s.maybeBuildPersistPayloadLocked(room)
 	s.mu.Unlock()
+	s.persistMatch(persist)
 	s.notify(roomID)
 }
 
@@ -497,6 +546,7 @@ func (s *DoudizhuRoomService) StartRound(roomID uuid.UUID, sessionID string) (*d
 	room.passCount = 0
 	room.actions = nil
 	room.winningSide = nil
+	room.matchPersisted = false
 	room.updatedAt = time.Now()
 	for seat, hand := range round.Hands {
 		player := room.players[doudizhu.Seat(seat)]
@@ -528,7 +578,9 @@ func (s *DoudizhuRoomService) Bid(input DoudizhuBidInput) (*doudizhu.ActionResul
 		return nil, err
 	}
 	s.drainAutoActorsLocked(room)
+	persist := s.maybeBuildPersistPayloadLocked(room)
 	s.mu.Unlock()
+	s.persistMatch(persist)
 	s.notify(room.id)
 	return result, nil
 }
@@ -554,7 +606,9 @@ func (s *DoudizhuRoomService) PlayCards(input DoudizhuPlayInput) (*doudizhu.Acti
 		return nil, err
 	}
 	s.drainAutoActorsLocked(room)
+	persist := s.maybeBuildPersistPayloadLocked(room)
 	s.mu.Unlock()
+	s.persistMatch(persist)
 	s.notify(room.id)
 	return result, nil
 }
@@ -572,7 +626,9 @@ func (s *DoudizhuRoomService) PassTurn(roomID uuid.UUID, sessionID string) (*dou
 		return nil, err
 	}
 	s.drainAutoActorsLocked(room)
+	persist := s.maybeBuildPersistPayloadLocked(room)
 	s.mu.Unlock()
+	s.persistMatch(persist)
 	s.notify(room.id)
 	return result, nil
 }
@@ -602,8 +658,10 @@ func (s *DoudizhuRoomService) ToggleAutoPlay(input ToggleDoudizhuAutoPlayInput) 
 	player.updatedAt = time.Now()
 	room.updatedAt = player.updatedAt
 	s.drainAutoActorsLocked(room)
+	persist := s.maybeBuildPersistPayloadLocked(room)
 	snapshot := snapshotDoudizhuRoom(room)
 	s.mu.Unlock()
+	s.persistMatch(persist)
 	s.notify(room.id)
 	return snapshot, nil
 }
@@ -835,6 +893,112 @@ func (s *DoudizhuRoomService) drainAutoActorsLocked(room *doudizhuRoomState) {
 			}
 		}
 	}
+}
+
+func buildDoudizhuMatch(room *doudizhuRoomState) (*doudizhu.Match, []doudizhu.MatchPlayerResult, []doudizhu.ActionEvent) {
+	if room == nil || room.round == nil || room.round.Landlord == nil || room.winningSide == nil {
+		return nil, nil, nil
+	}
+
+	finishedAt := room.updatedAt
+	room.round.FinishedAt = &finishedAt
+	bombCount := countDoudizhuBombActions(room.actions)
+	baseScore := doudizhuMaxInt(1, room.round.HighestBid)
+	multiplier := baseScore * (1 << bombCount)
+	matchID := uuid.New()
+
+	match := &doudizhu.Match{
+		ID:           matchID,
+		RoomID:       room.id,
+		RoomCode:     room.code,
+		RoomTitle:    room.title,
+		MatchMode:    room.matchMode,
+		StartedAt:    room.round.StartedAt,
+		FinishedAt:   finishedAt,
+		LandlordSeat: *room.round.Landlord,
+		WinnerSide:   *room.winningSide,
+		Multiplier:   multiplier,
+		BombCount:    bombCount,
+		Spring:       false,
+		AntiSpring:   false,
+		CreatedAt:    finishedAt,
+	}
+
+	results := make([]doudizhu.MatchPlayerResult, 0, len(room.players))
+	for _, seat := range []doudizhu.Seat{doudizhu.Seat0, doudizhu.Seat1, doudizhu.Seat2} {
+		player := room.players[seat]
+		if player == nil {
+			continue
+		}
+		role := room.round.Roles[seat]
+		isWinner := role == *room.winningSide
+		scoreDelta := doudizhuScoreDelta(role, *room.winningSide, multiplier)
+		results = append(results, doudizhu.MatchPlayerResult{
+			ID:          uuid.New(),
+			MatchID:     matchID,
+			SessionID:   player.sessionID,
+			UserID:      cloneUUIDPtr(player.userID),
+			IsBot:       player.isBot,
+			BotLevel:    player.botLevel,
+			Seat:        seat,
+			PlayerName:  player.name,
+			DisplayName: player.name,
+			Role:        role,
+			BidScore:    bidScoreForSeat(room.round.BidHistory, seat),
+			CardsLeft:   len(room.round.Hands[seat]),
+			IsWinner:    isWinner,
+			ScoreDelta:  scoreDelta,
+			CreatedAt:   finishedAt,
+		})
+	}
+	slices.SortFunc(results, func(a, b doudizhu.MatchPlayerResult) int {
+		switch {
+		case a.ScoreDelta > b.ScoreDelta:
+			return -1
+		case a.ScoreDelta < b.ScoreDelta:
+			return 1
+		case a.CardsLeft < b.CardsLeft:
+			return -1
+		case a.CardsLeft > b.CardsLeft:
+			return 1
+		default:
+			return strings.Compare(a.PlayerName, b.PlayerName)
+		}
+	})
+	match.Results = append([]doudizhu.MatchPlayerResult(nil), results...)
+
+	events := make([]doudizhu.ActionEvent, 0, len(room.actions))
+	turnNo := 0
+	for index, action := range room.actions {
+		if action.ActionType == "play_cards" || action.ActionType == "auto_play_cards" {
+			turnNo++
+		}
+		player := room.players[action.Seat]
+		displayName := ""
+		var userID *uuid.UUID
+		if player != nil {
+			displayName = player.name
+			userID = cloneUUIDPtr(player.userID)
+		}
+		events = append(events, doudizhu.ActionEvent{
+			ID:              uuid.New(),
+			MatchID:         matchID,
+			TurnNo:          turnNo,
+			ActionIndex:     index + 1,
+			SessionID:       sessionIDForAction(room, action.Seat),
+			UserID:          userID,
+			PlayerName:      action.ActorName,
+			DisplayName:     displayName,
+			Seat:            action.Seat,
+			ActionType:      action.ActionType,
+			Cards:           append([]doudizhu.Card(nil), action.Cards...),
+			Combo:           comboPtr(action.Combo),
+			MultiplierAfter: multiplierAfterAction(room.actions[:index+1], baseScore),
+			OccurredAt:      action.At,
+		})
+	}
+
+	return match, results, events
 }
 
 func currentAutoActor(room *doudizhuRoomState) (doudizhu.Seat, *doudizhuPlayerState, bool) {
@@ -1231,6 +1395,87 @@ func actionType(auto bool, base string) string {
 		return "auto_" + base
 	}
 	return base
+}
+
+func doudizhuScoreDelta(role, winningSide doudizhu.PlayerRole, multiplier int) int {
+	switch {
+	case role == doudizhu.PlayerRoleLandlord && winningSide == doudizhu.PlayerRoleLandlord:
+		return multiplier * 2
+	case role == doudizhu.PlayerRoleLandlord:
+		return -multiplier * 2
+	case winningSide == doudizhu.PlayerRoleFarmer:
+		return multiplier
+	default:
+		return -multiplier
+	}
+}
+
+func bidScoreForSeat(records []DoudizhuBidRecord, seat doudizhu.Seat) int {
+	score := 0
+	for _, record := range records {
+		if record.Seat == seat && record.Score > score {
+			score = record.Score
+		}
+	}
+	return score
+}
+
+func countDoudizhuBombActions(actions []doudizhu.ActionRecord) int {
+	total := 0
+	for _, action := range actions {
+		if action.Combo == nil {
+			continue
+		}
+		if action.Combo.Type == doudizhu.ComboBomb || action.Combo.Type == doudizhu.ComboRocket {
+			total++
+		}
+	}
+	return total
+}
+
+func sessionIDForAction(room *doudizhuRoomState, seat doudizhu.Seat) string {
+	player := room.players[seat]
+	if player == nil {
+		return ""
+	}
+	return player.sessionID
+}
+
+func multiplierAfterAction(actions []doudizhu.ActionRecord, baseScore int) int {
+	totalBombs := countDoudizhuBombActions(actions)
+	return doudizhuMaxInt(1, baseScore) * (1 << totalBombs)
+}
+
+func doudizhuMaxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func (s *DoudizhuRoomService) maybeBuildPersistPayloadLocked(room *doudizhuRoomState) *doudizhuPersistPayload {
+	if room == nil || room.round == nil || room.status != doudizhu.RoundPhaseSettlement || room.matchPersisted {
+		return nil
+	}
+	match, results, events := buildDoudizhuMatch(room)
+	if match == nil {
+		return nil
+	}
+	room.matchPersisted = true
+	return &doudizhuPersistPayload{
+		match:   match,
+		results: results,
+		events:  events,
+	}
+}
+
+func (s *DoudizhuRoomService) persistMatch(payload *doudizhuPersistPayload) {
+	if s.repo == nil || payload == nil || payload.match == nil {
+		return
+	}
+	if err := s.repo.SaveMatch(context.Background(), payload.match, payload.results, payload.events); err != nil {
+		s.logger.Warn("failed to persist doudizhu match", zap.Error(err), zap.String("match_id", payload.match.ID.String()))
+	}
 }
 
 func (s *DoudizhuRoomService) notify(roomID uuid.UUID) {
