@@ -549,10 +549,24 @@ export interface AdminGameMetrics {
 }
 
 export interface AdminGameOverview {
-  metrics: AdminGameMetrics;
-  rooms: HexBlitzRoom[];
-  leaderboard: HexBlitzLeaderboardEntry[];
-  recent_matches: HexBlitzMatchSummary[];
+  hex_blitz: {
+    metrics: AdminGameMetrics;
+    rooms: HexBlitzRoom[];
+    leaderboard: HexBlitzLeaderboardEntry[];
+    recent_matches: HexBlitzMatchSummary[];
+  };
+  doudizhu: {
+    metrics: {
+      active_rooms: number;
+      active_players: number;
+      demo_rooms: number;
+      pvp_rooms: number;
+      recent_matches_count: number;
+    };
+    rooms: DoudizhuRoom[];
+    leaderboard: DoudizhuLeaderboardEntry[];
+    recent_matches: DoudizhuMatchSummary[];
+  };
 }
 
 export type DoudizhuRoomStatus =

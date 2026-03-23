@@ -1,8 +1,6 @@
 package usecase
 
 import (
-	"sort"
-
 	"github.com/studio/platform/internal/domain/doudizhu"
 )
 
@@ -263,12 +261,4 @@ func cardsOfRank(hand []doudizhu.Card, rank doudizhu.Rank, count int) []doudizhu
 		}
 	}
 	return nil
-}
-
-func doudizhuSortedRanksForBots(counts map[doudizhu.Rank]int) []doudizhu.Rank {
-	ranks := doudizhuSortedRanks(counts)
-	sort.Slice(ranks, func(i, j int) bool {
-		return ranks[i] < ranks[j]
-	})
-	return ranks
 }

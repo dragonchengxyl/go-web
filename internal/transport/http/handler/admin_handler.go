@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/audit"
+	doudizhudomain "github.com/studio/platform/internal/domain/doudizhu"
 	"github.com/studio/platform/internal/domain/event"
 	"github.com/studio/platform/internal/domain/gameplay"
 	"github.com/studio/platform/internal/domain/group"
@@ -31,6 +32,7 @@ type AdminHandler struct {
 	statsService     usecase.StatsProvider
 	userService      *usecase.UserService
 	gameService      *usecase.HexBlitzRoomService
+	doudizhuService  *usecase.DoudizhuRoomService
 	commentService   *usecase.CommentService
 	postService      *usecase.PostService
 	audioWorkService *usecase.AudioWorkService
@@ -50,6 +52,7 @@ func NewAdminHandler(
 	statsService usecase.StatsProvider,
 	userService *usecase.UserService,
 	gameService *usecase.HexBlitzRoomService,
+	doudizhuService *usecase.DoudizhuRoomService,
 	commentService *usecase.CommentService,
 	postService *usecase.PostService,
 	audioWorkService *usecase.AudioWorkService,
@@ -67,6 +70,7 @@ func NewAdminHandler(
 		statsService:     statsService,
 		userService:      userService,
 		gameService:      gameService,
+		doudizhuService:  doudizhuService,
 		commentService:   commentService,
 		postService:      postService,
 		audioWorkService: audioWorkService,
@@ -82,35 +86,92 @@ func NewAdminHandler(
 	}
 }
 
-// GetGameOverview returns Hex Blitz runtime metrics, active rooms, leaderboard and recent matches.
-func (h *AdminHandler) GetGameOverview(c *gin.Context) {
-	gameMetrics := gamemetrics.GetSnapshot()
+type doudizhuAdminMetrics struct {
+	ActiveRooms        int `json:"active_rooms"`
+	ActivePlayers      int `json:"active_players"`
+	DemoRooms          int `json:"demo_rooms"`
+	PVPRooms           int `json:"pvp_rooms"`
+	RecentMatchesCount int `json:"recent_matches_count"`
+}
 
-	var rooms []*gameplay.Room
-	var leaderboard []*gameplay.LeaderboardEntry
-	var recentMatches []*gameplay.MatchSummary
+// GetGameOverview returns game runtime snapshots grouped by game.
+func (h *AdminHandler) GetGameOverview(c *gin.Context) {
+	hexMetrics := gamemetrics.GetSnapshot()
+
+	var hexRooms []*gameplay.Room
+	var hexLeaderboard []*gameplay.LeaderboardEntry
+	var hexRecentMatches []*gameplay.MatchSummary
 	if h.gameService != nil {
-		rooms = h.gameService.ListRooms()
+		hexRooms = h.gameService.ListRooms()
 		entries, err := h.gameService.ListLeaderboard(c.Request.Context(), 10)
 		if err != nil {
 			response.Error(c, err)
 			return
 		}
-		leaderboard = entries
+		hexLeaderboard = entries
 		matches, err := h.gameService.ListRecentMatches(c.Request.Context(), 8)
 		if err != nil {
 			response.Error(c, err)
 			return
 		}
-		recentMatches = matches
+		hexRecentMatches = matches
+	}
+
+	var doudizhuRooms []*doudizhudomain.Room
+	var doudizhuLeaderboard []*doudizhudomain.LeaderboardEntry
+	var doudizhuRecentMatches []*doudizhudomain.MatchSummary
+	doudizhuMetrics := doudizhuAdminMetrics{}
+	if h.doudizhuService != nil {
+		doudizhuRooms = h.doudizhuService.ListRooms()
+		entries, err := h.doudizhuService.ListLeaderboard(c.Request.Context(), 10)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		doudizhuLeaderboard = entries
+		matches, err := h.doudizhuService.ListRecentMatches(c.Request.Context(), 8)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		doudizhuRecentMatches = matches
+		doudizhuMetrics = buildDoudizhuAdminMetrics(doudizhuRooms, doudizhuRecentMatches)
 	}
 
 	response.Success(c, gin.H{
-		"metrics":        gameMetrics,
-		"rooms":          rooms,
-		"leaderboard":    leaderboard,
-		"recent_matches": recentMatches,
+		"hex_blitz": gin.H{
+			"metrics":        hexMetrics,
+			"rooms":          hexRooms,
+			"leaderboard":    hexLeaderboard,
+			"recent_matches": hexRecentMatches,
+		},
+		"doudizhu": gin.H{
+			"metrics":        doudizhuMetrics,
+			"rooms":          doudizhuRooms,
+			"leaderboard":    doudizhuLeaderboard,
+			"recent_matches": doudizhuRecentMatches,
+		},
 	})
+}
+
+func buildDoudizhuAdminMetrics(rooms []*doudizhudomain.Room, recentMatches []*doudizhudomain.MatchSummary) doudizhuAdminMetrics {
+	metrics := doudizhuAdminMetrics{
+		RecentMatchesCount: len(recentMatches),
+	}
+	for _, room := range rooms {
+		if room == nil {
+			continue
+		}
+		metrics.ActiveRooms++
+		metrics.ActivePlayers += room.PlayerCount
+		switch room.MatchMode {
+		case doudizhudomain.MatchModeDemoAI:
+			metrics.DemoRooms++
+		case doudizhudomain.MatchModePVP:
+			metrics.PVPRooms++
+		}
+	}
+	return metrics
 }
 
 // ListAudioWorks returns paginated audio works filtered by moderation status (admin).

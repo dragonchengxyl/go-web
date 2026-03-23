@@ -454,6 +454,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 					cfg.StatsService,
 					cfg.UserService,
 					cfg.GameService,
+					cfg.DoudizhuService,
 					cfg.CommentService,
 					cfg.PostService,
 					cfg.AudioWorkService,

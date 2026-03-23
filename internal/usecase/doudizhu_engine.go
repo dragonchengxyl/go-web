@@ -441,8 +441,8 @@ func doudizhuBuildAirplaneCombo(counts map[doudizhu.Rank]int, segment []doudizhu
 
 	runLength := len(segment)
 	remainingCards := total - runLength*3
-	comboType := doudizhu.ComboAirplane
 
+	var comboType doudizhu.ComboType
 	switch {
 	case remainingCards == 0:
 		comboType = doudizhu.ComboAirplane
