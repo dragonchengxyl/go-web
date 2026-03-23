@@ -6,14 +6,22 @@ import {
   ArrowRight,
   Crown,
   Loader2,
+  Medal,
   Radio,
   RefreshCcw,
   Rocket,
   Signal,
+  Trophy,
   Users2,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { apiClient, HexBlitzRoom, HexBlitzRoomPlayer } from '@/lib/api-client';
+import {
+  apiClient,
+  HexBlitzLeaderboardEntry,
+  HexBlitzMatchSummary,
+  HexBlitzRoom,
+  HexBlitzRoomPlayer,
+} from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { HexBlitzPrototype } from '@/components/games/hex-blitz-prototype';
 import { Badge } from '@/components/ui/badge';
@@ -81,12 +89,16 @@ export function HexBlitzPlayStage() {
   const [roomTitle, setRoomTitle] = useState('好友训练房');
   const [rooms, setRooms] = useState<HexBlitzRoom[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(false);
+  const [metaLoading, setMetaLoading] = useState(false);
   const [activeRoom, setActiveRoom] = useState<HexBlitzRoom | null>(null);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [wsStatus, setWsStatus] = useState<RoomWSStatus>('idle');
   const [notice, setNotice] = useState('可以先单机试玩，也可以创建房间进入多人实验室。');
   const [errorMessage, setErrorMessage] = useState('');
   const [timeTick, setTimeTick] = useState(Date.now());
+  const [leaderboard, setLeaderboard] = useState<HexBlitzLeaderboardEntry[]>([]);
+  const [recentMatches, setRecentMatches] = useState<HexBlitzMatchSummary[]>([]);
+  const [myMatches, setMyMatches] = useState<HexBlitzMatchSummary[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
@@ -155,6 +167,44 @@ export function HexBlitzPlayStage() {
       window.clearInterval(timer);
     };
   }, [activeRoomId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMeta() {
+      setMetaLoading(true);
+      try {
+        const [leaderboardData, matchesData, myMatchesData] = await Promise.all([
+          apiClient.getHexBlitzLeaderboard(10),
+          apiClient.getHexBlitzRecentMatches(6),
+          user ? apiClient.getMyHexBlitzRecentMatches(4) : Promise.resolve({ matches: [] }),
+        ]);
+        if (!cancelled) {
+          setLeaderboard(leaderboardData.entries);
+          setRecentMatches(matchesData.matches);
+          setMyMatches(myMatchesData.matches);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : '加载榜单失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setMetaLoading(false);
+        }
+      }
+    }
+
+    void loadMeta();
+    const timer = window.setInterval(() => {
+      void loadMeta();
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!activeRoom) {
@@ -356,6 +406,31 @@ export function HexBlitzPlayStage() {
         infoText: notice,
       }
     : undefined;
+
+  useEffect(() => {
+    if (activeRoom?.status !== 'finished') {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      apiClient
+        .getHexBlitzLeaderboard(10)
+        .then((data) => setLeaderboard(data.entries))
+        .catch(() => {});
+      apiClient
+        .getHexBlitzRecentMatches(6)
+        .then((data) => setRecentMatches(data.matches))
+        .catch(() => {});
+      if (user) {
+        apiClient
+          .getMyHexBlitzRecentMatches(4)
+          .then((data) => setMyMatches(data.matches))
+          .catch(() => {});
+      }
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [activeRoom?.id, activeRoom?.status, user]);
 
   return (
     <div className="space-y-6">
@@ -707,6 +782,215 @@ export function HexBlitzPlayStage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+        <Card className="border-white/10 bg-white/[0.04] text-white">
+          <CardContent className="p-6">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Trophy className="h-5 w-5 text-amber-300" />
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight">实时榜单</h2>
+                  <p className="mt-1 text-sm text-slate-400">
+                    当前基于已落库的 Hex Blitz 对局结果生成。
+                  </p>
+                </div>
+              </div>
+              {metaLoading && <Loader2 className="h-4 w-4 animate-spin text-sky-300" />}
+            </div>
+
+            <div className="space-y-3">
+              {leaderboard.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                  还没有已结算的正式对局。先拉一局多人房间，把结果写进榜单。
+                </div>
+              )}
+
+              {leaderboard.map((entry) => (
+                <div
+                  key={`${entry.user_id ?? entry.player_name}-${entry.rank}`}
+                  className="flex items-center justify-between gap-4 rounded-[22px] border border-white/10 bg-black/20 px-4 py-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-black',
+                        entry.rank <= 3
+                          ? 'bg-amber-300/15 text-amber-100'
+                          : 'bg-white/8 text-white/80'
+                      )}
+                    >
+                      #{entry.rank}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-white">{entry.display_name}</div>
+                      <div className="mt-1 text-sm text-slate-400">
+                        {entry.matches} 场 · 最近于{' '}
+                        {new Date(entry.last_played).toLocaleString('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                      BEST
+                    </div>
+                    <div className="mt-1 text-2xl font-black tracking-tight text-white">
+                      {entry.best_score}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-white/10 bg-white/[0.04] text-white">
+          <CardContent className="p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <Medal className="h-5 w-5 text-sky-300" />
+              <div>
+                <h2 className="text-2xl font-black tracking-tight">近期战报</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  最近落库的对局摘要，方便展示“从房间到结果”的完整链路。
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {recentMatches.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                  还没有战报。完成一局多人对局后，这里会出现近期结果。
+                </div>
+              )}
+
+              {recentMatches.map((match) => (
+                <div
+                  key={match.match_id}
+                  className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-semibold text-white">
+                          {match.room_title}
+                        </span>
+                        <Badge className="border-white/15 bg-white/8 text-white">
+                          {match.room_code}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 text-sm text-slate-400">
+                        {new Date(match.finished_at).toLocaleString('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}{' '}
+                        · {match.duration_sec}s · {match.player_count} 人
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                        WINNER
+                      </div>
+                      <div className="mt-1 text-lg font-semibold text-white">
+                        {match.winner_name}
+                      </div>
+                      <div className="mt-1 text-sm text-sky-200">
+                        {match.winner_score} 分
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {match.top_results.map((result) => (
+                      <div
+                        key={result.id}
+                        className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+                      >
+                        <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                          #{result.rank}
+                        </div>
+                        <div className="mt-2 font-semibold text-white">
+                          {result.display_name}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-400">{result.score} 分</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {user && (
+        <Card className="border-white/10 bg-white/[0.04] text-white">
+          <CardContent className="p-6">
+            <div className="mb-5 flex items-center gap-3">
+              <Users2 className="h-5 w-5 text-emerald-300" />
+              <div>
+                <h2 className="text-2xl font-black tracking-tight">我的近期对局</h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  这里展示当前登录用户最近落库的 Hex Blitz 对局。
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {myMatches.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                  你还没有已落库的战报。完成一局多人对局后，这里就会出现。
+                </div>
+              )}
+
+              {myMatches.map((match) => {
+                const myResult = match.top_results.find(
+                  (result) => result.user_id && result.user_id === user.id
+                );
+                return (
+                  <div
+                    key={match.match_id}
+                    className="flex flex-wrap items-center justify-between gap-4 rounded-[22px] border border-white/10 bg-black/20 px-4 py-4"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white">{match.room_title}</span>
+                        <Badge className="border-white/15 bg-white/8 text-white">
+                          {match.room_code}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 text-sm text-slate-400">
+                        {new Date(match.finished_at).toLocaleString('zh-CN', {
+                          month: 'numeric',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                        我的成绩
+                      </div>
+                      <div className="mt-1 text-lg font-semibold text-white">
+                        {myResult ? `#${myResult.rank} · ${myResult.score} 分` : '未进入前 3'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

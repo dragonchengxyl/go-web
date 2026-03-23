@@ -1,6 +1,8 @@
 package usecase
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,9 +13,11 @@ import (
 )
 
 func TestHexBlitzRoomServiceCreateJoinAndStart(t *testing.T) {
+	repo := &stubHexBlitzRepo{}
 	svc := NewHexBlitzRoomService(
 		zap.NewNop(),
 		WithHexBlitzRoomTiming(20*time.Millisecond, 40*time.Millisecond),
+		WithHexBlitzRepository(repo),
 	)
 
 	hostRoom, err := svc.CreateRoom(CreateHexBlitzRoomInput{
@@ -78,6 +82,25 @@ func TestHexBlitzRoomServiceCreateJoinAndStart(t *testing.T) {
 	finishedRoom, ok := svc.GetRoom(hostRoom.ID)
 	require.True(t, ok)
 	require.Equal(t, gameplay.RoomStatusFinished, finishedRoom.Status)
+	require.Len(t, repo.savedMatches, 1)
+	require.Len(t, repo.savedMatches[0].Results, 2)
+
+	_, err = svc.SetReady(SetHexBlitzReadyInput{
+		RoomID:    hostRoom.ID,
+		SessionID: "host-session",
+		Ready:     &ready,
+	})
+	require.NoError(t, err)
+	_, err = svc.SetReady(SetHexBlitzReadyInput{
+		RoomID:    hostRoom.ID,
+		SessionID: "guest-session",
+		Ready:     &ready,
+	})
+	require.NoError(t, err)
+
+	restartedRoom, err := svc.StartMatch(hostRoom.ID, "host-session")
+	require.NoError(t, err)
+	require.Equal(t, gameplay.RoomStatusCountdown, restartedRoom.Status)
 }
 
 func TestHexBlitzRoomServiceReassignsHost(t *testing.T) {
@@ -109,4 +132,28 @@ func TestHexBlitzRoomServiceReassignsHost(t *testing.T) {
 
 func uuidPtr(id uuid.UUID) *uuid.UUID {
 	return &id
+}
+
+type stubHexBlitzRepo struct {
+	mu           sync.Mutex
+	savedMatches []*gameplay.Match
+}
+
+func (s *stubHexBlitzRepo) SaveMatch(_ context.Context, match *gameplay.Match, _ []gameplay.MatchResult) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.savedMatches = append(s.savedMatches, match)
+	return nil
+}
+
+func (s *stubHexBlitzRepo) ListLeaderboard(_ context.Context, _ int) ([]*gameplay.LeaderboardEntry, error) {
+	return nil, nil
+}
+
+func (s *stubHexBlitzRepo) ListRecentMatches(_ context.Context, _ int) ([]*gameplay.MatchSummary, error) {
+	return nil, nil
+}
+
+func (s *stubHexBlitzRepo) ListUserRecentMatches(_ context.Context, _ uuid.UUID, _ int) ([]*gameplay.MatchSummary, error) {
+	return nil, nil
 }

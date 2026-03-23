@@ -252,6 +252,8 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			games.Use(authMiddleware.OptionalAuthenticate())
 			games.GET("/rooms", gameHandler.ListHexBlitzRooms)
 			games.GET("/rooms/:id", gameHandler.GetHexBlitzRoom)
+			games.GET("/leaderboard", gameHandler.ListHexBlitzLeaderboard)
+			games.GET("/matches", gameHandler.ListHexBlitzRecentMatches)
 			games.POST("/rooms", gameHandler.CreateHexBlitzRoom)
 		}
 
@@ -401,6 +403,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			// Creator dashboard
 			creatorHandler := handler.NewCreatorHandler(cfg.PostService, cfg.FollowService, cfg.TipService)
 			protected.GET("/creator/stats", creatorHandler.GetStats)
+
+			if gameHandler != nil {
+				protected.GET("/games/hex-blitz/matches/me", gameHandler.ListMyHexBlitzRecentMatches)
+			}
 
 			// Reports
 			reportHandler := handler.NewReportHandler(cfg.ReportRepo)

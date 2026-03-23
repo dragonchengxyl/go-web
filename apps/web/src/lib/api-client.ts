@@ -390,6 +390,46 @@ export interface HexBlitzRoom {
   players: HexBlitzRoomPlayer[];
 }
 
+export interface HexBlitzLeaderboardEntry {
+  rank: number;
+  user_id?: string;
+  player_name: string;
+  display_name: string;
+  best_score: number;
+  matches: number;
+  last_played: string;
+}
+
+export interface HexBlitzMatchResult {
+  id: string;
+  match_id: string;
+  room_id: string;
+  room_code: string;
+  room_title: string;
+  user_id?: string;
+  player_name: string;
+  display_name: string;
+  score: number;
+  rank: number;
+  started_at: string;
+  finished_at: string;
+  created_at: string;
+}
+
+export interface HexBlitzMatchSummary {
+  match_id: string;
+  room_id: string;
+  room_code: string;
+  room_title: string;
+  game_slug: string;
+  finished_at: string;
+  duration_sec: number;
+  winner_name: string;
+  winner_score: number;
+  player_count: number;
+  top_results: HexBlitzMatchResult[];
+}
+
 export interface AdminAIToolSection {
   title: string;
   bullets?: string[];
@@ -804,6 +844,24 @@ class ApiClient {
     session_id: string;
   }) {
     return this.post<HexBlitzRoom>("/games/hex-blitz/rooms", data);
+  }
+
+  async getHexBlitzLeaderboard(limit = 10) {
+    return this.get<{ entries: HexBlitzLeaderboardEntry[] }>(
+      `/games/hex-blitz/leaderboard?limit=${limit}`
+    );
+  }
+
+  async getHexBlitzRecentMatches(limit = 8) {
+    return this.get<{ matches: HexBlitzMatchSummary[] }>(
+      `/games/hex-blitz/matches?limit=${limit}`
+    );
+  }
+
+  async getMyHexBlitzRecentMatches(limit = 8) {
+    return this.get<{ matches: HexBlitzMatchSummary[] }>(
+      `/games/hex-blitz/matches/me?limit=${limit}`
+    );
   }
 
   // ── Follow ────────────────────────────────────────────────────────────

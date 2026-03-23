@@ -93,6 +93,7 @@ func main() {
 	groupRepo := postgres.NewGroupRepository(pool)
 	audioJobRepo := postgres.NewAudioJobRepository(pool)
 	audioWorkRepo := postgres.NewAudioWorkRepository(pool)
+	hexBlitzRepo := postgres.NewHexBlitzRepository(pool)
 
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
@@ -289,7 +290,10 @@ func main() {
 		groupService,
 		eventService,
 	)
-	gameService := usecase.NewHexBlitzRoomService(logger)
+	gameService := usecase.NewHexBlitzRoomService(
+		logger,
+		usecase.WithHexBlitzRepository(hexBlitzRepo),
+	)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)

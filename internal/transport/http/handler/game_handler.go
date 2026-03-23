@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -121,6 +122,60 @@ func (h *GameHandler) CreateHexBlitzRoom(c *gin.Context) {
 		return
 	}
 	response.Success(c, room)
+}
+
+func (h *GameHandler) ListHexBlitzLeaderboard(c *gin.Context) {
+	limit := 10
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	items, err := h.service.ListLeaderboard(c.Request.Context(), limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"entries": items})
+}
+
+func (h *GameHandler) ListHexBlitzRecentMatches(c *gin.Context) {
+	limit := 8
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	items, err := h.service.ListRecentMatches(c.Request.Context(), limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"matches": items})
+}
+
+func (h *GameHandler) ListMyHexBlitzRecentMatches(c *gin.Context) {
+	userID := middlewareUserID(c)
+	if userID == nil {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+
+	limit := 8
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	items, err := h.service.ListUserRecentMatches(c.Request.Context(), *userID, limit)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"matches": items})
 }
 
 func (h *GameHandler) ServeHexBlitzWS(c *gin.Context) {

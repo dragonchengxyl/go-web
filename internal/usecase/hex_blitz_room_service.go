@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ type HexBlitzRoomService struct {
 	mu            sync.RWMutex
 	rooms         map[uuid.UUID]*hexBlitzRoomState
 	sessionToRoom map[string]uuid.UUID
+	repo          gameplay.Repository
 	logger        *zap.Logger
 	countdown     time.Duration
 	roundDuration time.Duration
@@ -68,6 +70,7 @@ type hexBlitzRoomState struct {
 	countdownStarted *time.Time
 	startedAt        *time.Time
 	endsAt           *time.Time
+	currentMatchID   *uuid.UUID
 	createdAt        time.Time
 	updatedAt        time.Time
 	players          map[string]*gameplay.RoomPlayer
@@ -108,10 +111,37 @@ func WithHexBlitzRoomNotifier(notifier func(uuid.UUID)) HexBlitzRoomServiceOptio
 	}
 }
 
+func WithHexBlitzRepository(repo gameplay.Repository) HexBlitzRoomServiceOption {
+	return func(s *HexBlitzRoomService) {
+		s.repo = repo
+	}
+}
+
 func (s *HexBlitzRoomService) SetNotifier(notifier func(uuid.UUID)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.notifier = notifier
+}
+
+func (s *HexBlitzRoomService) ListLeaderboard(ctx context.Context, limit int) ([]*gameplay.LeaderboardEntry, error) {
+	if s.repo == nil {
+		return []*gameplay.LeaderboardEntry{}, nil
+	}
+	return s.repo.ListLeaderboard(ctx, limit)
+}
+
+func (s *HexBlitzRoomService) ListRecentMatches(ctx context.Context, limit int) ([]*gameplay.MatchSummary, error) {
+	if s.repo == nil {
+		return []*gameplay.MatchSummary{}, nil
+	}
+	return s.repo.ListRecentMatches(ctx, limit)
+}
+
+func (s *HexBlitzRoomService) ListUserRecentMatches(ctx context.Context, userID uuid.UUID, limit int) ([]*gameplay.MatchSummary, error) {
+	if s.repo == nil {
+		return []*gameplay.MatchSummary{}, nil
+	}
+	return s.repo.ListUserRecentMatches(ctx, userID, limit)
 }
 
 func (s *HexBlitzRoomService) ListRooms() []*gameplay.Room {
@@ -351,9 +381,9 @@ func (s *HexBlitzRoomService) SetReady(input SetHexBlitzReadyInput) (*gameplay.R
 		s.mu.Unlock()
 		return nil, apperr.ErrNotFound
 	}
-	if room.status != gameplay.RoomStatusWaiting {
+	if room.status != gameplay.RoomStatusWaiting && room.status != gameplay.RoomStatusFinished {
 		s.mu.Unlock()
-		return nil, apperr.BadRequest("当前房间不在准备阶段")
+		return nil, apperr.BadRequest("当前房间不在可准备阶段")
 	}
 	player, exists := room.players[input.SessionID]
 	if !exists {
@@ -386,7 +416,7 @@ func (s *HexBlitzRoomService) StartMatch(roomID uuid.UUID, sessionID string) (*g
 		s.mu.Unlock()
 		return nil, apperr.New(apperr.CodeForbidden, "只有房主可以开始对局")
 	}
-	if room.status != gameplay.RoomStatusWaiting {
+	if room.status != gameplay.RoomStatusWaiting && room.status != gameplay.RoomStatusFinished {
 		s.mu.Unlock()
 		return nil, apperr.BadRequest("当前房间不可开始新对局")
 	}
@@ -400,10 +430,12 @@ func (s *HexBlitzRoomService) StartMatch(roomID uuid.UUID, sessionID string) (*g
 	}
 
 	now := time.Now()
+	matchID := uuid.New()
 	room.status = gameplay.RoomStatusCountdown
 	room.countdownStarted = &now
 	room.startedAt = nil
 	room.endsAt = nil
+	room.currentMatchID = &matchID
 	room.updatedAt = now
 	room.sequence++
 	sequence := room.sequence
@@ -486,12 +518,14 @@ func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64)
 	finishedAt := time.Now()
 	room.status = gameplay.RoomStatusFinished
 	room.updatedAt = finishedAt
+	match := buildHexBlitzMatch(room, finishedAt)
 	for _, player := range room.players {
 		player.Ready = false
 		player.UpdatedAt = finishedAt
 	}
 	s.mu.Unlock()
 	s.notify(roomID)
+	s.persistMatch(match)
 }
 
 func (s *HexBlitzRoomService) notify(roomID uuid.UUID) {
@@ -500,6 +534,15 @@ func (s *HexBlitzRoomService) notify(roomID uuid.UUID) {
 	s.mu.RUnlock()
 	if notifier != nil {
 		notifier(roomID)
+	}
+}
+
+func (s *HexBlitzRoomService) persistMatch(match *gameplay.Match) {
+	if s.repo == nil || match == nil {
+		return
+	}
+	if err := s.repo.SaveMatch(context.Background(), match, match.Results); err != nil {
+		s.logger.Warn("failed to persist hex blitz match", zap.Error(err), zap.String("match_id", match.ID.String()))
 	}
 }
 
@@ -563,6 +606,72 @@ func snapshotHexBlitzRoom(room *hexBlitzRoomState) *gameplay.Room {
 		CreatedAt:        room.createdAt,
 		UpdatedAt:        room.updatedAt,
 		Players:          players,
+	}
+}
+
+func buildHexBlitzMatch(room *hexBlitzRoomState, finishedAt time.Time) *gameplay.Match {
+	if room.currentMatchID == nil || room.startedAt == nil {
+		return nil
+	}
+
+	players := make([]gameplay.RoomPlayer, 0, len(room.players))
+	for _, player := range room.players {
+		players = append(players, *player)
+	}
+	slices.SortFunc(players, func(a, b gameplay.RoomPlayer) int {
+		switch {
+		case a.Score > b.Score:
+			return -1
+		case a.Score < b.Score:
+			return 1
+		case a.Connected && !b.Connected:
+			return -1
+		case !a.Connected && b.Connected:
+			return 1
+		case a.JoinedAt.Before(b.JoinedAt):
+			return -1
+		case a.JoinedAt.After(b.JoinedAt):
+			return 1
+		default:
+			return strings.Compare(a.Name, b.Name)
+		}
+	})
+
+	results := make([]gameplay.MatchResult, 0, len(players))
+	for index, player := range players {
+		results = append(results, gameplay.MatchResult{
+			ID:          uuid.New(),
+			MatchID:     *room.currentMatchID,
+			RoomID:      room.id,
+			RoomCode:    room.code,
+			RoomTitle:   room.title,
+			UserID:      cloneUUIDPtr(player.UserID),
+			PlayerName:  player.Name,
+			DisplayName: player.Name,
+			Score:       player.Score,
+			Rank:        index + 1,
+			StartedAt:   *room.startedAt,
+			FinishedAt:  finishedAt,
+			CreatedAt:   finishedAt,
+		})
+	}
+
+	durationSec := int(finishedAt.Sub(*room.startedAt).Seconds())
+	if durationSec <= 0 {
+		durationSec = int(room.roundDurationSec)
+	}
+
+	return &gameplay.Match{
+		ID:          *room.currentMatchID,
+		RoomID:      room.id,
+		RoomCode:    room.code,
+		RoomTitle:   room.title,
+		GameSlug:    hexBlitzGameSlug,
+		StartedAt:   *room.startedAt,
+		FinishedAt:  finishedAt,
+		DurationSec: durationSec,
+		CreatedAt:   finishedAt,
+		Results:     results,
 	}
 }
 
