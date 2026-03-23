@@ -20,6 +20,7 @@ import {
   HexBlitzBoardState,
   HexBlitzLeaderboardEntry,
   HexBlitzMatchSummary,
+  HexBlitzMoveResult,
   HexBlitzRoom,
   HexBlitzRoomPlayer,
 } from '@/lib/api-client';
@@ -101,6 +102,7 @@ export function HexBlitzPlayStage() {
   const [recentMatches, setRecentMatches] = useState<HexBlitzMatchSummary[]>([]);
   const [myMatches, setMyMatches] = useState<HexBlitzMatchSummary[]>([]);
   const [boardState, setBoardState] = useState<HexBlitzBoardState | null>(null);
+  const [lastMoveResult, setLastMoveResult] = useState<HexBlitzMoveResult | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
@@ -272,6 +274,7 @@ export function HexBlitzPlayStage() {
     setActiveRoomId(roomId);
     reconnectEnabledRef.current = true;
     setBoardState(null);
+    setLastMoveResult(null);
 
     const query = new URLSearchParams({
       room_id: roomId,
@@ -311,11 +314,16 @@ export function HexBlitzPlayStage() {
           setBoardState(message.payload as HexBlitzBoardState);
           return;
         }
+        if (message.type === 'move_result') {
+          setLastMoveResult(message.payload as HexBlitzMoveResult);
+          return;
+        }
         if (message.type === 'room_closed') {
           setNotice('房间已关闭。');
           setActiveRoom(null);
           setActiveRoomId(null);
           setBoardState(null);
+          setLastMoveResult(null);
           activeRoomIdRef.current = null;
           setWsStatus('idle');
           reconnectEnabledRef.current = false;
@@ -717,6 +725,7 @@ export function HexBlitzPlayStage() {
                       setActiveRoom(null);
                       setActiveRoomId(null);
                       setBoardState(null);
+                      setLastMoveResult(null);
                       setNotice('你已离开房间。');
                       setWsStatus('idle');
                     }}
@@ -731,6 +740,14 @@ export function HexBlitzPlayStage() {
                   现在这条链路已经具备真实的多人房间状态机：创建房间、进入房间、在线状态、
                   准备、倒计时、开始、局内记分同步、结束。
                 </div>
+
+                {lastMoveResult && (
+                  <div className="rounded-2xl border border-sky-300/15 bg-sky-300/10 px-4 py-4 text-sm leading-7 text-sky-50">
+                    服务端最近一次判定：清除 {lastMoveResult.cleared_count} 格，获得{' '}
+                    {lastMoveResult.gained_score} 分，当前连击 x{lastMoveResult.combo}，
+                    总分 {lastMoveResult.score}。
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3">

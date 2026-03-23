@@ -11,6 +11,7 @@ import (
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/audit"
 	"github.com/studio/platform/internal/domain/event"
+	"github.com/studio/platform/internal/domain/gameplay"
 	"github.com/studio/platform/internal/domain/group"
 	"github.com/studio/platform/internal/domain/notification"
 	"github.com/studio/platform/internal/domain/order"
@@ -19,6 +20,7 @@ import (
 	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
 	"github.com/studio/platform/internal/observability/audiometrics"
+	"github.com/studio/platform/internal/observability/gamemetrics"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -28,6 +30,7 @@ import (
 type AdminHandler struct {
 	statsService     usecase.StatsProvider
 	userService      *usecase.UserService
+	gameService      *usecase.HexBlitzRoomService
 	commentService   *usecase.CommentService
 	postService      *usecase.PostService
 	audioWorkService *usecase.AudioWorkService
@@ -46,7 +49,7 @@ type AdminHandler struct {
 func NewAdminHandler(
 	statsService usecase.StatsProvider,
 	userService *usecase.UserService,
-	_ any, // was gameService - no longer needed
+	gameService *usecase.HexBlitzRoomService,
 	commentService *usecase.CommentService,
 	postService *usecase.PostService,
 	audioWorkService *usecase.AudioWorkService,
@@ -63,6 +66,7 @@ func NewAdminHandler(
 	return &AdminHandler{
 		statsService:     statsService,
 		userService:      userService,
+		gameService:      gameService,
 		commentService:   commentService,
 		postService:      postService,
 		audioWorkService: audioWorkService,
@@ -76,6 +80,37 @@ func NewAdminHandler(
 		reportRepo:       reportRepo,
 		notifyService:    notifyService,
 	}
+}
+
+// GetGameOverview returns Hex Blitz runtime metrics, active rooms, leaderboard and recent matches.
+func (h *AdminHandler) GetGameOverview(c *gin.Context) {
+	gameMetrics := gamemetrics.GetSnapshot()
+
+	var rooms []*gameplay.Room
+	var leaderboard []*gameplay.LeaderboardEntry
+	var recentMatches []*gameplay.MatchSummary
+	if h.gameService != nil {
+		rooms = h.gameService.ListRooms()
+		entries, err := h.gameService.ListLeaderboard(c.Request.Context(), 10)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		leaderboard = entries
+		matches, err := h.gameService.ListRecentMatches(c.Request.Context(), 8)
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		recentMatches = matches
+	}
+
+	response.Success(c, gin.H{
+		"metrics":        gameMetrics,
+		"rooms":          rooms,
+		"leaderboard":    leaderboard,
+		"recent_matches": recentMatches,
+	})
 }
 
 // ListAudioWorks returns paginated audio works filtered by moderation status (admin).

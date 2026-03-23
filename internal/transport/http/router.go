@@ -433,7 +433,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				adminHandler := handler.NewAdminHandler(
 					cfg.StatsService,
 					cfg.UserService,
-					nil,
+					cfg.GameService,
 					cfg.CommentService,
 					cfg.PostService,
 					cfg.AudioWorkService,
@@ -450,6 +450,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 				admin.GET("/stats/dashboard", adminHandler.GetDashboardStats)
 				admin.GET("/stats/user-growth", adminHandler.GetUserGrowthChart)
+				admin.GET("/games/overview", adminHandler.GetGameOverview)
 				admin.GET("/audit-logs", adminHandler.ListAuditLogs)
 				admin.GET("/audit-logs/export", adminHandler.ExportAuditLogs)
 				admin.GET("/permissions/matrix", adminHandler.GetPermissionMatrix)

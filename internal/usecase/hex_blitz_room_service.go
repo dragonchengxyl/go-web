@@ -553,36 +553,37 @@ func (s *HexBlitzRoomService) GetPlayerBoardState(roomID uuid.UUID, sessionID st
 	return board.snapshot(sessionID, *room.currentMatchID, room.status, time.Now()), true
 }
 
-func (s *HexBlitzRoomService) ApplyMove(roomID uuid.UUID, sessionID, tileID string) (*gameplay.HexBlitzBoardState, error) {
+func (s *HexBlitzRoomService) ApplyMove(roomID uuid.UUID, sessionID, tileID string) (*gameplay.HexBlitzBoardState, *gameplay.HexBlitzMoveResult, error) {
 	s.mu.Lock()
 	room, ok := s.rooms[roomID]
 	if !ok {
 		s.mu.Unlock()
-		return nil, apperr.ErrNotFound
+		return nil, nil, apperr.ErrNotFound
 	}
 	if room.status != gameplay.RoomStatusRunning {
 		s.mu.Unlock()
-		return nil, apperr.BadRequest("当前房间不在对局中")
+		return nil, nil, apperr.BadRequest("当前房间不在对局中")
 	}
 	if room.currentMatchID == nil {
 		s.mu.Unlock()
-		return nil, apperr.BadRequest("当前对局尚未初始化")
+		return nil, nil, apperr.BadRequest("当前对局尚未初始化")
 	}
 	player, exists := room.players[sessionID]
 	if !exists {
 		s.mu.Unlock()
-		return nil, apperr.New(apperr.CodeForbidden, "您不在该房间中")
+		return nil, nil, apperr.New(apperr.CodeForbidden, "您不在该房间中")
 	}
 	board, exists := room.playerBoards[sessionID]
 	if !exists || board == nil {
 		s.mu.Unlock()
-		return nil, apperr.BadRequest("当前玩家棋盘未准备好")
+		return nil, nil, apperr.BadRequest("当前玩家棋盘未准备好")
 	}
 
 	now := time.Now()
-	if err := board.applyMove(strings.TrimSpace(tileID), now); err != nil {
+	moveResult, err := board.applyMove(sessionID, *room.currentMatchID, strings.TrimSpace(tileID), now)
+	if err != nil {
 		s.mu.Unlock()
-		return nil, err
+		return nil, nil, err
 	}
 	player.Score = board.score
 	player.UpdatedAt = now
@@ -591,7 +592,7 @@ func (s *HexBlitzRoomService) ApplyMove(roomID uuid.UUID, sessionID, tileID stri
 	s.mu.Unlock()
 
 	s.notify(roomID)
-	return snapshot, nil
+	return snapshot, moveResult, nil
 }
 
 func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64) {

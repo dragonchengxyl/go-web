@@ -60,10 +60,10 @@ func newHexBlitzPlayerBoard(seed int64, now time.Time) *hexBlitzPlayerBoard {
 	return board
 }
 
-func (b *hexBlitzPlayerBoard) applyMove(tileID string, now time.Time) error {
+func (b *hexBlitzPlayerBoard) applyMove(sessionID string, matchID uuid.UUID, tileID string, now time.Time) (*gameplay.HexBlitzMoveResult, error) {
 	group := hexBlitzCollectGroup(b.tiles, tileID)
 	if len(group) < 2 {
-		return apperr.BadRequest("当前选中的连线不足 2 格")
+		return nil, apperr.BadRequest("当前选中的连线不足 2 格")
 	}
 
 	cleared := hexBlitzExpandBurst(group, b.tiles)
@@ -115,7 +115,19 @@ func (b *hexBlitzPlayerBoard) applyMove(tileID string, now time.Time) error {
 		gainedScore,
 		nextCombo,
 	)
-	return nil
+	return &gameplay.HexBlitzMoveResult{
+		SessionID:    sessionID,
+		MatchID:      matchID,
+		TileID:       tileID,
+		ClearedCount: len(clearedTiles),
+		GainedScore:  gainedScore,
+		Score:        b.score,
+		Combo:        b.combo,
+		BestCombo:    b.bestCombo,
+		Moves:        b.moves,
+		Message:      b.message,
+		UpdatedAt:    now,
+	}, nil
 }
 
 func (b *hexBlitzPlayerBoard) snapshot(sessionID string, matchID uuid.UUID, phase gameplay.RoomStatus, now time.Time) *gameplay.HexBlitzBoardState {

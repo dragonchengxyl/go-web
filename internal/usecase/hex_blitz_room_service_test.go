@@ -76,10 +76,12 @@ func TestHexBlitzRoomServiceCreateJoinAndStart(t *testing.T) {
 	}
 	require.NotEmpty(t, playableTileID)
 
-	updatedBoardState, err := svc.ApplyMove(hostRoom.ID, "guest-session", playableTileID)
+	updatedBoardState, moveResult, err := svc.ApplyMove(hostRoom.ID, "guest-session", playableTileID)
 	require.NoError(t, err)
 	require.Greater(t, updatedBoardState.Score, 0)
 	require.Equal(t, 1, updatedBoardState.Moves)
+	require.NotNil(t, moveResult)
+	require.Equal(t, updatedBoardState.Score, moveResult.Score)
 
 	time.Sleep(50 * time.Millisecond)
 

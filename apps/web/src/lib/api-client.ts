@@ -423,6 +423,20 @@ export interface HexBlitzBoardState {
   tiles: HexBlitzTile[];
 }
 
+export interface HexBlitzMoveResult {
+  session_id: string;
+  match_id: string;
+  tile_id: string;
+  cleared_count: number;
+  gained_score: number;
+  score: number;
+  combo: number;
+  best_combo: number;
+  moves: number;
+  message: string;
+  updated_at: string;
+}
+
 export interface HexBlitzLeaderboardEntry {
   rank: number;
   user_id?: string;
@@ -461,6 +475,26 @@ export interface HexBlitzMatchSummary {
   winner_score: number;
   player_count: number;
   top_results: HexBlitzMatchResult[];
+}
+
+export interface AdminGameMetrics {
+  room_events_total: number;
+  score_reports_total: number;
+  rejected_score_reports: number;
+  active_rooms: number;
+  active_players: number;
+  active_connections: number;
+  matches_finished_total: number;
+  rooms_by_status: Record<string, number>;
+  room_events_by_type: Record<string, number>;
+  score_report_reasons: Record<string, number>;
+}
+
+export interface AdminGameOverview {
+  metrics: AdminGameMetrics;
+  rooms: HexBlitzRoom[];
+  leaderboard: HexBlitzLeaderboardEntry[];
+  recent_matches: HexBlitzMatchSummary[];
 }
 
 export interface AdminAIToolSection {
@@ -1952,6 +1986,10 @@ class ApiClient {
 
   async updateAdminSponsorConfig(data: AdminSponsorConfig) {
     return this.put<AdminSponsorConfig>("/admin/system/sponsor", data);
+  }
+
+  async getAdminGamesOverview() {
+    return this.get<AdminGameOverview>("/admin/games/overview");
   }
 }
 

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ClipboardList,
   Disc3,
+  Gamepad2,
   BarChart3,
   Bot,
   CalendarRange,
@@ -36,6 +37,13 @@ const navItems: NavItem[] = [
     description: "查看核心指标与待办队列",
     section: "总览",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/admin/games",
+    label: "游戏观测",
+    description: "查看房间、异常上报和战报概况",
+    section: "监控",
+    icon: Gamepad2,
   },
   {
     href: "/admin/analytics",

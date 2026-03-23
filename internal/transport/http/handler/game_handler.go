@@ -420,8 +420,13 @@ func (c *gameWSClient) readPump() {
 				c.handler.sendToClient(c, "error", gin.H{"message": "操作消息错误"})
 				continue
 			}
-			if _, err := c.handler.service.ApplyMove(c.roomID, c.sessionID, payload.TileID); err != nil {
+			_, moveResult, err := c.handler.service.ApplyMove(c.roomID, c.sessionID, payload.TileID)
+			if err != nil {
 				c.handler.sendToClient(c, "error", gin.H{"message": err.Error()})
+				continue
+			}
+			if moveResult != nil {
+				c.handler.sendToClient(c, "move_result", moveResult)
 			}
 		case "score_update":
 			c.handler.sendToClient(c, "error", gin.H{"message": "score_update 已弃用，请改为发送 make_move"})

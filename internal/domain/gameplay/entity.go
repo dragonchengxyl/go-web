@@ -57,6 +57,20 @@ type HexBlitzBoardState struct {
 	Tiles       []HexBlitzTile `json:"tiles"`
 }
 
+type HexBlitzMoveResult struct {
+	SessionID    string    `json:"session_id"`
+	MatchID      uuid.UUID `json:"match_id"`
+	TileID       string    `json:"tile_id"`
+	ClearedCount int       `json:"cleared_count"`
+	GainedScore  int       `json:"gained_score"`
+	Score        int       `json:"score"`
+	Combo        int       `json:"combo"`
+	BestCombo    int       `json:"best_combo"`
+	Moves        int       `json:"moves"`
+	Message      string    `json:"message"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type RoomPlayer struct {
 	SessionID string     `json:"session_id"`
 	UserID    *uuid.UUID `json:"user_id,omitempty"`
