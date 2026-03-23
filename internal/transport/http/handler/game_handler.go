@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/infra/redis"
+	"github.com/studio/platform/internal/observability/gamemetrics"
 	"github.com/studio/platform/internal/pkg/apperr"
 	cryptopkg "github.com/studio/platform/internal/pkg/crypto"
 	"github.com/studio/platform/internal/pkg/response"
@@ -266,6 +267,7 @@ func (h *GameHandler) registerClient(client *gameWSClient) {
 		h.rooms[client.roomID] = make(map[*gameWSClient]struct{})
 	}
 	h.rooms[client.roomID][client] = struct{}{}
+	gamemetrics.SetActiveConnections(h.connectionCountLocked())
 }
 
 func (h *GameHandler) unregisterClient(client *gameWSClient) {
@@ -276,8 +278,18 @@ func (h *GameHandler) unregisterClient(client *gameWSClient) {
 			delete(h.rooms, client.roomID)
 		}
 	}
+	connectionCount := h.connectionCountLocked()
 	h.mu.Unlock()
 	close(client.send)
+	gamemetrics.SetActiveConnections(connectionCount)
+}
+
+func (h *GameHandler) connectionCountLocked() int {
+	total := 0
+	for _, roomClients := range h.rooms {
+		total += len(roomClients)
+	}
+	return total
 }
 
 func (h *GameHandler) broadcastRoomState(roomID uuid.UUID) {

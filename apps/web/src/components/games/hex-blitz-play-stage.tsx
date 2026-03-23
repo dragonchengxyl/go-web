@@ -521,6 +521,11 @@ export function HexBlitzPlayStage() {
                 Go + WebSocket 链路，但棋盘解题仍然由前端本地执行。
               </div>
 
+              <div className="rounded-2xl border border-amber-300/15 bg-amber-300/10 px-4 py-3 text-sm leading-7 text-amber-50">
+                现在服务端已经增加了基础约束：分数不能倒退、不能异常跳涨、也不能超过当前实验室允许的上限。
+                这一步先解决“任何客户端都能随便报分”的问题。
+              </div>
+
               {errorMessage && (
                 <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
                   {errorMessage}

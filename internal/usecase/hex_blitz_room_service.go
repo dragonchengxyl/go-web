@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/gameplay"
+	"github.com/studio/platform/internal/observability/gamemetrics"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"go.uber.org/zap"
 )
@@ -18,6 +19,7 @@ const (
 	hexBlitzMaxPlayers    = 4
 	hexBlitzDefaultTitle  = "Hex Blitz 房间"
 	hexBlitzDefaultPlayer = "玩家"
+	hexBlitzMaxScore      = 50000
 )
 
 type HexBlitzRoomService struct {
@@ -74,6 +76,7 @@ type hexBlitzRoomState struct {
 	createdAt        time.Time
 	updatedAt        time.Time
 	players          map[string]*gameplay.RoomPlayer
+	lastScoreAt      map[string]time.Time
 	sequence         int64
 }
 
@@ -197,6 +200,7 @@ func (s *HexBlitzRoomService) CreateRoom(input CreateHexBlitzRoomInput) (*gamepl
 		createdAt:        now,
 		updatedAt:        now,
 		players:          make(map[string]*gameplay.RoomPlayer),
+		lastScoreAt:      make(map[string]time.Time),
 	}
 	room.players[sessionID] = &gameplay.RoomPlayer{
 		SessionID: sessionID,
@@ -213,8 +217,11 @@ func (s *HexBlitzRoomService) CreateRoom(input CreateHexBlitzRoomInput) (*gamepl
 	s.mu.Lock()
 	s.rooms[roomID] = room
 	s.sessionToRoom[sessionID] = roomID
+	room.lastScoreAt[sessionID] = time.Time{}
 	s.mu.Unlock()
 
+	gamemetrics.RecordRoomEvent("created")
+	s.refreshMetrics()
 	s.notify(roomID)
 	return snapshotHexBlitzRoom(room), nil
 }
@@ -260,6 +267,7 @@ func (s *HexBlitzRoomService) JoinRoom(input JoinHexBlitzRoomInput) (*gameplay.R
 		player.UserID = cloneUUIDPtr(input.UserID)
 		player.Connected = true
 		player.UpdatedAt = now
+		room.lastScoreAt[sessionID] = time.Time{}
 		room.updatedAt = now
 		s.sessionToRoom[sessionID] = room.id
 		notifyRoomIDs = append(notifyRoomIDs, room.id)
@@ -284,9 +292,12 @@ func (s *HexBlitzRoomService) JoinRoom(input JoinHexBlitzRoomInput) (*gameplay.R
 		JoinedAt:  now,
 		UpdatedAt: now,
 	}
+	room.lastScoreAt[sessionID] = time.Time{}
 	room.updatedAt = now
 	s.sessionToRoom[sessionID] = room.id
 	notifyRoomIDs = append(notifyRoomIDs, room.id)
+	gamemetrics.RecordRoomEvent("player_joined")
+	s.refreshMetricsLocked()
 	return snapshotHexBlitzRoom(room), nil
 }
 
@@ -309,10 +320,13 @@ func (s *HexBlitzRoomService) LeaveRoom(roomID uuid.UUID, sessionID string) (*ga
 
 	removeHexBlitzPlayer(room, sessionID)
 	delete(s.sessionToRoom, sessionID)
+	delete(room.lastScoreAt, sessionID)
 	var snapshot *gameplay.Room
 	if len(room.players) == 0 {
 		delete(s.rooms, roomID)
 		s.mu.Unlock()
+		gamemetrics.RecordRoomEvent("room_closed")
+		s.refreshMetrics()
 		s.notify(roomID)
 		return nil, nil
 	}
@@ -321,6 +335,8 @@ func (s *HexBlitzRoomService) LeaveRoom(roomID uuid.UUID, sessionID string) (*ga
 	snapshot = snapshotHexBlitzRoom(room)
 	s.mu.Unlock()
 
+	gamemetrics.RecordRoomEvent("player_left")
+	s.refreshMetrics()
 	s.notify(roomID)
 	return snapshot, nil
 }
@@ -369,6 +385,8 @@ func (s *HexBlitzRoomService) DisconnectSession(sessionID string) {
 	}
 	s.mu.Unlock()
 
+	gamemetrics.RecordRoomEvent("disconnected")
+	s.refreshMetrics()
 	if shouldNotify {
 		s.notify(notifyRoomID)
 	}
@@ -401,6 +419,7 @@ func (s *HexBlitzRoomService) SetReady(input SetHexBlitzReadyInput) (*gameplay.R
 	snapshot := snapshotHexBlitzRoom(room)
 	s.mu.Unlock()
 
+	gamemetrics.RecordRoomEvent("ready_changed")
 	s.notify(input.RoomID)
 	return snapshot, nil
 }
@@ -442,10 +461,13 @@ func (s *HexBlitzRoomService) StartMatch(roomID uuid.UUID, sessionID string) (*g
 	for _, player := range room.players {
 		player.Score = 0
 		player.UpdatedAt = now
+		room.lastScoreAt[player.SessionID] = time.Time{}
 	}
 	snapshot := snapshotHexBlitzRoom(room)
 	s.mu.Unlock()
 
+	gamemetrics.RecordRoomEvent("match_countdown_started")
+	s.refreshMetrics()
 	s.notify(roomID)
 	go s.runHexBlitzMatch(roomID, sequence)
 	return snapshot, nil
@@ -455,8 +477,9 @@ func (s *HexBlitzRoomService) UpdateScore(input UpdateHexBlitzScoreInput) (*game
 	if input.Score < 0 {
 		input.Score = 0
 	}
-	if input.Score > 999999 {
-		input.Score = 999999
+	if input.Score > hexBlitzMaxScore {
+		gamemetrics.RecordScoreReport(false, "score_cap_exceeded")
+		return nil, apperr.BadRequest("分数超过当前实验室允许范围")
 	}
 
 	s.mu.Lock()
@@ -474,12 +497,38 @@ func (s *HexBlitzRoomService) UpdateScore(input UpdateHexBlitzScoreInput) (*game
 		s.mu.Unlock()
 		return nil, apperr.New(apperr.CodeForbidden, "您不在该房间中")
 	}
+	if input.Score < player.Score {
+		s.mu.Unlock()
+		gamemetrics.RecordScoreReport(false, "score_regression")
+		return nil, apperr.BadRequest("分数不能回退")
+	}
+	delta := input.Score - player.Score
+	if delta > 6000 {
+		s.mu.Unlock()
+		gamemetrics.RecordScoreReport(false, "score_jump")
+		return nil, apperr.BadRequest("分数跃迁异常，已被拒绝")
+	}
+	now := time.Now()
+	lastReportedAt := room.lastScoreAt[input.SessionID]
+	if !lastReportedAt.IsZero() && delta > 0 {
+		elapsed := now.Sub(lastReportedAt)
+		if elapsed > 0 {
+			rate := float64(delta) / elapsed.Seconds()
+			if rate > 12000 {
+				s.mu.Unlock()
+				gamemetrics.RecordScoreReport(false, "score_rate")
+				return nil, apperr.BadRequest("分数增长速率异常，已被拒绝")
+			}
+		}
+	}
 	player.Score = input.Score
-	player.UpdatedAt = time.Now()
+	player.UpdatedAt = now
+	room.lastScoreAt[input.SessionID] = now
 	room.updatedAt = player.UpdatedAt
 	snapshot := snapshotHexBlitzRoom(room)
 	s.mu.Unlock()
 
+	gamemetrics.RecordScoreReport(true, "")
 	s.notify(input.RoomID)
 	return snapshot, nil
 }
@@ -503,8 +552,11 @@ func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64)
 		player.Ready = false
 		player.Score = 0
 		player.UpdatedAt = startedAt
+		room.lastScoreAt[player.SessionID] = time.Time{}
 	}
 	s.mu.Unlock()
+	gamemetrics.RecordRoomEvent("match_started")
+	s.refreshMetrics()
 	s.notify(roomID)
 
 	time.Sleep(s.roundDuration)
@@ -524,6 +576,9 @@ func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64)
 		player.UpdatedAt = finishedAt
 	}
 	s.mu.Unlock()
+	gamemetrics.RecordMatchFinished(len(match.Results))
+	gamemetrics.RecordRoomEvent("match_finished")
+	s.refreshMetrics()
 	s.notify(roomID)
 	s.persistMatch(match)
 }
@@ -535,6 +590,27 @@ func (s *HexBlitzRoomService) notify(roomID uuid.UUID) {
 	if notifier != nil {
 		notifier(roomID)
 	}
+}
+
+func (s *HexBlitzRoomService) refreshMetrics() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	s.refreshMetricsLocked()
+}
+
+func (s *HexBlitzRoomService) refreshMetricsLocked() {
+	roomsByStatus := map[string]int{
+		"waiting":   0,
+		"countdown": 0,
+		"running":   0,
+		"finished":  0,
+	}
+	activePlayers := 0
+	for _, room := range s.rooms {
+		roomsByStatus[string(room.status)]++
+		activePlayers += len(room.players)
+	}
+	gamemetrics.UpdateRooms(len(s.rooms), activePlayers, roomsByStatus)
 }
 
 func (s *HexBlitzRoomService) persistMatch(match *gameplay.Match) {
