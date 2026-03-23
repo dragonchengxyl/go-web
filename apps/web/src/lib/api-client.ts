@@ -2012,6 +2012,13 @@ export interface AdminSystemConfig {
     notification_port: number;
     moderation_port: number;
   };
+  audio_metrics: {
+    playback_events_total: number;
+    events_by_type: Record<string, number>;
+    last_event?: string;
+    last_source_kind?: string;
+    last_position_sec: number;
+  };
 }
 
 export interface GroupAnnouncement {

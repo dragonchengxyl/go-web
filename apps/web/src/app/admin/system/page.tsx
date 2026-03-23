@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Settings2, ShieldCheck, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Activity, AudioLines, Radio, Settings2, ShieldCheck, SlidersHorizontal, Sparkles } from 'lucide-react'
 import {
   AdminSponsorConfig,
   AdminSystemConfig,
@@ -40,6 +40,13 @@ function RuntimeCard({
       </CardContent>
     </Card>
   )
+}
+
+function formatEventDistribution(events?: Record<string, number>) {
+  if (!events) return '—'
+  const items = Object.entries(events).sort(([, left], [, right]) => right - left)
+  if (items.length === 0) return '—'
+  return items.map(([event, count]) => `${event}×${count}`).join(', ')
 }
 
 export default function AdminSystemPage() {
@@ -111,6 +118,30 @@ export default function AdminSystemPage() {
           hint="Server allow_origins 条目数"
           icon={SlidersHorizontal}
           tone="default"
+        />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <AdminMetricCard
+          label="播放事件总量"
+          value={String(data?.audio_metrics.playback_events_total ?? 0)}
+          hint="播放器累计上报的播放事件数"
+          icon={AudioLines}
+          tone={(data?.audio_metrics.playback_events_total ?? 0) > 0 ? 'brand' : 'default'}
+        />
+        <AdminMetricCard
+          label="最近事件"
+          value={data?.audio_metrics.last_event || '—'}
+          hint="最近一次捕获到的播放动作"
+          icon={Activity}
+          tone={data?.audio_metrics.last_event ? 'success' : 'default'}
+        />
+        <AdminMetricCard
+          label="最近来源"
+          value={data?.audio_metrics.last_source_kind || '—'}
+          hint="最近一次事件的来源上下文"
+          icon={Radio}
+          tone={data?.audio_metrics.last_source_kind ? 'warning' : 'default'}
         />
       </div>
 
@@ -190,6 +221,25 @@ export default function AdminSystemPage() {
               { label: 'Stats Port', value: data?.grpc.stats_port ?? '—' },
               { label: 'Notification Port', value: data?.grpc.notification_port ?? '—' },
               { label: 'Moderation Port', value: data?.grpc.moderation_port ?? '—' },
+            ]}
+          />
+          <RuntimeCard
+            title="音频播放"
+            rows={[
+              { label: '事件总量', value: data?.audio_metrics.playback_events_total ?? '—' },
+              { label: '最近事件', value: data?.audio_metrics.last_event || '—' },
+              { label: '最近来源', value: data?.audio_metrics.last_source_kind || '—' },
+              {
+                label: '最近位置',
+                value:
+                  typeof data?.audio_metrics.last_position_sec === 'number'
+                    ? `${data.audio_metrics.last_position_sec.toFixed(1)}s`
+                    : '—',
+              },
+              {
+                label: '事件分布',
+                value: formatEventDistribution(data?.audio_metrics.events_by_type),
+              },
             ]}
           />
         </div>

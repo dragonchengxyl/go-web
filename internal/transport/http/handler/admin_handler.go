@@ -18,6 +18,7 @@ import (
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/domain/report"
 	"github.com/studio/platform/internal/domain/user"
+	"github.com/studio/platform/internal/observability/audiometrics"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"github.com/studio/platform/internal/pkg/response"
 	"github.com/studio/platform/internal/usecase"
@@ -855,6 +856,7 @@ func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
 			sponsorCfg = cfg
 		}
 	}
+	audioMetrics := audiometrics.GetSnapshot()
 
 	response.Success(c, gin.H{
 		"server": gin.H{
@@ -919,6 +921,7 @@ func (h *AdminHandler) GetSystemConfig(c *gin.Context) {
 			"notification_port": h.config.GRPC.NotificationPort,
 			"moderation_port":   h.config.GRPC.ModerationPort,
 		},
+		"audio_metrics": audioMetrics,
 	})
 }
 
