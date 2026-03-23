@@ -47,6 +47,10 @@ export default function RegisterPage() {
     mutationFn: () => apiClient.register(formData.username, formData.email, formData.password),
     onSuccess: async (data) => {
       await login(data.access_token, data.refresh_token, data.user);
+      if (typeof window !== 'undefined') {
+        window.location.replace('/feed');
+        return;
+      }
       router.replace('/feed');
     },
     onError: (err: any) => {

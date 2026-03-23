@@ -73,9 +73,9 @@ export const gamesCatalog: GameCatalogEntry[] = [
     roundTime: '4-8 分钟一局',
     onlineNow: 0,
     shortDescription:
-      '基于现有网站账号、WebSocket 和后台观测体系接入的经典斗地主方案，先把真人房和人机演示模式接进站内。',
+      '基于现有网站账号、WebSocket 和战报链路接入的经典斗地主方案，当前已能进入房间、打人机演示并查看最近对局。',
     heroDescription:
-      '这不是独立 demo，而是站内第二款真实游戏接入工程。Phase 0 先把 Games Hub、详情页和试玩页壳子接上，后续再落规则引擎、实时房间、人机演示与战报体系。',
+      '这不是独立 demo，而是站内第二款真实游戏接入工程。当前版本已经接入真人房入口、快速 AI 演示、基础房间状态同步、最近对局与战报查询，下一步继续补完整出牌体验与后台多游戏观测。',
     accentFrom: '#f4b63f',
     accentTo: '#db5a3f',
     atmosphere: '暖金牌桌 / 琥珀 + 砖红',
@@ -91,10 +91,10 @@ export const gamesCatalog: GameCatalogEntry[] = [
       '天然适合接战报、排行榜、后台观测和社区分享链路。',
     ],
     roadmap: [
-      'Phase 0：Games Hub 接入、详情页、试玩页壳子、人机模式入口定义。',
-      'Phase 1：斗地主规则引擎、牌型比较、局内状态机与测试。',
-      'Phase 2：房间服务、WebSocket、人机演示模式、断线重连。',
-      'Phase 3：结算落库、最近对局、战报页、后台多游戏观测。',
+      'Phase 0-1：Games Hub 接入、规则引擎、牌型比较、局内状态机与测试。',
+      'Phase 2：房间服务、WebSocket、人机演示模式与断线重连。',
+      'Phase 3：结算落库、最近对局、战报页与查询接口。',
+      'Phase 4：前端大厅、房间页、最近对局入口与战报展示。',
     ],
     fitForJD: [
       '能展示服务端权威裁决、房间状态机和实时同步，而不是只做前端原型。',

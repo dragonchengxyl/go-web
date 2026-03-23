@@ -22,6 +22,14 @@ function buildForcedResetHref(from: string) {
   return `/settings?${params.toString()}`;
 }
 
+function redirectAfterAuth(path: string, router: ReturnType<typeof useRouter>) {
+  if (typeof window !== 'undefined') {
+    window.location.replace(path);
+    return;
+  }
+  router.replace(path);
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,10 +45,10 @@ function LoginForm() {
     onSuccess: async (data) => {
       await login(data.access_token, data.refresh_token, data.user);
       if (data.user?.force_password_reset) {
-        router.replace(buildForcedResetHref(from));
+        redirectAfterAuth(buildForcedResetHref(from), router);
         return;
       }
-      router.replace(from);
+      redirectAfterAuth(from, router);
     },
     onError: (err: any) => {
       setError(err.message || '登录失败，请检查邮箱和密码');

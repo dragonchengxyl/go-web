@@ -14,11 +14,11 @@ const playPageConfig = {
     badgeText: '房间实验室已接入',
   },
   'dou-dizhu': {
-    eyebrow: 'Phase 0 Integration',
+    eyebrow: 'Playable Integration',
     description:
-      '当前阶段先把斗地主正式接入站内试玩入口，并明确真人房与人机演示模式的页面壳子。下一阶段会开始落服务端规则引擎、房间服务和 WebSocket 实时链路。',
-    badgeLabel: 'Phase 0',
-    badgeText: '网站接入壳子已就位',
+      '当前版本已经接入真人房入口、快速 AI 演示、基础房间状态同步和战报查询链路。接下来继续完善前端出牌体验、查询页和后台多游戏观测。',
+    badgeLabel: 'Phase 4',
+    badgeText: '大厅与战报已接入',
   },
 } as const;
 

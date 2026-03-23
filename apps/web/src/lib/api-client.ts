@@ -555,6 +555,210 @@ export interface AdminGameOverview {
   recent_matches: HexBlitzMatchSummary[];
 }
 
+export type DoudizhuRoomStatus =
+  | "waiting"
+  | "bidding"
+  | "playing"
+  | "settlement"
+  | "redeal";
+
+export type DoudizhuMatchMode = "pvp" | "demo_ai";
+
+export type DoudizhuPlayerRole = "farmer" | "landlord";
+
+export type DoudizhuComboType =
+  | "single"
+  | "pair"
+  | "triple"
+  | "triple_with_single"
+  | "triple_with_pair"
+  | "straight"
+  | "straight_pairs"
+  | "airplane"
+  | "airplane_with_single"
+  | "airplane_with_pair"
+  | "four_with_two_single"
+  | "four_with_two_pair"
+  | "bomb"
+  | "rocket";
+
+export interface DoudizhuCard {
+  suit: "spade" | "heart" | "club" | "diamond" | "joker";
+  rank: number;
+}
+
+export interface DoudizhuCombo {
+  type: DoudizhuComboType;
+  main_rank: number;
+  sequence_length: number;
+  total_cards: number;
+}
+
+export interface DoudizhuBidRecord {
+  seat: number;
+  score: number;
+  at: string;
+}
+
+export interface DoudizhuActionRecord {
+  seat: number;
+  action_type: string;
+  cards?: DoudizhuCard[];
+  combo?: DoudizhuCombo;
+  at: string;
+  message?: string;
+  actor_name?: string;
+  winning_side?: DoudizhuPlayerRole;
+}
+
+export interface DoudizhuRoomPlayer {
+  session_id: string;
+  user_id?: string;
+  seat: number;
+  name: string;
+  ready: boolean;
+  connected: boolean;
+  is_host: boolean;
+  is_bot: boolean;
+  bot_level?: string;
+  auto_play: boolean;
+  card_count: number;
+  role: DoudizhuPlayerRole;
+  joined_at: string;
+  updated_at: string;
+}
+
+export interface DoudizhuRoom {
+  id: string;
+  code: string;
+  title: string;
+  match_mode: DoudizhuMatchMode;
+  status: DoudizhuRoomStatus;
+  host_session_id: string;
+  player_count: number;
+  ready_count: number;
+  current_bidder?: number;
+  highest_bid: number;
+  highest_bidder?: number;
+  landlord?: number;
+  current_turn?: number;
+  last_play?: DoudizhuCombo;
+  last_play_seat?: number;
+  winning_side?: DoudizhuPlayerRole;
+  turn_expires_at?: string;
+  bottom_cards?: DoudizhuCard[];
+  players: DoudizhuRoomPlayer[];
+  bid_history?: DoudizhuBidRecord[];
+  recent_actions?: DoudizhuActionRecord[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DoudizhuPrivateState {
+  session_id: string;
+  room_id: string;
+  status: DoudizhuRoomStatus;
+  hand: DoudizhuCard[];
+  can_pass: boolean;
+  role: DoudizhuPlayerRole;
+  bottom_cards?: DoudizhuCard[];
+  last_play?: DoudizhuCombo;
+  last_play_seat?: number;
+  turn_expires_at?: string;
+}
+
+export interface DoudizhuActionResult {
+  action_type: string;
+  seat: number;
+  actor_name: string;
+  combo?: DoudizhuCombo;
+  cards?: DoudizhuCard[];
+  hand_count: number;
+  next_turn?: number;
+  status: DoudizhuRoomStatus;
+  winning_side?: DoudizhuPlayerRole;
+  message?: string;
+}
+
+export interface DoudizhuMatchPlayerResult {
+  id: string;
+  match_id: string;
+  session_id: string;
+  user_id?: string;
+  is_bot: boolean;
+  bot_level?: string;
+  seat: number;
+  player_name: string;
+  display_name: string;
+  role: DoudizhuPlayerRole;
+  bid_score: number;
+  cards_left: number;
+  is_winner: boolean;
+  score_delta: number;
+  created_at: string;
+}
+
+export interface DoudizhuMatchSummary {
+  match_id: string;
+  room_id: string;
+  room_code: string;
+  room_title: string;
+  match_mode: DoudizhuMatchMode;
+  finished_at: string;
+  winner_side: DoudizhuPlayerRole;
+  landlord_seat: number;
+  multiplier: number;
+  player_count: number;
+  top_results: DoudizhuMatchPlayerResult[];
+}
+
+export interface DoudizhuLeaderboardEntry {
+  rank: number;
+  user_id?: string;
+  player_name: string;
+  display_name: string;
+  matches: number;
+  wins: number;
+  total_score: number;
+  last_played: string;
+}
+
+export interface DoudizhuReplay {
+  match: {
+    id: string;
+    room_id: string;
+    room_code: string;
+    room_title: string;
+    match_mode: DoudizhuMatchMode;
+    started_at: string;
+    finished_at: string;
+    landlord_seat: number;
+    winner_side: DoudizhuPlayerRole;
+    multiplier: number;
+    bomb_count: number;
+    spring: boolean;
+    anti_spring: boolean;
+    created_at: string;
+  };
+  results: DoudizhuMatchPlayerResult[];
+  events: Array<{
+    id: string;
+    match_id: string;
+    turn_no: number;
+    action_index: number;
+    session_id: string;
+    user_id?: string;
+    player_name: string;
+    display_name: string;
+    seat: number;
+    action_type: string;
+    cards?: DoudizhuCard[];
+    combo?: DoudizhuCombo;
+    multiplier_after: number;
+    occurred_at: string;
+  }>;
+}
+
 export interface AdminAIToolSection {
   title: string;
   bullets?: string[];
@@ -991,6 +1195,54 @@ class ApiClient {
     return this.get<{ matches: HexBlitzMatchSummary[] }>(
       `/games/hex-blitz/matches/me?limit=${limit}`
     );
+  }
+
+  // ── Games / Dou Dizhu ────────────────────────────────────────────────
+
+  async getDoudizhuRooms() {
+    return this.get<{ rooms: DoudizhuRoom[] }>("/games/dou-dizhu/rooms");
+  }
+
+  async getDoudizhuRoom(roomId: string) {
+    return this.get<DoudizhuRoom>(`/games/dou-dizhu/rooms/${roomId}`);
+  }
+
+  async createDoudizhuRoom(data: {
+    title?: string;
+    player_name: string;
+    session_id: string;
+  }) {
+    return this.post<DoudizhuRoom>("/games/dou-dizhu/rooms", data);
+  }
+
+  async createDoudizhuDemoRoom(data: {
+    title?: string;
+    player_name: string;
+    session_id: string;
+  }) {
+    return this.post<DoudizhuRoom>("/games/dou-dizhu/rooms/demo", data);
+  }
+
+  async getDoudizhuLeaderboard(limit = 10) {
+    return this.get<{ entries: DoudizhuLeaderboardEntry[] }>(
+      `/games/dou-dizhu/leaderboard?limit=${limit}`
+    );
+  }
+
+  async getDoudizhuRecentMatches(limit = 8) {
+    return this.get<{ matches: DoudizhuMatchSummary[] }>(
+      `/games/dou-dizhu/matches?limit=${limit}`
+    );
+  }
+
+  async getMyDoudizhuRecentMatches(limit = 8) {
+    return this.get<{ matches: DoudizhuMatchSummary[] }>(
+      `/games/dou-dizhu/matches/me?limit=${limit}`
+    );
+  }
+
+  async getDoudizhuReplay(matchId: string) {
+    return this.get<DoudizhuReplay>(`/games/dou-dizhu/matches/${matchId}/replay`);
   }
 
   // ── Follow ────────────────────────────────────────────────────────────
