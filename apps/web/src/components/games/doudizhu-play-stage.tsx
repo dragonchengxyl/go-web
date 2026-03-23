@@ -312,7 +312,7 @@ export function DouDizhuPlayStage() {
     setSelectedCards((current) =>
       current.filter((item) => privateState.hand.some((card) => cardKey(card) === item))
     );
-  }, [privateState?.hand]);
+  }, [privateState]);
 
   function updateActiveRoom(room: DoudizhuRoom) {
     const nextPlayers = [...room.players].sort(playerSort);
@@ -459,6 +459,12 @@ export function DouDizhuPlayStage() {
       wsRef.current = null;
 
       if (!reconnectEnabledRef.current || !activeRoomIdRef.current) {
+        setActiveRoom(null);
+        setActiveRoomId(null);
+        setPrivateState(null);
+        setLatestAction(null);
+        setSelectedCards([]);
+        setNotice('你已离开房间。');
         return;
       }
 
@@ -560,6 +566,31 @@ export function DouDizhuPlayStage() {
     }
     return privateState.hand.filter((card) => selectedCards.includes(cardKey(card)));
   }, [privateState, selectedCards]);
+
+  useEffect(() => {
+    if (!activeRoom || activeRoom.status !== 'settlement') {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      apiClient
+        .getDoudizhuLeaderboard(10)
+        .then((data) => setLeaderboard(data.entries))
+        .catch(() => {});
+      apiClient
+        .getDoudizhuRecentMatches(6)
+        .then((data) => setRecentMatches(data.matches))
+        .catch(() => {});
+      if (user) {
+        apiClient
+          .getMyDoudizhuRecentMatches(4)
+          .then((data) => setMyMatches(data.matches))
+          .catch(() => {});
+      }
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [activeRoom, user]);
 
   return (
     <div className="space-y-6">
