@@ -8,6 +8,7 @@ import {
   Bell,
   MessageCircle,
   AudioLines,
+  Gamepad2,
   Compass,
   PenSquare,
   LogOut,
@@ -31,6 +32,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const NAV_LINKS = [
   { href: "/feed", label: "动态" },
   { href: "/explore", label: "发现", icon: Compass },
+  { href: "/games", label: "游戏", icon: Gamepad2 },
   { href: "/audio/works", label: "音频", icon: AudioLines },
   { href: "/groups", label: "圈子", icon: Users },
   { href: "/events", label: "活动", icon: Calendar },
@@ -232,22 +234,27 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-3 flex-shrink-0">
-            {NAV_LINKS.map(({ href, label, icon: Icon, className }) => (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "text-sm font-medium transition-colors flex items-center gap-1",
-                  pathname === href
-                    ? "text-primary font-semibold"
-                    : "text-muted-foreground hover:text-foreground",
-                  className,
-                )}
-              >
-                {Icon && <Icon className="h-4 w-4" />}
-                {label}
-              </Link>
-            ))}
+            {NAV_LINKS.map(({ href, label, icon: Icon, className }) => {
+              const isActive =
+                pathname === href || pathname.startsWith(`${href}/`);
+
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "text-sm font-medium transition-colors flex items-center gap-1",
+                    isActive
+                      ? "text-primary font-semibold"
+                      : "text-muted-foreground hover:text-foreground",
+                    className,
+                  )}
+                >
+                  {Icon && <Icon className="h-4 w-4" />}
+                  {label}
+                </Link>
+              );
+            })}
 
             {isLoggedIn ? (
               <>
@@ -331,22 +338,27 @@ export function Header() {
                   <GlobalSearch />
                 </div>
                 <nav className="flex flex-col space-y-1">
-                  {NAV_LINKS.map(({ href, label, className }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={cn(
-                        "px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                        pathname === href
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                        className,
-                      )}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      {label}
-                    </Link>
-                  ))}
+                  {NAV_LINKS.map(({ href, label, className }) => {
+                    const isActive =
+                      pathname === href || pathname.startsWith(`${href}/`);
+
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={cn(
+                          "px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                          isActive
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          className,
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
 
                   {isLoggedIn ? (
                     <>
