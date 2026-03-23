@@ -309,8 +309,9 @@ export function DouDizhuPlayStage() {
       setSelectedCards([]);
       return;
     }
+    const hand = Array.isArray(privateState.hand) ? privateState.hand : [];
     setSelectedCards((current) =>
-      current.filter((item) => privateState.hand.some((card) => cardKey(card) === item))
+      current.filter((item) => hand.some((card) => cardKey(card) === item))
     );
   }, [privateState]);
 
@@ -561,11 +562,13 @@ export function DouDizhuPlayStage() {
     activeRoom.current_turn === me.seat;
 
   const selectedHandCards = useMemo(() => {
-    if (!privateState) {
+    if (!privateState || !Array.isArray(privateState.hand)) {
       return [];
     }
     return privateState.hand.filter((card) => selectedCards.includes(cardKey(card)));
   }, [privateState, selectedCards]);
+
+  const currentHand = Array.isArray(privateState?.hand) ? privateState.hand : [];
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== 'settlement') {
@@ -997,18 +1000,18 @@ export function DouDizhuPlayStage() {
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <div className="text-lg font-semibold text-white">我的手牌</div>
-                          <div className="mt-1 text-sm text-slate-400">
+                        <div className="mt-1 text-sm text-slate-400">
                             角色：{privateState.role === 'landlord' ? '地主' : '农民'} · 共{' '}
-                            {privateState.hand.length} 张
-                          </div>
+                            {currentHand.length} 张
                         </div>
+                      </div>
                         <div className="text-sm text-slate-400">
                           已选 {selectedCards.length} 张
                         </div>
                       </div>
 
                       <div className="flex flex-wrap gap-2">
-                        {privateState.hand.map((card) => {
+                        {currentHand.map((card) => {
                           const selected = selectedCards.includes(cardKey(card));
                           return (
                             <button
