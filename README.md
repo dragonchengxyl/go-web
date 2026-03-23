@@ -1,60 +1,88 @@
 # Furry 同好社区平台
 
-一个以 Furry 社区为核心的全栈 monorepo。当前代码已经实现了社区内容、群组、活动、私信、创作者打赏、AI 助手和管理后台；默认开发模式是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，并预留了通知、审核、统计三个可选扩展服务。
+一个以 Furry 社区为核心的全栈 monorepo。当前仓库已经落地社区内容、圈子、活动、私信通知、创作者赞助、音频作品、AI 助手、管理后台，以及一个持续扩展中的 `Hex Blitz` 游戏实验室。
+
+默认开发形态是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，并可按需接入通知、审核、统计和音频 worker 等扩展进程。
 
 ## 项目一句话
 
-这不是一个单页 demo，而是一个已经具备完整后端分层、前端页面矩阵、数据库迁移、运维脚本和部署清单的中型工程。主线业务是社区平台，仓库内还保留了音乐内容域、成就体系和排行榜等辅助模块。
+这不是一个单页 demo，而是一个已经具备后端分层、前端页面矩阵、数据库迁移、运维脚本和部署清单的中型工程。
 
-## 当前已经做了什么
+当前架构更接近：
+
+- 社区平台主站，承载内容、圈子、活动、私信、通知和创作者能力
+- 单体 API 优先，按需要用 Redis Streams / gRPC 拆出通知、审核、统计和音频处理
+- 同仓库维护 Web 前端、Go 后端、独立 worker/service、部署文件和 QA 工具
+
+## 当前代码已经做了什么
 
 ### 社区主线
 
-- 用户注册、登录、刷新 Token、退出登录、找回密码、邮箱验证
-- 用户资料编辑，包含 `furry_name`、`species` 等社区字段
+- 用户注册、登录、刷新 Token、退出登录、找回密码、重置密码、邮箱验证
+- 用户资料编辑，包含 `furry_name`、`species`、头像、简介、站点链接等社区字段
 - 帖子发布、编辑、删除、点赞、书签、举报、屏蔽
-- 评论和嵌套回复，关注关系与关注流 `feed`
+- 评论与回复、评论点赞、关注关系与关注流 `feed`
 - 探索页、热门标签、全文搜索、个性化推荐
 
-### 群组与活动
+### 圈子与活动
 
-- 群组列表、详情、创建、加入/退出、成员管理
-- 群组帖子、公告、标签、高亮帖、置顶帖、管理面板
+- 圈子列表、详情、创建、加入/退出、成员管理
+- 圈子帖子、公告、标签、高亮帖、置顶帖、管理面板
 - 活动列表、详情、创建、报名、我的活动 / 我参与的活动
 
-### 实时与消息
+### 实时、通知与审核
 
 - 私信会话、消息发送、已读状态
 - `WebSocket` 单连接实时推送
 - Redis Pub/Sub 分布式 WS Hub，支持多节点广播
+- 通知中心、未读数查询与实时提醒
+- Redis Streams 事件总线
+- `notification-svc` 消费事件生成通知
+- `moderation-svc` 消费帖子事件执行内容审核
 
-### 创作者与商业化
+### 创作者与音频
 
 - 打赏订单创建
 - 支付宝 / 微信支付接口接线，未配置时可回退到 mock 网关
 - 赞助页、创作者统计页、赞助配置
+- 音频任务创建、重试、发布
+- 社区音频作品列表、详情、播放事件、点赞、收藏、评论、举报
+- 独立 `audio-worker` 消费音频任务并执行本地处理
 
 ### AI 与管理后台
 
 - AI 助手流式对话（SSE）
 - 助手会话持久化、知识检索、媒体分析
-- 管理后台仪表盘、用户管理、评论管理、帖子审核、举报处理、审计日志、AI 助手设置
+- 助手知识索引后台同步与降级 fallback
+- 管理后台仪表盘、用户管理、评论管理、帖子审核、举报处理、审计日志
+- 管理后台 AI 助手设置与辅助工具
+- 后台还覆盖圈子、活动、订单、音频作品和游戏概览等页面
 
-### 保留 / 辅助模块
+### 游戏实验室
+
+- `Hex Blitz` 房间列表、房间详情、排行榜、最近对局
+- `Hex Blitz` 对局回放接口
+- 游戏专用 WebSocket：`/ws/game/hex-blitz`
+- 前端已接入实验室页面、排行榜和回放页
+
+### 辅助模块与工程能力
 
 - 音乐专辑与曲目接口
 - 成就系统与排行榜
-- `studio-cli` 健康检查、性能诊断、播种和 smoke 测试
+- `studio-cli` 健康检查、管理辅助、性能诊断、播种和 smoke 测试
+- `/health`、`/ready`、`/metrics`、`/debug/pprof/*`
+- Docker Compose、Kubernetes、数据库迁移、运维脚本
 
 ## 运行形态
 
 | 模式 | 组成 | 说明 |
 | --- | --- | --- |
-| 默认本地开发 | `apps/web` + `cmd/server` + PostgreSQL + Redis + MailHog | `./dev.sh` 一键拉起 |
+| 默认本地开发 | `apps/web` + `cmd/server` + PostgreSQL + Redis + MailHog | `./dev.sh` 一键拉起，主 API 已可独立承载大部分业务 |
 | 事件驱动扩展 | 再加 `cmd/notification-svc` / `cmd/moderation-svc` / `cmd/stats-svc` | 用于验证异步通知、审核和 gRPC 拆分 |
+| 音频处理扩展 | 再加 `cmd/audio-worker` | 消费音频任务、执行本地处理与重试 |
 | 部署 | Docker Compose / Kubernetes | 仓库内提供 `docker-compose.full.yml`、`docker-compose.ha.yml`、`k8s/` |
 
-默认情况下，主 API 已经可以独立工作；其中统计服务支持本地 fallback，通知和审核则更适合在独立服务模式下验证完整事件链路。
+默认情况下，主 API 可以独立工作；统计服务支持本地 fallback，而通知、审核和音频处理在独立进程模式下更接近生产拓扑。
 
 ## 技术栈
 
@@ -79,20 +107,23 @@
 
 ### 基础能力
 
-- Cloudflare R2 / 阿里云 OSS
+- Cloudflare R2 / 阿里云 OSS / 本地存储
 - Redis Streams 事件总线
-- WebSocket 实时推送
+- Redis Pub/Sub + WebSocket 实时推送
 - OpenAI-compatible / DeepSeek 风格 LLM 接口
+- Embedding / Vision 能力接入
 
 ## 关键目录
 
 | 目录 | 作用 |
 | --- | --- |
 | `cmd/server` | 主 API 入口，承载 HTTP、WebSocket、SSE、指标和大部分业务逻辑 |
+| `cmd/audio-worker` | 消费音频任务并执行本地处理、重试 |
 | `cmd/notification-svc` | 消费 Redis Streams 事件并生成通知 |
 | `cmd/moderation-svc` | 消费帖子事件并执行内容审核 |
 | `cmd/stats-svc` | 统计 gRPC 服务 |
-| `cmd/studio-cli` | 运维 / QA 辅助工具 |
+| `cmd/seed-dev` | 本地开发数据播种 |
+| `cmd/studio-cli` | 运维 / QA / 管理辅助工具 |
 | `apps/web` | Next.js 前端 |
 | `internal/domain` | 领域实体、仓储接口、权限模型 |
 | `internal/usecase` | 用例层，负责业务编排 |
@@ -132,7 +163,9 @@
 | 前端 | http://localhost:3000 |
 | API | http://localhost:8080/api/v1 |
 | 健康检查 | http://localhost:8080/health |
-| WebSocket | ws://localhost:8080/ws/chat |
+| 就绪检查 | http://localhost:8080/ready |
+| 聊天 WebSocket | ws://localhost:8080/ws/chat |
+| 游戏 WebSocket | ws://localhost:8080/ws/game/hex-blitz |
 | MailHog | http://localhost:8025 |
 | Prometheus Metrics | http://localhost:8080/metrics |
 
@@ -158,12 +191,19 @@ make dev-backend
 make dev-frontend
 ```
 
-可选扩展服务：
+可选扩展进程：
 
 ```bash
 go run ./cmd/stats-svc -config configs/config.local.yaml
 go run ./cmd/notification-svc -config configs/config.local.yaml
 go run ./cmd/moderation-svc -config configs/config.local.yaml
+go run ./cmd/audio-worker -config configs/config.local.yaml
+```
+
+开发数据播种：
+
+```bash
+go run ./cmd/seed-dev -config configs/config.local.yaml
 ```
 
 ## 配置说明
@@ -173,7 +213,9 @@ go run ./cmd/moderation-svc -config configs/config.local.yaml
 - `./dev.sh` 会自动补齐根目录 `.env` 和 `apps/web/.env`
 - OSS 直传需要配置 `oss.*`
 - AI 助手需要配置 `assistant.*`
+- 支付接入需要配置 `payment.*`
 - `moderation-svc` 需要有效的阿里云内容审核凭据
+- `audio-worker` 读取 `audio.*` 和 `oss.allowed_hosts`
 
 ## 常用命令
 
@@ -195,6 +237,7 @@ make ci
 make build-studio-cli
 ./bin/studio-cli health
 ./bin/studio-cli smoke
+./bin/studio-cli seed demo
 ./bin/studio-cli perf db
 ./bin/studio-cli pprof cpu --seconds 30
 ```

@@ -105,14 +105,14 @@ export function GameCard({
               {game.status === 'playable' ? '进入游戏页' : '查看企划'}
             </Link>
           </Button>
-          {game.status === 'playable' && (
+          {game.playPageEnabled && (
             <Button
               asChild
               variant="outline"
               className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
             >
               <Link href={`/games/${game.slug}/play`}>
-                直接试玩
+                {game.status === 'playable' ? '直接试玩' : '进入实验页'}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>

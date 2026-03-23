@@ -1,8 +1,26 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Sparkles } from 'lucide-react';
+import { DouDizhuPlayStage } from '@/components/games/doudizhu-play-stage';
 import { HexBlitzPlayStage } from '@/components/games/hex-blitz-play-stage';
 import { getGameBySlug } from '@/lib/games';
+
+const playPageConfig = {
+  'hex-blitz': {
+    eyebrow: 'Playable Prototype',
+    description:
+      '当前版本先验证休闲手感和分数循环。下一阶段会把这块接成多人房间模式，补 WebSocket 同步、结算落库和排行榜。',
+    badgeLabel: 'Stage 2',
+    badgeText: '房间实验室已接入',
+  },
+  'dou-dizhu': {
+    eyebrow: 'Phase 0 Integration',
+    description:
+      '当前阶段先把斗地主正式接入站内试玩入口，并明确真人房与人机演示模式的页面壳子。下一阶段会开始落服务端规则引擎、房间服务和 WebSocket 实时链路。',
+    badgeLabel: 'Phase 0',
+    badgeText: '网站接入壳子已就位',
+  },
+} as const;
 
 export default function GamePlayPage({
   params,
@@ -11,7 +29,12 @@ export default function GamePlayPage({
 }) {
   const game = getGameBySlug(params.slug);
 
-  if (!game || game.slug !== 'hex-blitz') {
+  if (!game || !game.playPageEnabled) {
+    notFound();
+  }
+
+  const pageConfig = playPageConfig[game.slug as keyof typeof playPageConfig];
+  if (!pageConfig) {
     notFound();
   }
 
@@ -29,7 +52,7 @@ export default function GamePlayPage({
         <div className="mt-6 mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.32em] text-slate-500">
-              Playable Prototype
+              {pageConfig.eyebrow}
             </p>
             <h1 className="mt-2 text-4xl font-black tracking-tight text-white">
               {game.title}
@@ -38,20 +61,19 @@ export default function GamePlayPage({
               </span>
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
-              当前版本先验证休闲手感和分数循环。下一阶段会把这块接成多人房间模式，补
-              WebSocket 同步、结算落库和排行榜。
+              {pageConfig.description}
             </p>
           </div>
           <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
             <span className="mr-2 inline-flex items-center gap-1 text-amber-300">
               <Sparkles className="h-4 w-4" />
-              Stage 2
+              {pageConfig.badgeLabel}
             </span>
-            房间实验室已接入
+            {pageConfig.badgeText}
           </div>
         </div>
 
-        <HexBlitzPlayStage />
+        {game.slug === 'hex-blitz' ? <HexBlitzPlayStage /> : <DouDizhuPlayStage />}
       </section>
     </main>
   );

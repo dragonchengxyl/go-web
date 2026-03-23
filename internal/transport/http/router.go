@@ -52,6 +52,7 @@ type RouterConfig struct {
 	AdminAIToolService     *usecase.AdminAIToolService
 	MultimodalService      *usecase.MultimodalService
 	GameService            *usecase.HexBlitzRoomService
+	DoudizhuService        *usecase.DoudizhuRoomService
 	Hub                    ws.HubInterface
 	TokenStore             *redis.TokenStore
 	ReportRepo             report.Repository
@@ -96,6 +97,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	var gameHandler *handler.GameHandler
 	if cfg.GameService != nil {
 		gameHandler = handler.NewGameHandler(cfg.GameService, cfg.Config.JWT, cfg.TokenStore, cfg.Logger)
+	}
+	var doudizhuHandler *handler.DoudizhuHandler
+	if cfg.DoudizhuService != nil {
+		doudizhuHandler = handler.NewDoudizhuHandler(cfg.DoudizhuService, cfg.Config.JWT, cfg.TokenStore, cfg.Logger)
 	}
 
 	v1 := r.Group("/api/v1")
@@ -256,6 +261,14 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			games.GET("/matches", gameHandler.ListHexBlitzRecentMatches)
 			games.GET("/matches/:match_id/replay", gameHandler.GetHexBlitzReplay)
 			games.POST("/rooms", gameHandler.CreateHexBlitzRoom)
+		}
+		if doudizhuHandler != nil {
+			games := v1.Group("/games/dou-dizhu")
+			games.Use(authMiddleware.OptionalAuthenticate())
+			games.GET("/rooms", doudizhuHandler.ListRooms)
+			games.GET("/rooms/:id", doudizhuHandler.GetRoom)
+			games.POST("/rooms", doudizhuHandler.CreateRoom)
+			games.POST("/rooms/demo", doudizhuHandler.CreateDemoRoom)
 		}
 
 		// ── Authenticated routes ────────────────────────────────────────
@@ -529,6 +542,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.GET("/ws/chat", middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore).Authenticate(), chatHandler.ServeWS)
 	if cfg.GameService != nil {
 		r.GET("/ws/game/hex-blitz", gameHandler.ServeHexBlitzWS)
+	}
+	if cfg.DoudizhuService != nil {
+		r.GET("/ws/game/dou-dizhu", doudizhuHandler.ServeWS)
 	}
 
 	return r

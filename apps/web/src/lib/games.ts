@@ -5,6 +5,7 @@ export interface GameCatalogEntry {
   title: string;
   subtitle: string;
   status: GameStatus;
+  playPageEnabled?: boolean;
   genre: string;
   playerMode: string;
   roundTime: string;
@@ -26,6 +27,7 @@ export const gamesCatalog: GameCatalogEntry[] = [
     title: 'Hex Blitz',
     subtitle: '六角冲分赛',
     status: 'playable',
+    playPageEnabled: true,
     genre: '休闲竞技 / 连消冲分',
     playerMode: '当前单机，规划 2-4 人实时对局',
     roundTime: '75 秒一局',
@@ -58,6 +60,46 @@ export const gamesCatalog: GameCatalogEntry[] = [
       '能讲清楚游戏服务器如何设计房间、Tick 和状态同步。',
       '可以展示你如何和策划一起压缩规则，和美术一起定义反馈。',
       '后续很适合补性能优化、稳定性和压测结果。',
+    ],
+  },
+  {
+    slug: 'dou-dizhu',
+    title: 'Dou Dizhu',
+    subtitle: '经典斗地主',
+    status: 'prototype',
+    playPageEnabled: true,
+    genre: '棋牌对战 / 房间制',
+    playerMode: '3 人房间对战，规划 1 人 + 2 机器人演示',
+    roundTime: '4-8 分钟一局',
+    onlineNow: 0,
+    shortDescription:
+      '基于现有网站账号、WebSocket 和后台观测体系接入的经典斗地主方案，先把真人房和人机演示模式接进站内。',
+    heroDescription:
+      '这不是独立 demo，而是站内第二款真实游戏接入工程。Phase 0 先把 Games Hub、详情页和试玩页壳子接上，后续再落规则引擎、实时房间、人机演示与战报体系。',
+    accentFrom: '#f4b63f',
+    accentTo: '#db5a3f',
+    atmosphere: '暖金牌桌 / 琥珀 + 砖红',
+    loops: [
+      '3 人进入房间后开始一局经典斗地主，服务端完成发牌、叫分、抢地主和胜负裁决。',
+      '房间模式是主线，人机演示模式是兜底能力，保证单人也能完整演示一局。',
+      '战报、最近对局和后台观测会直接接入现有网站，不做孤立页游。',
+      '第一阶段先把入口和页面壳子接入，后续分阶段接规则引擎、WebSocket 和落库。',
+    ],
+    highlights: [
+      '更贴近传统实时棋牌服务端场景，能清楚展示状态机与裁决逻辑。',
+      '单人演示可依赖机器人兜底，避免现场凑不齐 3 个真人。',
+      '天然适合接战报、排行榜、后台观测和社区分享链路。',
+    ],
+    roadmap: [
+      'Phase 0：Games Hub 接入、详情页、试玩页壳子、人机模式入口定义。',
+      'Phase 1：斗地主规则引擎、牌型比较、局内状态机与测试。',
+      'Phase 2：房间服务、WebSocket、人机演示模式、断线重连。',
+      'Phase 3：结算落库、最近对局、战报页、后台多游戏观测。',
+    ],
+    fitForJD: [
+      '能展示服务端权威裁决、房间状态机和实时同步，而不是只做前端原型。',
+      '人机模式让你在演示和录屏场景中稳定跑通完整链路。',
+      '很适合往后扩成更完整的棋牌游戏中台，而不会脱离现有网站。',
     ],
   },
   {
