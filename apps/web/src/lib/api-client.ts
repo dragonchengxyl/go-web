@@ -390,6 +390,39 @@ export interface HexBlitzRoom {
   players: HexBlitzRoomPlayer[];
 }
 
+export type HexBlitzTileColor =
+  | "ember"
+  | "lagoon"
+  | "mint"
+  | "sun"
+  | "violet";
+
+export type HexBlitzTileSpecial = "none" | "spark" | "burst";
+
+export interface HexBlitzTile {
+  id: string;
+  q: number;
+  r: number;
+  color: HexBlitzTileColor;
+  special: HexBlitzTileSpecial;
+}
+
+export interface HexBlitzBoardState {
+  session_id: string;
+  match_id: string;
+  phase: HexBlitzRoomStatus;
+  seed: number;
+  score: number;
+  combo: number;
+  best_combo: number;
+  moves: number;
+  last_gain: number;
+  last_cleared: number;
+  message: string;
+  updated_at: string;
+  tiles: HexBlitzTile[];
+}
+
 export interface HexBlitzLeaderboardEntry {
   rank: number;
   user_id?: string;

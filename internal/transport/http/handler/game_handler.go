@@ -298,17 +298,17 @@ func (h *GameHandler) broadcastRoomState(roomID uuid.UUID) {
 		h.closeRoomClients(roomID)
 		return
 	}
-	h.broadcastToRoom(roomID, "room_state", room)
+	clients := h.roomClients(roomID)
+	h.broadcastToClients(clients, "room_state", room)
+	for _, client := range clients {
+		if board, exists := h.service.GetPlayerBoardState(roomID, client.sessionID); exists {
+			h.sendToClient(client, "board_state", board)
+		}
+	}
 }
 
 func (h *GameHandler) closeRoomClients(roomID uuid.UUID) {
-	h.mu.RLock()
-	roomClients := h.rooms[roomID]
-	clients := make([]*gameWSClient, 0, len(roomClients))
-	for client := range roomClients {
-		clients = append(clients, client)
-	}
-	h.mu.RUnlock()
+	clients := h.roomClients(roomID)
 
 	for _, client := range clients {
 		h.sendToClient(client, "room_closed", gin.H{"room_id": roomID.String()})
@@ -317,6 +317,10 @@ func (h *GameHandler) closeRoomClients(roomID uuid.UUID) {
 }
 
 func (h *GameHandler) broadcastToRoom(roomID uuid.UUID, messageType string, payload any) {
+	h.broadcastToClients(h.roomClients(roomID), messageType, payload)
+}
+
+func (h *GameHandler) broadcastToClients(clients []*gameWSClient, messageType string, payload any) {
 	data, err := json.Marshal(gin.H{
 		"type":    messageType,
 		"payload": payload,
@@ -325,15 +329,23 @@ func (h *GameHandler) broadcastToRoom(roomID uuid.UUID, messageType string, payl
 		h.logger.Error("failed to marshal game ws message", zap.Error(err))
 		return
 	}
-
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for client := range h.rooms[roomID] {
+	for _, client := range clients {
 		select {
 		case client.send <- data:
 		default:
 		}
 	}
+}
+
+func (h *GameHandler) roomClients(roomID uuid.UUID) []*gameWSClient {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	roomClients := h.rooms[roomID]
+	clients := make([]*gameWSClient, 0, len(roomClients))
+	for client := range roomClients {
+		clients = append(clients, client)
+	}
+	return clients
 }
 
 func (h *GameHandler) sendToClient(client *gameWSClient, messageType string, payload any) {
@@ -400,21 +412,19 @@ func (c *gameWSClient) readPump() {
 			if _, err := c.handler.service.StartMatch(c.roomID, c.sessionID); err != nil {
 				c.handler.sendToClient(c, "error", gin.H{"message": err.Error()})
 			}
-		case "score_update":
+		case "make_move":
 			var payload struct {
-				Score int `json:"score"`
+				TileID string `json:"tile_id"`
 			}
 			if err := json.Unmarshal(message.Payload, &payload); err != nil {
-				c.handler.sendToClient(c, "error", gin.H{"message": "分数消息错误"})
+				c.handler.sendToClient(c, "error", gin.H{"message": "操作消息错误"})
 				continue
 			}
-			if _, err := c.handler.service.UpdateScore(usecase.UpdateHexBlitzScoreInput{
-				RoomID:    c.roomID,
-				SessionID: c.sessionID,
-				Score:     payload.Score,
-			}); err != nil {
+			if _, err := c.handler.service.ApplyMove(c.roomID, c.sessionID, payload.TileID); err != nil {
 				c.handler.sendToClient(c, "error", gin.H{"message": err.Error()})
 			}
+		case "score_update":
+			c.handler.sendToClient(c, "error", gin.H{"message": "score_update 已弃用，请改为发送 make_move"})
 		case "leave_room":
 			if _, err := c.handler.service.LeaveRoom(c.roomID, c.sessionID); err != nil {
 				c.handler.sendToClient(c, "error", gin.H{"message": err.Error()})

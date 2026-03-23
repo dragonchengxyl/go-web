@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import {
   apiClient,
+  HexBlitzBoardState,
   HexBlitzLeaderboardEntry,
   HexBlitzMatchSummary,
   HexBlitzRoom,
@@ -99,11 +100,11 @@ export function HexBlitzPlayStage() {
   const [leaderboard, setLeaderboard] = useState<HexBlitzLeaderboardEntry[]>([]);
   const [recentMatches, setRecentMatches] = useState<HexBlitzMatchSummary[]>([]);
   const [myMatches, setMyMatches] = useState<HexBlitzMatchSummary[]>([]);
+  const [boardState, setBoardState] = useState<HexBlitzBoardState | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
   const reconnectEnabledRef = useRef(false);
-  const lastReportedScoreRef = useRef(-1);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -270,7 +271,7 @@ export function HexBlitzPlayStage() {
     activeRoomIdRef.current = roomId;
     setActiveRoomId(roomId);
     reconnectEnabledRef.current = true;
-    lastReportedScoreRef.current = -1;
+    setBoardState(null);
 
     const query = new URLSearchParams({
       room_id: roomId,
@@ -306,10 +307,15 @@ export function HexBlitzPlayStage() {
           updateActiveRoom(message.payload as HexBlitzRoom);
           return;
         }
+        if (message.type === 'board_state') {
+          setBoardState(message.payload as HexBlitzBoardState);
+          return;
+        }
         if (message.type === 'room_closed') {
           setNotice('房间已关闭。');
           setActiveRoom(null);
           setActiveRoomId(null);
+          setBoardState(null);
           activeRoomIdRef.current = null;
           setWsStatus('idle');
           reconnectEnabledRef.current = false;
@@ -436,15 +442,12 @@ export function HexBlitzPlayStage() {
     <div className="space-y-6">
       <HexBlitzPrototype
         roomMode={roomMode}
-        onScoreChange={(score) => {
+        boardState={boardState}
+        onBoardMove={(tileId) => {
           if (!activeRoom || activeRoom.status !== 'running') {
             return;
           }
-          if (lastReportedScoreRef.current === score) {
-            return;
-          }
-          lastReportedScoreRef.current = score;
-          sendRoomMessage('score_update', { score });
+          sendRoomMessage('make_move', { tile_id: tileId });
         }}
       />
 
@@ -713,6 +716,7 @@ export function HexBlitzPlayStage() {
                       sendRoomMessage('leave_room');
                       setActiveRoom(null);
                       setActiveRoomId(null);
+                      setBoardState(null);
                       setNotice('你已离开房间。');
                       setWsStatus('idle');
                     }}
@@ -781,8 +785,8 @@ export function HexBlitzPlayStage() {
           <div className="mt-5 flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm leading-7 text-slate-300">
             <AlertCircle className="mt-1 h-4 w-4 flex-shrink-0 text-amber-300" />
             <div>
-              当前多人版仍是“客户端记分、服务端同步房间状态”的实验室实现，目的是先把房间、WS
-              协议和多人演示链路立起来。下一阶段再把计分和结算逻辑逐步收回到服务端。
+              当前多人版已经进一步升级为“客户端发送操作，服务端维护棋盘和分数”。房间状态、
+              棋盘状态、得分变化和战报都由服务端统一裁定与广播。
             </div>
           </div>
         </CardContent>

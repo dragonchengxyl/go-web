@@ -15,6 +15,48 @@ const (
 	RoomStatusFinished  RoomStatus = "finished"
 )
 
+type HexBlitzTileColor string
+
+const (
+	HexBlitzTileColorEmber  HexBlitzTileColor = "ember"
+	HexBlitzTileColorLagoon HexBlitzTileColor = "lagoon"
+	HexBlitzTileColorMint   HexBlitzTileColor = "mint"
+	HexBlitzTileColorSun    HexBlitzTileColor = "sun"
+	HexBlitzTileColorViolet HexBlitzTileColor = "violet"
+)
+
+type HexBlitzTileSpecial string
+
+const (
+	HexBlitzTileSpecialNone  HexBlitzTileSpecial = "none"
+	HexBlitzTileSpecialSpark HexBlitzTileSpecial = "spark"
+	HexBlitzTileSpecialBurst HexBlitzTileSpecial = "burst"
+)
+
+type HexBlitzTile struct {
+	ID      string              `json:"id"`
+	Q       int                 `json:"q"`
+	R       int                 `json:"r"`
+	Color   HexBlitzTileColor   `json:"color"`
+	Special HexBlitzTileSpecial `json:"special"`
+}
+
+type HexBlitzBoardState struct {
+	SessionID   string         `json:"session_id"`
+	MatchID     uuid.UUID      `json:"match_id"`
+	Phase       RoomStatus     `json:"phase"`
+	Seed        int64          `json:"seed"`
+	Score       int            `json:"score"`
+	Combo       int            `json:"combo"`
+	BestCombo   int            `json:"best_combo"`
+	Moves       int            `json:"moves"`
+	LastGain    int            `json:"last_gain"`
+	LastCleared int            `json:"last_cleared"`
+	Message     string         `json:"message"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Tiles       []HexBlitzTile `json:"tiles"`
+}
+
 type RoomPlayer struct {
 	SessionID string     `json:"session_id"`
 	UserID    *uuid.UUID `json:"user_id,omitempty"`

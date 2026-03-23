@@ -76,6 +76,7 @@ type hexBlitzRoomState struct {
 	createdAt        time.Time
 	updatedAt        time.Time
 	players          map[string]*gameplay.RoomPlayer
+	playerBoards     map[string]*hexBlitzPlayerBoard
 	lastScoreAt      map[string]time.Time
 	sequence         int64
 }
@@ -200,6 +201,7 @@ func (s *HexBlitzRoomService) CreateRoom(input CreateHexBlitzRoomInput) (*gamepl
 		createdAt:        now,
 		updatedAt:        now,
 		players:          make(map[string]*gameplay.RoomPlayer),
+		playerBoards:     make(map[string]*hexBlitzPlayerBoard),
 		lastScoreAt:      make(map[string]time.Time),
 	}
 	room.players[sessionID] = &gameplay.RoomPlayer{
@@ -245,6 +247,8 @@ func (s *HexBlitzRoomService) JoinRoom(input JoinHexBlitzRoomInput) (*gameplay.R
 	if previousRoomID, ok := s.sessionToRoom[sessionID]; ok && previousRoomID != input.RoomID {
 		if previousRoom, exists := s.rooms[previousRoomID]; exists {
 			removeHexBlitzPlayer(previousRoom, sessionID)
+			delete(previousRoom.playerBoards, sessionID)
+			delete(previousRoom.lastScoreAt, sessionID)
 			if len(previousRoom.players) == 0 {
 				delete(s.rooms, previousRoomID)
 			} else {
@@ -319,6 +323,7 @@ func (s *HexBlitzRoomService) LeaveRoom(roomID uuid.UUID, sessionID string) (*ga
 	}
 
 	removeHexBlitzPlayer(room, sessionID)
+	delete(room.playerBoards, sessionID)
 	delete(s.sessionToRoom, sessionID)
 	delete(room.lastScoreAt, sessionID)
 	var snapshot *gameplay.Room
@@ -533,6 +538,62 @@ func (s *HexBlitzRoomService) UpdateScore(input UpdateHexBlitzScoreInput) (*game
 	return snapshot, nil
 }
 
+func (s *HexBlitzRoomService) GetPlayerBoardState(roomID uuid.UUID, sessionID string) (*gameplay.HexBlitzBoardState, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	room, ok := s.rooms[roomID]
+	if !ok || room.currentMatchID == nil {
+		return nil, false
+	}
+	board, exists := room.playerBoards[sessionID]
+	if !exists || board == nil {
+		return nil, false
+	}
+	return board.snapshot(sessionID, *room.currentMatchID, room.status, time.Now()), true
+}
+
+func (s *HexBlitzRoomService) ApplyMove(roomID uuid.UUID, sessionID, tileID string) (*gameplay.HexBlitzBoardState, error) {
+	s.mu.Lock()
+	room, ok := s.rooms[roomID]
+	if !ok {
+		s.mu.Unlock()
+		return nil, apperr.ErrNotFound
+	}
+	if room.status != gameplay.RoomStatusRunning {
+		s.mu.Unlock()
+		return nil, apperr.BadRequest("当前房间不在对局中")
+	}
+	if room.currentMatchID == nil {
+		s.mu.Unlock()
+		return nil, apperr.BadRequest("当前对局尚未初始化")
+	}
+	player, exists := room.players[sessionID]
+	if !exists {
+		s.mu.Unlock()
+		return nil, apperr.New(apperr.CodeForbidden, "您不在该房间中")
+	}
+	board, exists := room.playerBoards[sessionID]
+	if !exists || board == nil {
+		s.mu.Unlock()
+		return nil, apperr.BadRequest("当前玩家棋盘未准备好")
+	}
+
+	now := time.Now()
+	if err := board.applyMove(strings.TrimSpace(tileID), now); err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	player.Score = board.score
+	player.UpdatedAt = now
+	room.updatedAt = now
+	snapshot := board.snapshot(sessionID, *room.currentMatchID, room.status, now)
+	s.mu.Unlock()
+
+	s.notify(roomID)
+	return snapshot, nil
+}
+
 func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64) {
 	time.Sleep(s.countdown)
 
@@ -548,11 +609,13 @@ func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64)
 	room.startedAt = &startedAt
 	room.endsAt = &endsAt
 	room.updatedAt = startedAt
+	matchSeed := hexBlitzSeedFromMatchID(*room.currentMatchID)
 	for _, player := range room.players {
 		player.Ready = false
 		player.Score = 0
 		player.UpdatedAt = startedAt
 		room.lastScoreAt[player.SessionID] = time.Time{}
+		room.playerBoards[player.SessionID] = newHexBlitzPlayerBoard(matchSeed, startedAt)
 	}
 	s.mu.Unlock()
 	gamemetrics.RecordRoomEvent("match_started")

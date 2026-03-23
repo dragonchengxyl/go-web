@@ -63,19 +63,23 @@ func TestHexBlitzRoomServiceCreateJoinAndStart(t *testing.T) {
 	require.NotNil(t, runningRoom.StartedAt)
 	require.NotNil(t, runningRoom.EndsAt)
 
-	updatedScoreRoom, err := svc.UpdateScore(UpdateHexBlitzScoreInput{
-		RoomID:    hostRoom.ID,
-		SessionID: "guest-session",
-		Score:     1880,
-	})
-	require.NoError(t, err)
-	var guestScore int
-	for _, player := range updatedScoreRoom.Players {
-		if player.SessionID == "guest-session" {
-			guestScore = player.Score
+	boardState, ok := svc.GetPlayerBoardState(hostRoom.ID, "guest-session")
+	require.True(t, ok)
+	require.NotEmpty(t, boardState.Tiles)
+
+	var playableTileID string
+	for _, tile := range boardState.Tiles {
+		if len(hexBlitzCollectGroup(boardState.Tiles, tile.ID)) >= 2 {
+			playableTileID = tile.ID
+			break
 		}
 	}
-	require.Equal(t, 1880, guestScore)
+	require.NotEmpty(t, playableTileID)
+
+	updatedBoardState, err := svc.ApplyMove(hostRoom.ID, "guest-session", playableTileID)
+	require.NoError(t, err)
+	require.Greater(t, updatedBoardState.Score, 0)
+	require.Equal(t, 1, updatedBoardState.Moves)
 
 	time.Sleep(50 * time.Millisecond)
 

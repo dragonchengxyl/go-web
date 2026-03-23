@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { HexBlitzBoardState } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
 type TileColor = 'ember' | 'lagoon' | 'mint' | 'sun' | 'violet';
@@ -311,12 +312,14 @@ interface HexBlitzRoomMode {
 
 interface HexBlitzPrototypeProps {
   roomMode?: HexBlitzRoomMode;
-  onScoreChange?: (score: number) => void;
+  boardState?: HexBlitzBoardState | null;
+  onBoardMove?: (tileId: string) => void;
 }
 
 export function HexBlitzPrototype({
   roomMode,
-  onScoreChange,
+  boardState,
+  onBoardMove,
 }: HexBlitzPrototypeProps = {}) {
   const [tiles, setTiles] = useState<Tile[]>(() => createShowcaseBoard());
   const [phase, setPhase] = useState<'idle' | 'running' | 'ended'>('idle');
@@ -386,7 +389,6 @@ export function HexBlitzPrototype({
         return;
       }
       lastRoomMatchKeyRef.current = roomMatchKey;
-      setTiles(createRandomBoard());
       setPhase('running');
       setScore(0);
       setBestCombo(0);
@@ -395,7 +397,7 @@ export function HexBlitzPrototype({
       setHoveredTileId(null);
       setChainExpiresAt(null);
       setTimeLeftMs(remoteEndAtMs ? Math.max(0, remoteEndAtMs - Date.now()) : GAME_DURATION_MS);
-      setMessage(roomInfoText || '房间对局已开始，你的分数会实时同步到记分板。');
+      setMessage(roomInfoText || '房间对局已开始，正在等待服务端棋盘状态。');
       setRunSeed((current) => current + 1);
       return;
     }
@@ -419,6 +421,32 @@ export function HexBlitzPrototype({
       setMessage(roomInfoText || `房间对局已结束，当前分数 ${score}。`);
     }
   }, [isRoomMode, remoteEndAtMs, roomInfoText, roomMatchKey, roomPhase, score]);
+
+  useEffect(() => {
+    if (!isRoomMode || !boardState) {
+      return;
+    }
+
+    setTiles(
+      boardState.tiles.map((tile) => ({
+        id: tile.id,
+        q: tile.q,
+        r: tile.r,
+        color: tile.color,
+        special: tile.special,
+      }))
+    );
+    setScore(boardState.score);
+    setCombo(boardState.combo);
+    setBestCombo(boardState.best_combo);
+    setMoves(boardState.moves);
+    setMessage(boardState.message || roomInfoText || '服务端棋盘已同步。');
+    if (boardState.phase === 'running') {
+      setPhase('running');
+    } else if (boardState.phase === 'finished') {
+      setPhase('ended');
+    }
+  }, [boardState, isRoomMode, roomInfoText]);
 
   useEffect(() => {
     if (!chainExpiresAt || phase !== 'running') {
@@ -458,13 +486,6 @@ export function HexBlitzPrototype({
     });
   }, [isRoomMode, phase, roomInfoText, score]);
 
-  useEffect(() => {
-    if (phase !== 'running' || !onScoreChange) {
-      return;
-    }
-    onScoreChange(score);
-  }, [onScoreChange, phase, score]);
-
   function startGame() {
     if (isRoomMode) {
       return;
@@ -483,6 +504,12 @@ export function HexBlitzPrototype({
   }
 
   function handleTileClick(tileId: string) {
+    if (isRoomMode) {
+      if (phase === 'running' && onBoardMove) {
+        onBoardMove(tileId);
+      }
+      return;
+    }
     if (phase !== 'running') {
       return;
     }
