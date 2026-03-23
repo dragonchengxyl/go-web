@@ -88,8 +88,9 @@ func TestHexBlitzRoomServiceCreateJoinAndStart(t *testing.T) {
 	finishedRoom, ok := svc.GetRoom(hostRoom.ID)
 	require.True(t, ok)
 	require.Equal(t, gameplay.RoomStatusFinished, finishedRoom.Status)
-	require.Len(t, repo.savedMatches, 1)
-	require.Len(t, repo.savedMatches[0].Results, 2)
+	savedMatches := repo.snapshot()
+	require.Len(t, savedMatches, 1)
+	require.Len(t, savedMatches[0].Results, 2)
 
 	_, err = svc.SetReady(SetHexBlitzReadyInput{
 		RoomID:    hostRoom.ID,
@@ -150,6 +151,14 @@ func (s *stubHexBlitzRepo) SaveMatch(_ context.Context, match *gameplay.Match, _
 	defer s.mu.Unlock()
 	s.savedMatches = append(s.savedMatches, match)
 	return nil
+}
+
+func (s *stubHexBlitzRepo) snapshot() []*gameplay.Match {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items := make([]*gameplay.Match, len(s.savedMatches))
+	copy(items, s.savedMatches)
+	return items
 }
 
 func (s *stubHexBlitzRepo) ListLeaderboard(_ context.Context, _ int) ([]*gameplay.LeaderboardEntry, error) {
