@@ -73,10 +73,12 @@ type hexBlitzRoomState struct {
 	startedAt        *time.Time
 	endsAt           *time.Time
 	currentMatchID   *uuid.UUID
+	currentSeed      int64
 	createdAt        time.Time
 	updatedAt        time.Time
 	players          map[string]*gameplay.RoomPlayer
 	playerBoards     map[string]*hexBlitzPlayerBoard
+	moveEvents       []gameplay.HexBlitzMoveEvent
 	lastScoreAt      map[string]time.Time
 	sequence         int64
 }
@@ -146,6 +148,13 @@ func (s *HexBlitzRoomService) ListUserRecentMatches(ctx context.Context, userID 
 		return []*gameplay.MatchSummary{}, nil
 	}
 	return s.repo.ListUserRecentMatches(ctx, userID, limit)
+}
+
+func (s *HexBlitzRoomService) GetReplay(ctx context.Context, matchID uuid.UUID) (*gameplay.MatchReplay, error) {
+	if s.repo == nil {
+		return nil, apperr.ErrNotFound
+	}
+	return s.repo.GetReplay(ctx, matchID)
 }
 
 func (s *HexBlitzRoomService) ListRooms() []*gameplay.Room {
@@ -460,6 +469,8 @@ func (s *HexBlitzRoomService) StartMatch(roomID uuid.UUID, sessionID string) (*g
 	room.startedAt = nil
 	room.endsAt = nil
 	room.currentMatchID = &matchID
+	room.currentSeed = hexBlitzSeedFromMatchID(matchID)
+	room.moveEvents = nil
 	room.updatedAt = now
 	room.sequence++
 	sequence := room.sequence
@@ -588,6 +599,21 @@ func (s *HexBlitzRoomService) ApplyMove(roomID uuid.UUID, sessionID, tileID stri
 	player.Score = board.score
 	player.UpdatedAt = now
 	room.updatedAt = now
+	room.moveEvents = append(room.moveEvents, gameplay.HexBlitzMoveEvent{
+		ID:           uuid.New(),
+		MatchID:      *room.currentMatchID,
+		SessionID:    sessionID,
+		UserID:       cloneUUIDPtr(player.UserID),
+		PlayerName:   player.Name,
+		DisplayName:  player.Name,
+		MoveIndex:    len(room.moveEvents) + 1,
+		TileID:       moveResult.TileID,
+		ClearedCount: moveResult.ClearedCount,
+		GainedScore:  moveResult.GainedScore,
+		ScoreAfter:   moveResult.Score,
+		ComboAfter:   moveResult.Combo,
+		OccurredAt:   now,
+	})
 	snapshot := board.snapshot(sessionID, *room.currentMatchID, room.status, now)
 	s.mu.Unlock()
 
@@ -610,7 +636,7 @@ func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64)
 	room.startedAt = &startedAt
 	room.endsAt = &endsAt
 	room.updatedAt = startedAt
-	matchSeed := hexBlitzSeedFromMatchID(*room.currentMatchID)
+	matchSeed := room.currentSeed
 	for _, player := range room.players {
 		player.Ready = false
 		player.Score = 0
@@ -635,6 +661,7 @@ func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64)
 	room.status = gameplay.RoomStatusFinished
 	room.updatedAt = finishedAt
 	match := buildHexBlitzMatch(room, finishedAt)
+	events := cloneHexBlitzMoveEvents(room.moveEvents)
 	for _, player := range room.players {
 		player.Ready = false
 		player.UpdatedAt = finishedAt
@@ -644,7 +671,7 @@ func (s *HexBlitzRoomService) runHexBlitzMatch(roomID uuid.UUID, sequence int64)
 	gamemetrics.RecordRoomEvent("match_finished")
 	s.refreshMetrics()
 	s.notify(roomID)
-	s.persistMatch(match)
+	s.persistMatch(match, events)
 }
 
 func (s *HexBlitzRoomService) notify(roomID uuid.UUID) {
@@ -677,11 +704,11 @@ func (s *HexBlitzRoomService) refreshMetricsLocked() {
 	gamemetrics.UpdateRooms(len(s.rooms), activePlayers, roomsByStatus)
 }
 
-func (s *HexBlitzRoomService) persistMatch(match *gameplay.Match) {
+func (s *HexBlitzRoomService) persistMatch(match *gameplay.Match, events []gameplay.HexBlitzMoveEvent) {
 	if s.repo == nil || match == nil {
 		return
 	}
-	if err := s.repo.SaveMatch(context.Background(), match, match.Results); err != nil {
+	if err := s.repo.SaveMatch(context.Background(), match, match.Results, events); err != nil {
 		s.logger.Warn("failed to persist hex blitz match", zap.Error(err), zap.String("match_id", match.ID.String()))
 	}
 }
@@ -807,12 +834,19 @@ func buildHexBlitzMatch(room *hexBlitzRoomState, finishedAt time.Time) *gameplay
 		RoomCode:    room.code,
 		RoomTitle:   room.title,
 		GameSlug:    hexBlitzGameSlug,
+		Seed:        room.currentSeed,
 		StartedAt:   *room.startedAt,
 		FinishedAt:  finishedAt,
 		DurationSec: durationSec,
 		CreatedAt:   finishedAt,
 		Results:     results,
 	}
+}
+
+func cloneHexBlitzMoveEvents(events []gameplay.HexBlitzMoveEvent) []gameplay.HexBlitzMoveEvent {
+	cloned := make([]gameplay.HexBlitzMoveEvent, len(events))
+	copy(cloned, events)
+	return cloned
 }
 
 func sanitizeHexBlitzTitle(value string) string {

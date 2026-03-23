@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -71,6 +72,16 @@ function MatchCard({ match }: { match: HexBlitzMatchSummary }) {
             <p className="mt-1 text-sm text-slate-500">{result.score} 分</p>
           </div>
         ))}
+      </div>
+
+      <div className="mt-4">
+        <Link
+          href={`/games/hex-blitz/matches/${match.match_id}`}
+          className="text-sm font-medium text-sky-600 hover:text-sky-700"
+          target="_blank"
+        >
+          查看战报详情
+        </Link>
       </div>
     </div>
   )

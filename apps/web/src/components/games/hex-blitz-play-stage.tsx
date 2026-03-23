@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
@@ -948,6 +949,15 @@ export function HexBlitzPlayStage() {
                         <div className="mt-1 text-sm text-slate-400">{result.score} 分</div>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="mt-4">
+                    <Link
+                      href={`/games/hex-blitz/matches/${match.match_id}`}
+                      className="text-sm font-medium text-sky-300 transition-colors hover:text-white"
+                    >
+                      查看战报详情
+                    </Link>
                   </div>
                 </div>
               ))}

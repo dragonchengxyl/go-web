@@ -179,6 +179,21 @@ func (h *GameHandler) ListMyHexBlitzRecentMatches(c *gin.Context) {
 	response.Success(c, gin.H{"matches": items})
 }
 
+func (h *GameHandler) GetHexBlitzReplay(c *gin.Context) {
+	matchID, err := uuid.Parse(c.Param("match_id"))
+	if err != nil {
+		response.Error(c, apperr.BadRequest("无效的对局 ID"))
+		return
+	}
+
+	replay, err := h.service.GetReplay(c.Request.Context(), matchID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, replay)
+}
+
 func (h *GameHandler) ServeHexBlitzWS(c *gin.Context) {
 	roomID, err := uuid.Parse(c.Query("room_id"))
 	if err != nil {

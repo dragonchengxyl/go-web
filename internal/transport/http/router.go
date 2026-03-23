@@ -254,6 +254,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			games.GET("/rooms/:id", gameHandler.GetHexBlitzRoom)
 			games.GET("/leaderboard", gameHandler.ListHexBlitzLeaderboard)
 			games.GET("/matches", gameHandler.ListHexBlitzRecentMatches)
+			games.GET("/matches/:match_id/replay", gameHandler.GetHexBlitzReplay)
 			games.POST("/rooms", gameHandler.CreateHexBlitzRoom)
 		}
 

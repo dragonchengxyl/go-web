@@ -437,6 +437,37 @@ export interface HexBlitzMoveResult {
   updated_at: string;
 }
 
+export interface HexBlitzReplay {
+  match: {
+    id: string;
+    room_id: string;
+    room_code: string;
+    room_title: string;
+    game_slug: string;
+    seed: number;
+    started_at: string;
+    finished_at: string;
+    duration_sec: number;
+    created_at: string;
+  };
+  results: HexBlitzMatchResult[];
+  events: Array<{
+    id: string;
+    match_id: string;
+    session_id: string;
+    user_id?: string;
+    player_name: string;
+    display_name: string;
+    move_index: number;
+    tile_id: string;
+    cleared_count: number;
+    gained_score: number;
+    score_after: number;
+    combo_after: number;
+    occurred_at: string;
+  }>;
+}
+
 export interface HexBlitzLeaderboardEntry {
   rank: number;
   user_id?: string;
@@ -923,6 +954,10 @@ class ApiClient {
     return this.get<{ matches: HexBlitzMatchSummary[] }>(
       `/games/hex-blitz/matches?limit=${limit}`
     );
+  }
+
+  async getHexBlitzReplay(matchId: string) {
+    return this.get<HexBlitzReplay>(`/games/hex-blitz/matches/${matchId}/replay`);
   }
 
   async getMyHexBlitzRecentMatches(limit = 8) {

@@ -146,7 +146,7 @@ type stubHexBlitzRepo struct {
 	savedMatches []*gameplay.Match
 }
 
-func (s *stubHexBlitzRepo) SaveMatch(_ context.Context, match *gameplay.Match, _ []gameplay.MatchResult) error {
+func (s *stubHexBlitzRepo) SaveMatch(_ context.Context, match *gameplay.Match, _ []gameplay.MatchResult, _ []gameplay.HexBlitzMoveEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.savedMatches = append(s.savedMatches, match)
@@ -170,5 +170,9 @@ func (s *stubHexBlitzRepo) ListRecentMatches(_ context.Context, _ int) ([]*gamep
 }
 
 func (s *stubHexBlitzRepo) ListUserRecentMatches(_ context.Context, _ uuid.UUID, _ int) ([]*gameplay.MatchSummary, error) {
+	return nil, nil
+}
+
+func (s *stubHexBlitzRepo) GetReplay(_ context.Context, _ uuid.UUID) (*gameplay.MatchReplay, error) {
 	return nil, nil
 }

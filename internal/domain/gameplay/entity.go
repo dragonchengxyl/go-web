@@ -108,11 +108,28 @@ type Match struct {
 	RoomCode    string        `json:"room_code"`
 	RoomTitle   string        `json:"room_title"`
 	GameSlug    string        `json:"game_slug"`
+	Seed        int64         `json:"seed"`
 	StartedAt   time.Time     `json:"started_at"`
 	FinishedAt  time.Time     `json:"finished_at"`
 	DurationSec int           `json:"duration_sec"`
 	CreatedAt   time.Time     `json:"created_at"`
 	Results     []MatchResult `json:"results,omitempty"`
+}
+
+type HexBlitzMoveEvent struct {
+	ID           uuid.UUID  `json:"id"`
+	MatchID      uuid.UUID  `json:"match_id"`
+	SessionID    string     `json:"session_id"`
+	UserID       *uuid.UUID `json:"user_id,omitempty"`
+	PlayerName   string     `json:"player_name"`
+	DisplayName  string     `json:"display_name"`
+	MoveIndex    int        `json:"move_index"`
+	TileID       string     `json:"tile_id"`
+	ClearedCount int        `json:"cleared_count"`
+	GainedScore  int        `json:"gained_score"`
+	ScoreAfter   int        `json:"score_after"`
+	ComboAfter   int        `json:"combo_after"`
+	OccurredAt   time.Time  `json:"occurred_at"`
 }
 
 type MatchResult struct {
@@ -153,4 +170,10 @@ type MatchSummary struct {
 	WinnerScore int           `json:"winner_score"`
 	PlayerCount int           `json:"player_count"`
 	TopResults  []MatchResult `json:"top_results"`
+}
+
+type MatchReplay struct {
+	Match   *Match              `json:"match"`
+	Results []MatchResult       `json:"results"`
+	Events  []HexBlitzMoveEvent `json:"events"`
 }
