@@ -5,9 +5,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   Crown,
+  DoorOpen,
   Loader2,
   Radio,
   RefreshCcw,
+  Sparkles,
   Swords,
   Trophy,
   Users2,
@@ -30,6 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type RoomWSStatus = 'idle' | 'connecting' | 'connected' | 'closed';
 
@@ -103,31 +106,43 @@ function cardKey(card: DoudizhuCard) {
   return `${card.suit}-${card.rank}`;
 }
 
-function cardLabel(card: DoudizhuCard) {
-  const suitMap: Record<DoudizhuCard['suit'], string> = {
-    spade: '♠',
-    heart: '♥',
-    club: '♣',
-    diamond: '♦',
-    joker: 'J',
-  };
+function cardSuit(card: DoudizhuCard) {
+  switch (card.suit) {
+    case 'spade':
+      return '♠';
+    case 'heart':
+      return '♥';
+    case 'club':
+      return '♣';
+    case 'diamond':
+      return '♦';
+    default:
+      return 'J';
+  }
+}
+
+function cardRank(card: DoudizhuCard) {
   const rankMap: Record<number, string> = {
     11: 'J',
     12: 'Q',
     13: 'K',
     14: 'A',
     15: '2',
-    16: '小王',
-    17: '大王',
+    16: 'SJ',
+    17: 'BJ',
   };
+  return rankMap[card.rank] ?? String(card.rank);
+}
 
-  return `${suitMap[card.suit]}${rankMap[card.rank] ?? String(card.rank)}`;
+function cardLabel(card: DoudizhuCard) {
+  return `${cardSuit(card)}${cardRank(card)}`;
 }
 
 function comboLabel(combo?: DoudizhuCombo | null) {
   if (!combo) {
-    return '暂无牌型';
+    return '等待首家出牌';
   }
+
   const typeLabelMap: Record<DoudizhuCombo['type'], string> = {
     single: '单张',
     pair: '对子',
@@ -151,6 +166,220 @@ function playerSort(a: DoudizhuRoomPlayer, b: DoudizhuRoomPlayer) {
   return a.seat - b.seat;
 }
 
+function buildBoardSeats(activeRoom: DoudizhuRoom | null, me: DoudizhuRoomPlayer | null) {
+  if (!activeRoom) {
+    return {
+      bottom: null as DoudizhuRoomPlayer | null,
+      left: null as DoudizhuRoomPlayer | null,
+      right: null as DoudizhuRoomPlayer | null,
+    };
+  }
+
+  const players = [...activeRoom.players].sort(playerSort);
+  const bottom = me ?? players[0] ?? null;
+  const others = players.filter((player) => (bottom ? player.seat !== bottom.seat : true));
+
+  return {
+    bottom,
+    left: others[0] ?? null,
+    right: others[1] ?? null,
+  };
+}
+
+function findLastPlayAction(room: DoudizhuRoom | null) {
+  if (!room) {
+    return null;
+  }
+  return (
+    [...(room.recent_actions ?? [])]
+      .reverse()
+      .find((action) => Array.isArray(action.cards) && action.cards.length > 0) ?? null
+  );
+}
+
+function TablePlayerSeat({
+  player,
+  position,
+  isCurrentTurn,
+  isCurrentBidder,
+  isLandlord,
+  isMe,
+}: {
+  player: DoudizhuRoomPlayer | null;
+  position: 'left' | 'right' | 'bottom';
+  isCurrentTurn: boolean;
+  isCurrentBidder: boolean;
+  isLandlord: boolean;
+  isMe: boolean;
+}) {
+  if (!player) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        'rounded-[28px] border px-4 py-4 backdrop-blur-sm',
+        isMe
+          ? 'border-amber-300/35 bg-amber-300/10'
+          : 'border-white/10 bg-white/[0.04]',
+        position === 'bottom' ? 'shadow-[0_24px_80px_-30px_rgba(0,0,0,0.55)]' : ''
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-lg font-semibold text-white">{player.name}</span>
+        <Badge className="border-white/15 bg-black/25 text-white">{seatLabel(player.seat)}</Badge>
+        {player.is_host && (
+          <Badge className="border-sky-300/20 bg-sky-300/10 text-sky-100">房主</Badge>
+        )}
+        {player.is_bot && (
+          <Badge className="border-amber-300/20 bg-amber-300/10 text-amber-100">机器人</Badge>
+        )}
+        {isLandlord && (
+          <Badge className="border-red-400/20 bg-red-400/10 text-red-100">地主</Badge>
+        )}
+        {isCurrentTurn && (
+          <Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+            当前出牌
+          </Badge>
+        )}
+        {isCurrentBidder && (
+          <Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
+            当前叫分
+          </Badge>
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-4 text-sm text-slate-300">
+        <div>
+          手牌 {player.card_count} 张 · {player.connected ? '在线' : '离线'}
+        </div>
+        <div>{player.auto_play ? '托管中' : '手动操作'}</div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {Array.from({ length: Math.min(player.card_count, position === 'bottom' ? 8 : 10) }).map(
+          (_, index) => (
+            <div
+              key={`${player.session_id}-${index}`}
+              className={cn(
+                'rounded-lg border px-2 py-1 text-xs font-medium',
+                position === 'bottom'
+                  ? 'border-white/10 bg-black/30 text-slate-300'
+                  : 'border-white/10 bg-white/6 text-slate-300'
+              )}
+            >
+              牌
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlayCard({
+  card,
+  selected,
+  onClick,
+}: {
+  card: DoudizhuCard;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const red = card.suit === 'heart' || card.suit === 'diamond' || card.suit === 'joker';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'relative h-28 w-20 rounded-2xl border bg-white px-3 py-2 text-left shadow-[0_18px_40px_-18px_rgba(0,0,0,0.65)] transition-all',
+        selected
+          ? '-translate-y-4 border-amber-400 ring-2 ring-amber-300/40'
+          : 'border-slate-300 hover:-translate-y-2'
+      )}
+    >
+      <div className={cn('text-xs font-semibold', red ? 'text-red-500' : 'text-slate-900')}>
+        {cardSuit(card)}
+      </div>
+      <div className={cn('mt-2 text-2xl font-black', red ? 'text-red-500' : 'text-slate-900')}>
+        {cardRank(card)}
+      </div>
+      <div
+        className={cn(
+          'absolute bottom-2 right-2 text-lg font-semibold',
+          red ? 'text-red-400' : 'text-slate-400'
+        )}
+      >
+        {cardSuit(card)}
+      </div>
+    </button>
+  );
+}
+
+function MatchLinkCard({
+  match,
+  mine = false,
+}: {
+  match: DoudizhuMatchSummary;
+  mine?: boolean;
+}) {
+  return (
+    <Link
+      href={`/games/dou-dizhu/matches/${match.match_id}`}
+      className={cn(
+        'block rounded-[24px] border px-4 py-4 transition-colors',
+        mine
+          ? 'border-sky-300/15 bg-sky-300/10 hover:border-sky-300/30 hover:bg-sky-300/14'
+          : 'border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]'
+      )}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-white">{match.room_title}</span>
+            <Badge className="border-white/15 bg-white/8 text-white">
+              {match.match_mode === 'demo_ai' ? 'AI 演示' : '真人房'}
+            </Badge>
+          </div>
+          <div className="mt-1 text-sm text-slate-400">
+            {new Date(match.finished_at).toLocaleString('zh-CN')} · 地主 {seatLabel(match.landlord_seat)}
+          </div>
+        </div>
+
+        <div className="text-right text-sm text-slate-300">
+          <div>{match.winner_side === 'landlord' ? '地主胜' : '农民胜'}</div>
+          <div className="mt-1">倍率 x{match.multiplier}</div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function LeaderboardCard({ entry }: { entry: DoudizhuLeaderboardEntry }) {
+  return (
+    <div className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="font-semibold text-white">
+            #{entry.rank} {entry.display_name}
+          </div>
+          <div className="mt-1 text-sm text-slate-400">
+            {entry.matches} 局 · 胜 {entry.wins} 局
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">Total</div>
+          <div className="mt-1 text-2xl font-black tracking-tight text-white">
+            {entry.total_score}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DouDizhuPlayStage() {
   const { user } = useAuth();
   const [sessionId, setSessionId] = useState('');
@@ -165,7 +394,7 @@ export function DouDizhuPlayStage() {
   const [latestAction, setLatestAction] = useState<DoudizhuActionResult | null>(null);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [wsStatus, setWsStatus] = useState<RoomWSStatus>('idle');
-  const [notice, setNotice] = useState('可以创建真人房，也可以直接开始 1 人 + 2 机器人演示。');
+  const [notice, setNotice] = useState('直接开始 AI 演示，或者创建一个真人房。');
   const [errorMessage, setErrorMessage] = useState('');
   const [timeTick, setTimeTick] = useState(Date.now());
   const [leaderboard, setLeaderboard] = useState<DoudizhuLeaderboardEntry[]>([]);
@@ -287,6 +516,7 @@ export function DouDizhuPlayStage() {
     if (!activeRoom) {
       return;
     }
+
     const timer = window.setInterval(() => {
       setTimeTick(Date.now());
     }, 250);
@@ -324,26 +554,26 @@ export function DouDizhuPlayStage() {
 
     switch (nextRoom.status) {
       case 'bidding':
-        setNotice('正在叫分，所有叫分和地主裁决都由服务端处理。');
+        setNotice('叫分阶段已开始。地主归属由服务端统一裁定。');
         break;
       case 'playing':
         setNotice(
           nextRoom.match_mode === 'demo_ai'
-            ? '人机演示局进行中，机器人正在按基础策略出牌。'
-            : '真人房进行中，当前由服务端统一裁决出牌合法性与轮转。'
+            ? 'AI 演示局进行中。你现在在真正的牌桌里和两名机器人对局。'
+            : '真人对局进行中。当前轮转、压牌和胜负都由服务端处理。'
         );
         break;
       case 'settlement':
-        setNotice('本局已结算，可以继续留在房间准备下一局。');
+        setNotice('本局已结算。你可以继续留在房间再开一局，或直接查看战报。');
         break;
       case 'redeal':
-        setNotice('这一轮没有确定地主，服务端会重新开始新一轮。');
+        setNotice('这轮没有确定地主，服务端会重新发起一轮。');
         break;
       default:
         setNotice(
           nextRoom.match_mode === 'demo_ai'
-            ? '这是人机演示房。你准备后可以由房主直接开始，系统会补两名机器人。'
-            : '房间已连接。凑齐 3 名真人并全部准备后，由房主开始一局。'
+            ? '这是 AI 演示房。点准备后，房主可以直接开始。'
+            : '这是真人房。凑齐 3 人并全部准备后即可开始。'
         );
     }
   }
@@ -370,7 +600,7 @@ export function DouDizhuPlayStage() {
     closeSocket(false);
     setErrorMessage('');
     setWsStatus('connecting');
-    setNotice('正在连接房间...');
+    setNotice('正在连接牌桌...');
     activeRoomIdRef.current = roomId;
     setActiveRoomId(roomId);
     reconnectEnabledRef.current = true;
@@ -452,7 +682,7 @@ export function DouDizhuPlayStage() {
     };
 
     ws.onerror = () => {
-      setErrorMessage('房间连接异常，请稍后重试。');
+      setErrorMessage('牌桌连接异常，请稍后重试。');
     };
 
     ws.onclose = () => {
@@ -539,8 +769,8 @@ export function DouDizhuPlayStage() {
     }
   }
 
-  const me =
-    activeRoom?.players.find((player) => player.session_id === sessionId) ?? null;
+  const me = activeRoom?.players.find((player) => player.session_id === sessionId) ?? null;
+  const boardSeats = useMemo(() => buildBoardSeats(activeRoom, me), [activeRoom, me]);
   const isHost = !!me?.is_host;
   const canStart =
     !!activeRoom &&
@@ -569,6 +799,7 @@ export function DouDizhuPlayStage() {
   }, [privateState, selectedCards]);
 
   const currentHand = Array.isArray(privateState?.hand) ? privateState.hand : [];
+  const lastPlayAction = useMemo(() => findLastPlayAction(activeRoom), [activeRoom]);
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== 'settlement') {
@@ -597,234 +828,141 @@ export function DouDizhuPlayStage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
-        <Card className="border-white/10 bg-white/[0.04] text-white">
-          <CardContent className="p-6">
-            <div className="mb-5 flex items-center gap-3">
-              <Swords className="h-5 w-5 text-amber-300" />
-              <div>
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                  Room Entry
-                </p>
-                <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
-                  大厅与演示入口
-                </h2>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="ddz-player-name" className="text-white/85">
-                  玩家名称
-                </Label>
-                <Input
-                  id="ddz-player-name"
-                  value={playerName}
-                  onChange={(event) => setPlayerName(event.target.value)}
-                  className="border-white/10 bg-black/20 text-white placeholder:text-slate-500"
-                  placeholder="输入一个牌桌显示名称"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="ddz-room-title" className="text-white/85">
-                  房间标题
-                </Label>
-                <Input
-                  id="ddz-room-title"
-                  value={roomTitle}
-                  onChange={(event) => setRoomTitle(event.target.value)}
-                  className="border-white/10 bg-black/20 text-white placeholder:text-slate-500"
-                  placeholder="例如：周五加练场"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={handleCreateRoom}
-                  className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
-                >
-                  创建真人房
-                </Button>
-                <Button
-                  onClick={handleCreateDemoRoom}
-                  variant="outline"
-                  className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
-                >
-                  <Bot className="mr-2 h-4 w-4" />
-                  快速 AI 演示
-                </Button>
-                <Button
-                  onClick={() => {
-                    setRoomsLoading(true);
-                    apiClient
-                      .getDoudizhuRooms()
-                      .then((data) => setRooms(data.rooms))
-                      .catch((error) =>
-                        setErrorMessage(
-                          error instanceof Error ? error.message : '刷新房间失败'
-                        )
-                      )
-                      .finally(() => setRoomsLoading(false));
-                  }}
-                  variant="outline"
-                  className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
-                >
-                  <RefreshCcw className="mr-2 h-4 w-4" />
-                  刷新房间
-                </Button>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm leading-7 text-slate-300">
-                真人房模式用于 3 名登录用户联机；快速 AI 演示会自动补齐两名机器人，
-                方便录屏、面试和单人验证整条链路。
-              </div>
-
-              {errorMessage && (
-                <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
-                  {errorMessage}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-white/10 bg-white/[0.04] text-white">
-          <CardContent className="p-6">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Users2 className="h-5 w-5 text-sky-300" />
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight">房间列表</h2>
-                  <p className="mt-1 text-sm text-slate-400">
-                    加入一个正在等待中的房间，或者直接创建新的真人房 / 演示房。
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-300">
-                {roomsLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
-                ) : (
-                  <Radio className="h-4 w-4 text-emerald-300" />
-                )}
-                {rooms.length} 个房间
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {rooms.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                  当前还没有房间。你可以自己建一个真人房，也可以直接点“快速 AI 演示”。
-                </div>
-              )}
-
-              {rooms.map((room) => {
-                const active = activeRoomId === room.id;
-                return (
-                  <button
-                    key={room.id}
-                    type="button"
-                    onClick={() => connectToRoom(room.id)}
-                    className={cn(
-                      'w-full rounded-[22px] border px-4 py-4 text-left transition-all',
-                      active
-                        ? 'border-amber-300/35 bg-amber-300/10'
-                        : 'border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]'
-                    )}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-semibold text-white">{room.title}</span>
-                          <Badge className="border-white/15 bg-white/8 text-white">
-                            {room.code}
-                          </Badge>
-                          <Badge
-                            className={cn(
-                              'border-white/15 bg-white/8 text-white',
-                              room.match_mode === 'demo_ai' &&
-                                'border-amber-300/20 bg-amber-300/10 text-amber-100'
-                            )}
-                          >
-                            {room.match_mode === 'demo_ai' ? 'AI 演示' : '真人房'}
-                          </Badge>
-                        </div>
-                        <div className="mt-2 text-sm text-slate-400">
-                          {room.player_count} / 3 人，已准备 {room.ready_count} 人，当前状态{' '}
-                          {roomStatusLabel(room.status)}
-                        </div>
-                      </div>
-
-                      <div className="text-sm text-slate-300">{active ? '已连接' : '进入房间'}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-white/10 bg-white/[0.04] text-white">
-        <CardContent className="p-6">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+      <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[#081013] text-white shadow-[0_30px_90px_-50px_rgba(0,0,0,0.85)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,207,120,0.15),transparent_28%),radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.08),transparent_18%),linear-gradient(180deg,#0d382c_0%,#082019_100%)]" />
+        <div className="relative p-5 md:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-slate-500">
-                Live Table
-              </p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight">
-                {activeRoom ? activeRoom.title : '尚未进入房间'}
+              <p className="text-xs uppercase tracking-[0.32em] text-emerald-100/50">Game Table</p>
+              <h2 className="mt-3 text-3xl font-black tracking-tight text-white md:text-5xl">
+                经典斗地主
               </h2>
-              <p className="mt-2 text-sm text-slate-400">{notice}</p>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
+                现在页面的中心是牌桌本身，而不是房间工具。你可以直接开始 AI 演示，或者创建真人房，把叫分、
+                出牌和结算完整走一遍。
+              </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+
+            <div className="flex flex-wrap items-center gap-2">
               <Badge className="border-white/15 bg-white/8 text-white">WS: {wsStatus}</Badge>
               {activeRoom && (
                 <Badge className="border-amber-300/20 bg-amber-300/10 text-amber-100">
                   {roomStatusLabel(activeRoom.status)}
                 </Badge>
               )}
+              {activeRoom && (
+                <Badge className="border-white/15 bg-black/25 text-white">
+                  {activeRoom.match_mode === 'demo_ai' ? 'AI 演示' : '真人房'}
+                </Badge>
+              )}
             </div>
           </div>
 
           {!activeRoom && (
-            <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-              先进入一个房间，这里会显示座位、叫分、出牌区、手牌和最近操作。
+            <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="rounded-[30px] border border-white/10 bg-black/20 p-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="ddz-player-name" className="text-white/85">
+                      玩家名称
+                    </Label>
+                    <Input
+                      id="ddz-player-name"
+                      value={playerName}
+                      onChange={(event) => setPlayerName(event.target.value)}
+                      className="border-white/10 bg-black/30 text-white placeholder:text-emerald-50/35"
+                      placeholder="输入一个牌桌显示名称"
+                    />
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="ddz-room-title" className="text-white/85">
+                      房间标题
+                    </Label>
+                    <Input
+                      id="ddz-room-title"
+                      value={roomTitle}
+                      onChange={(event) => setRoomTitle(event.target.value)}
+                      className="border-white/10 bg-black/30 text-white placeholder:text-emerald-50/35"
+                      placeholder="例如：周五牌局"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Button
+                    onClick={handleCreateDemoRoom}
+                    className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
+                  >
+                    <Bot className="mr-2 h-4 w-4" />
+                    立即开始 AI 对局
+                  </Button>
+                  <Button
+                    onClick={handleCreateRoom}
+                    variant="outline"
+                    className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                  >
+                    <Users2 className="mr-2 h-4 w-4" />
+                    创建真人房
+                  </Button>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm leading-7 text-emerald-50/70">
+                  这页优先保证单人也能直接进入一局真实对战，不需要先理解房间系统。AI 演示房会自动补齐两名机器人，
+                  你点准备后由房主直接开始。
+                </div>
+
+                {errorMessage && (
+                  <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+                    {errorMessage}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  {[
+                    {
+                      title: '真正的牌桌布局',
+                      text: '中央展示当前阶段、上一手和玩家座位，底部手牌和操作直接围绕对局展开。',
+                    },
+                    {
+                      title: 'AI 演示兜底',
+                      text: '单人也能完整跑一局，适合演示、录屏和服务端联调。',
+                    },
+                    {
+                      title: '真人房继续保留',
+                      text: '需要 3 个真实玩家时，仍然可以从当前页面创建并进入真人房。',
+                    },
+                    {
+                      title: '战报已接入',
+                      text: '打完一局即可在最近对局里跳转到战报页，不再是打一局就蒸发。',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.title}
+                      className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
+                    >
+                      <div className="font-semibold text-white">{item.title}</div>
+                      <div className="mt-2 text-sm leading-6 text-emerald-50/70">{item.text}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
           {activeRoom && (
-            <div className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-xs uppercase tracking-[0.24em] text-slate-500">房间码</div>
-                  <div className="mt-2 text-xl font-black tracking-tight">{activeRoom.code}</div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-xs uppercase tracking-[0.24em] text-slate-500">模式</div>
-                  <div className="mt-2 text-xl font-black tracking-tight">
-                    {activeRoom.match_mode === 'demo_ai' ? 'AI 演示' : '真人房'}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-xs uppercase tracking-[0.24em] text-slate-500">最高叫分</div>
-                  <div className="mt-2 text-xl font-black tracking-tight">{activeRoom.highest_bid}</div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-xs uppercase tracking-[0.24em] text-slate-500">当前计时</div>
-                  <div className="mt-2 text-xl font-black tracking-tight">
-                    {formatRemaining(
-                      privateState?.turn_expires_at ?? activeRoom.turn_expires_at,
-                      timeTick
-                    )}
-                  </div>
-                </div>
-              </div>
-
+            <div className="mt-8 space-y-6">
               <div className="flex flex-wrap gap-3">
                 <Button
                   onClick={() => sendRoomMessage('set_ready', { ready: me ? !me.ready : true })}
-                  disabled={!me || wsStatus !== 'connected' || activeRoom.status === 'playing' || activeRoom.status === 'bidding'}
+                  disabled={
+                    !me ||
+                    wsStatus !== 'connected' ||
+                    activeRoom.status === 'playing' ||
+                    activeRoom.status === 'bidding'
+                  }
                   className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110 disabled:opacity-50"
                 >
                   {me?.ready ? '取消准备' : '准备就绪'}
@@ -835,6 +973,7 @@ export function DouDizhuPlayStage() {
                   variant="outline"
                   className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white disabled:opacity-50"
                 >
+                  <Radio className="mr-2 h-4 w-4" />
                   房主开始
                 </Button>
                 <Button
@@ -857,223 +996,279 @@ export function DouDizhuPlayStage() {
                   variant="outline"
                   className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
                 >
+                  <DoorOpen className="mr-2 h-4 w-4" />
                   离开房间
                 </Button>
               </div>
 
-              <div className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
-                <div className="space-y-4">
-                  <div className="grid gap-3">
-                    {[...activeRoom.players].sort(playerSort).map((player) => {
-                      const isMe = player.session_id === sessionId;
-                      const isCurrentTurn = activeRoom.current_turn === player.seat;
-                      const isCurrentBidder = activeRoom.current_bidder === player.seat;
-                      const isLandlord = activeRoom.landlord === player.seat;
-
-                      return (
-                        <div
-                          key={player.session_id}
-                          className={cn(
-                            'rounded-[22px] border px-4 py-4',
-                            isMe
-                              ? 'border-amber-300/30 bg-amber-300/10'
-                              : 'border-white/10 bg-black/20'
-                          )}
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-semibold text-white">{player.name}</span>
-                                <Badge className="border-white/15 bg-white/8 text-white">
-                                  {seatLabel(player.seat)}
-                                </Badge>
-                                {player.is_host && (
-                                  <Badge className="border-sky-300/20 bg-sky-300/10 text-sky-100">
-                                    房主
-                                  </Badge>
-                                )}
-                                {player.is_bot && (
-                                  <Badge className="border-amber-300/20 bg-amber-300/10 text-amber-100">
-                                    机器人
-                                  </Badge>
-                                )}
-                                {isLandlord && (
-                                  <Badge className="border-red-400/20 bg-red-400/10 text-red-100">
-                                    地主
-                                  </Badge>
-                                )}
-                                {isCurrentTurn && (
-                                  <Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
-                                    当前出牌
-                                  </Badge>
-                                )}
-                                {isCurrentBidder && activeRoom.status === 'bidding' && (
-                                  <Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
-                                    当前叫分
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="mt-2 text-sm text-slate-400">
-                                手牌 {player.card_count} 张 · {player.connected ? '在线' : '离线'} ·{' '}
-                                {player.ready ? '已准备' : '未准备'}
-                              </div>
-                            </div>
-
-                            <div className="text-right text-sm text-slate-300">
-                              <div>{player.role === 'landlord' ? '地主阵营' : '农民阵营'}</div>
-                              <div className="mt-1">{player.auto_play ? '托管中' : '手动操作'}</div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+              <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+                <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.06),transparent_28%),radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_20%),linear-gradient(180deg,#11523d_0%,#0a3427_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_28px_80px_-40px_rgba(0,0,0,0.7)]">
+                  <div className="grid gap-4 lg:grid-cols-2 xl:hidden">
+                    <TablePlayerSeat
+                      player={boardSeats.left}
+                      position="left"
+                      isCurrentTurn={!!boardSeats.left && activeRoom.current_turn === boardSeats.left.seat}
+                      isCurrentBidder={!!boardSeats.left && activeRoom.current_bidder === boardSeats.left.seat}
+                      isLandlord={!!boardSeats.left && activeRoom.landlord === boardSeats.left.seat}
+                      isMe={!!boardSeats.left && me?.seat === boardSeats.left.seat}
+                    />
+                    <TablePlayerSeat
+                      player={boardSeats.right}
+                      position="right"
+                      isCurrentTurn={!!boardSeats.right && activeRoom.current_turn === boardSeats.right.seat}
+                      isCurrentBidder={!!boardSeats.right && activeRoom.current_bidder === boardSeats.right.seat}
+                      isLandlord={!!boardSeats.right && activeRoom.landlord === boardSeats.right.seat}
+                      isMe={!!boardSeats.right && me?.seat === boardSeats.right.seat}
+                    />
                   </div>
 
-                  {latestAction && (
-                    <div className="rounded-2xl border border-sky-300/15 bg-sky-300/10 px-4 py-4 text-sm leading-7 text-sky-50">
-                      最近结果：{latestAction.message ?? `${latestAction.actor_name} 完成了一次操作`}。
+                  <div className="relative min-h-[420px] xl:min-h-[540px]">
+                    <div className="hidden xl:block">
+                      <div className="absolute left-0 top-4 w-[260px]">
+                        <TablePlayerSeat
+                          player={boardSeats.left}
+                          position="left"
+                          isCurrentTurn={!!boardSeats.left && activeRoom.current_turn === boardSeats.left.seat}
+                          isCurrentBidder={!!boardSeats.left && activeRoom.current_bidder === boardSeats.left.seat}
+                          isLandlord={!!boardSeats.left && activeRoom.landlord === boardSeats.left.seat}
+                          isMe={!!boardSeats.left && me?.seat === boardSeats.left.seat}
+                        />
+                      </div>
+                      <div className="absolute right-0 top-4 w-[260px]">
+                        <TablePlayerSeat
+                          player={boardSeats.right}
+                          position="right"
+                          isCurrentTurn={!!boardSeats.right && activeRoom.current_turn === boardSeats.right.seat}
+                          isCurrentBidder={!!boardSeats.right && activeRoom.current_bidder === boardSeats.right.seat}
+                          isLandlord={!!boardSeats.right && activeRoom.landlord === boardSeats.right.seat}
+                          isMe={!!boardSeats.right && me?.seat === boardSeats.right.seat}
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="mx-auto flex max-w-[360px] flex-col items-center justify-center gap-5 rounded-[32px] border border-white/10 bg-black/20 px-5 py-6 text-center shadow-[0_24px_60px_-40px_rgba(0,0,0,0.8)]">
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <Badge className="border-white/15 bg-white/8 text-white">
+                          {activeRoom.code}
+                        </Badge>
+                        <Badge className="border-white/15 bg-white/8 text-white">
+                          {activeRoom.match_mode === 'demo_ai' ? 'AI 演示' : '真人房'}
+                        </Badge>
+                        {activeRoom.landlord !== undefined && activeRoom.landlord !== null && (
+                          <Badge className="border-red-400/20 bg-red-400/10 text-red-100">
+                            地主 {seatLabel(activeRoom.landlord)}
+                          </Badge>
+                        )}
+                      </div>
+
                       <div>
-                        <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                          Last Play
+                        <div className="text-xs uppercase tracking-[0.28em] text-emerald-100/45">
+                          Phase
+                        </div>
+                        <div className="mt-2 text-3xl font-black tracking-tight text-white">
+                          {roomStatusLabel(activeRoom.status)}
+                        </div>
+                        <div className="mt-3 text-sm leading-7 text-emerald-50/70">{notice}</div>
+                      </div>
+
+                      <div className="grid w-full gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                          <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
+                            当前计时
+                          </div>
+                          <div className="mt-2 text-xl font-black tracking-tight text-white">
+                            {formatRemaining(
+                              privateState?.turn_expires_at ?? activeRoom.turn_expires_at,
+                              timeTick
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                          <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
+                            当前目标
+                          </div>
+                          <div className="mt-2 text-xl font-black tracking-tight text-white">
+                            {activeRoom.status === 'bidding'
+                              ? seatLabel(activeRoom.current_bidder)
+                              : seatLabel(activeRoom.current_turn)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-full rounded-[26px] border border-white/10 bg-white/[0.04] px-4 py-4">
+                        <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
+                          上一手
                         </div>
                         <div className="mt-2 text-lg font-semibold text-white">
                           {comboLabel(privateState?.last_play ?? activeRoom.last_play)}
                         </div>
-                        <div className="mt-2 text-sm text-slate-400">
-                          上一手座位：{seatLabel(privateState?.last_play_seat ?? activeRoom.last_play_seat)}
+                        <div className="mt-2 text-sm text-emerald-50/65">
+                          {privateState?.last_play_seat !== undefined || activeRoom.last_play_seat !== undefined
+                            ? `上一手来自 ${seatLabel(
+                                privateState?.last_play_seat ?? activeRoom.last_play_seat
+                              )}`
+                            : '等待首家出牌'}
                         </div>
-                      </div>
-                      {privateState?.bottom_cards?.length ? (
-                        <div className="text-right">
-                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                            Bottom
-                          </div>
-                          <div className="mt-2 flex flex-wrap justify-end gap-2">
-                            {privateState.bottom_cards.map((card) => (
+                        {lastPlayAction?.cards?.length ? (
+                          <div className="mt-4 flex flex-wrap justify-center gap-2">
+                            {lastPlayAction.cards.map((card, index) => (
                               <div
-                                key={cardKey(card)}
-                                className="rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-sm text-white"
+                                key={`${cardKey(card)}-${index}`}
+                                className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white"
                               >
                                 {cardLabel(card)}
                               </div>
                             ))}
                           </div>
+                        ) : null}
+                      </div>
+
+                      {latestAction && (
+                        <div className="w-full rounded-2xl border border-sky-300/15 bg-sky-300/10 px-4 py-3 text-sm text-sky-50">
+                          {latestAction.message ?? `${latestAction.actor_name} 完成了一次操作。`}
                         </div>
-                      ) : null}
+                      )}
+                    </div>
+
+                    <div className="mt-6 xl:absolute xl:bottom-0 xl:left-1/2 xl:w-[78%] xl:-translate-x-1/2">
+                      <TablePlayerSeat
+                        player={boardSeats.bottom}
+                        position="bottom"
+                        isCurrentTurn={!!boardSeats.bottom && activeRoom.current_turn === boardSeats.bottom.seat}
+                        isCurrentBidder={!!boardSeats.bottom && activeRoom.current_bidder === boardSeats.bottom.seat}
+                        isLandlord={!!boardSeats.bottom && activeRoom.landlord === boardSeats.bottom.seat}
+                        isMe={!!boardSeats.bottom && me?.seat === boardSeats.bottom.seat}
+                      />
                     </div>
                   </div>
+                </div>
 
-                  {isMyBidTurn && (
-                    <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4">
-                      <div className="mb-3 text-lg font-semibold text-white">轮到你叫分</div>
-                      <div className="flex flex-wrap gap-3">
-                        {[1, 2, 3].map((score) => (
-                          <Button
-                            key={score}
-                            onClick={() => sendRoomMessage('bid', { score })}
-                            disabled={score <= activeRoom.highest_bid}
-                            className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
-                          >
-                            叫 {score} 分
-                          </Button>
-                        ))}
-                        <Button
-                          onClick={() => sendRoomMessage('pass_bid')}
-                          variant="outline"
-                          className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
-                        >
-                          不叫
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {privateState && (
-                    <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-lg font-semibold text-white">我的手牌</div>
+                <div className="space-y-4">
+                  <div className="rounded-[30px] border border-white/10 bg-black/20 p-5">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-semibold text-white">我的手牌</div>
                         <div className="mt-1 text-sm text-slate-400">
-                            角色：{privateState.role === 'landlord' ? '地主' : '农民'} · 共{' '}
-                            {currentHand.length} 张
+                          {privateState
+                            ? `角色：${privateState.role === 'landlord' ? '地主' : '农民'} · 共 ${currentHand.length} 张`
+                            : '进入房间后会显示你的实际手牌'}
                         </div>
                       </div>
-                        <div className="text-sm text-slate-400">
-                          已选 {selectedCards.length} 张
-                        </div>
-                      </div>
+                      <div className="text-sm text-slate-400">已选 {selectedCards.length} 张</div>
+                    </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        {currentHand.map((card) => {
-                          const selected = selectedCards.includes(cardKey(card));
-                          return (
-                            <button
-                              key={cardKey(card)}
-                              type="button"
-                              onClick={() =>
-                                setSelectedCards((current) =>
-                                  current.includes(cardKey(card))
-                                    ? current.filter((item) => item !== cardKey(card))
-                                    : [...current, cardKey(card)]
-                                )
-                              }
-                              className={cn(
-                                'rounded-xl border px-3 py-2 text-sm font-medium transition-all',
-                                selected
-                                  ? 'border-amber-300/40 bg-amber-300/12 text-amber-50 -translate-y-1'
-                                  : 'border-white/10 bg-white/5 text-white hover:border-white/20 hover:bg-white/10'
-                              )}
+                    {privateState?.bottom_cards?.length ? (
+                      <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                        <div className="text-xs uppercase tracking-[0.24em] text-slate-500">地主底牌</div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {privateState.bottom_cards.map((card, index) => (
+                            <div
+                              key={`${cardKey(card)}-${index}`}
+                              className="rounded-lg border border-white/10 bg-white/8 px-2 py-1 text-sm text-white"
                             >
                               {cardLabel(card)}
-                            </button>
-                          );
-                        })}
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    ) : null}
 
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <Button
-                          onClick={() => sendRoomMessage('play_cards', { cards: selectedHandCards })}
-                          disabled={!isMyPlayTurn || selectedHandCards.length === 0}
-                          className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110 disabled:opacity-50"
-                        >
-                          出牌
-                        </Button>
-                        <Button
-                          onClick={() => sendRoomMessage('pass_turn')}
-                          disabled={!isMyPlayTurn || !privateState.can_pass}
-                          variant="outline"
-                          className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white disabled:opacity-50"
-                        >
-                          过牌
-                        </Button>
-                        <Button
-                          onClick={() => setSelectedCards([])}
-                          variant="outline"
-                          className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
-                        >
-                          清空选择
-                        </Button>
+                    {!privateState && (
+                      <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-4 py-8 text-center text-sm text-slate-400">
+                        先加入一个房间，再开始叫分和出牌。
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4">
+                    {privateState && (
+                      <>
+                        <div className="flex flex-wrap items-end gap-3">
+                          {currentHand.map((card) => {
+                            const selected = selectedCards.includes(cardKey(card));
+                            return (
+                              <PlayCard
+                                key={cardKey(card)}
+                                card={card}
+                                selected={selected}
+                                onClick={() =>
+                                  setSelectedCards((current) =>
+                                    current.includes(cardKey(card))
+                                      ? current.filter((item) => item !== cardKey(card))
+                                      : [...current, cardKey(card)]
+                                  )
+                                }
+                              />
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          {isMyBidTurn && (
+                            <>
+                              {[1, 2, 3].map((score) => (
+                                <Button
+                                  key={score}
+                                  onClick={() => sendRoomMessage('bid', { score })}
+                                  disabled={score <= activeRoom.highest_bid}
+                                  className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
+                                >
+                                  叫 {score} 分
+                                </Button>
+                              ))}
+                              <Button
+                                onClick={() => sendRoomMessage('pass_bid')}
+                                variant="outline"
+                                className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                              >
+                                不叫
+                              </Button>
+                            </>
+                          )}
+
+                          {!isMyBidTurn && (
+                            <>
+                              <Button
+                                onClick={() =>
+                                  sendRoomMessage('play_cards', { cards: selectedHandCards })
+                                }
+                                disabled={!isMyPlayTurn || selectedHandCards.length === 0}
+                                className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110 disabled:opacity-50"
+                              >
+                                出牌
+                              </Button>
+                              <Button
+                                onClick={() => sendRoomMessage('pass_turn')}
+                                disabled={!isMyPlayTurn || !privateState.can_pass}
+                                variant="outline"
+                                className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white disabled:opacity-50"
+                              >
+                                过牌
+                              </Button>
+                              <Button
+                                onClick={() => setSelectedCards([])}
+                                variant="outline"
+                                className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                              >
+                                清空选择
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="rounded-[30px] border border-white/10 bg-black/20 p-5">
                     <div className="mb-3 text-lg font-semibold text-white">最近操作</div>
                     <div className="space-y-2">
                       {(activeRoom.recent_actions ?? []).length === 0 && (
-                        <div className="text-sm text-slate-400">还没有操作记录。</div>
+                        <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-4 py-5 text-sm text-slate-400">
+                          还没有操作记录。
+                        </div>
                       )}
                       {(activeRoom.recent_actions ?? []).slice().reverse().map((action, index) => (
                         <div
                           key={`${action.at}-${index}`}
-                          className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-slate-300"
+                          className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-300"
                         >
                           <div className="font-medium text-white">
                             {action.actor_name ?? seatLabel(action.seat)}
@@ -1081,8 +1276,8 @@ export function DouDizhuPlayStage() {
                           <div className="mt-1">{action.message ?? action.action_type}</div>
                           {action.cards?.length ? (
                             <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
-                              {action.cards.map((card) => (
-                                <span key={cardKey(card)}>{cardLabel(card)}</span>
+                              {action.cards.map((card, index) => (
+                                <span key={`${cardKey(card)}-${index}`}>{cardLabel(card)}</span>
                               ))}
                             </div>
                           ) : null}
@@ -1094,137 +1289,238 @@ export function DouDizhuPlayStage() {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-        <Card className="border-white/10 bg-white/[0.04] text-white">
-          <CardContent className="p-6">
-            <div className="mb-5 flex items-center gap-3">
-              <Trophy className="h-5 w-5 text-amber-300" />
-              <div>
-                <h2 className="text-2xl font-black tracking-tight">排行榜</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  当前只统计真人对局，人机演示房不会进入榜单。
-                </p>
-              </div>
-            </div>
+      <Tabs defaultValue="start" className="space-y-4">
+        <TabsList className="border border-white/10 bg-black/20">
+          <TabsTrigger
+            value="start"
+            className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
+          >
+            房间大厅
+          </TabsTrigger>
+          <TabsTrigger
+            value="matches"
+            className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
+          >
+            最近对局
+          </TabsTrigger>
+          <TabsTrigger
+            value="leaderboard"
+            className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
+          >
+            排行榜
+          </TabsTrigger>
+        </TabsList>
 
-            <div className="space-y-3">
-              {leaderboard.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                  还没有可展示的真人对局结果。
-                </div>
-              )}
-              {leaderboard.map((entry) => (
-                <div
-                  key={`${entry.rank}-${entry.display_name}`}
-                  className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-sm text-slate-400">#{entry.rank}</div>
-                      <div className="mt-1 text-lg font-semibold text-white">{entry.display_name}</div>
-                      <div className="mt-1 text-sm text-slate-400">
-                        {entry.matches} 局 · 胜 {entry.wins} 局
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                        Total
-                      </div>
-                      <div className="mt-1 text-2xl font-black tracking-tight text-white">
-                        {entry.total_score}
-                      </div>
-                    </div>
+        <TabsContent value="start">
+          <div className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
+            <Card className="border-white/10 bg-white/[0.04] text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <Sparkles className="h-5 w-5 text-amber-300" />
+                  <div>
+                    <h3 className="text-2xl font-black tracking-tight text-white">快速开局</h3>
+                    <p className="mt-1 text-sm text-slate-400">
+                      继续保留房间能力，但它现在退到辅助入口，不再压过牌桌本身。
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card className="border-white/10 bg-white/[0.04] text-white">
-          <CardContent className="p-6">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Crown className="h-5 w-5 text-sky-300" />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ddz-room-title-panel" className="text-white/85">
+                      房间标题
+                    </Label>
+                    <Input
+                      id="ddz-room-title-panel"
+                      value={roomTitle}
+                      onChange={(event) => setRoomTitle(event.target.value)}
+                      className="border-white/10 bg-black/20 text-white placeholder:text-slate-500"
+                      placeholder="例如：夜场训练局"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      onClick={handleCreateDemoRoom}
+                      className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
+                    >
+                      <Bot className="mr-2 h-4 w-4" />
+                      开始 AI 演示
+                    </Button>
+                    <Button
+                      onClick={handleCreateRoom}
+                      variant="outline"
+                      className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                    >
+                      <Users2 className="mr-2 h-4 w-4" />
+                      创建真人房
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-white/[0.04] text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Users2 className="h-5 w-5 text-sky-300" />
+                    <div>
+                      <h3 className="text-2xl font-black tracking-tight text-white">房间列表</h3>
+                      <p className="mt-1 text-sm text-slate-400">
+                        如果你要和真人联机，这里仍然可以直接加入当前开放中的房间。
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-300">
+                    {roomsLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
+                    ) : (
+                      <Radio className="h-4 w-4 text-emerald-300" />
+                    )}
+                    {rooms.length} 个房间
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {rooms.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                      当前还没有房间。最简单的试玩方式依然是直接点 AI 演示。
+                    </div>
+                  )}
+
+                  {rooms.map((room) => {
+                    const active = activeRoomId === room.id;
+                    return (
+                      <button
+                        key={room.id}
+                        type="button"
+                        onClick={() => connectToRoom(room.id)}
+                        className={cn(
+                          'w-full rounded-[22px] border px-4 py-4 text-left transition-all',
+                          active
+                            ? 'border-amber-300/35 bg-amber-300/10'
+                            : 'border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]'
+                        )}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-white">{room.title}</span>
+                              <Badge className="border-white/15 bg-white/8 text-white">
+                                {room.code}
+                              </Badge>
+                              <Badge
+                                className={
+                                  room.match_mode === 'demo_ai'
+                                    ? 'border-amber-300/20 bg-amber-300/10 text-amber-100'
+                                    : 'border-sky-300/20 bg-sky-300/10 text-sky-100'
+                                }
+                              >
+                                {room.match_mode === 'demo_ai' ? 'AI 演示' : '真人房'}
+                              </Badge>
+                            </div>
+                            <div className="mt-2 text-sm text-slate-400">
+                              {room.player_count} / 3 人，状态 {roomStatusLabel(room.status)}
+                            </div>
+                          </div>
+                          <div className="text-sm text-slate-300">{active ? '已连接' : '进入房间'}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="matches">
+          <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+            <Card className="border-white/10 bg-white/[0.04] text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center gap-3">
+                  <Crown className="h-5 w-5 text-sky-300" />
+                  <div>
+                    <h3 className="text-2xl font-black tracking-tight text-white">我的最近对局</h3>
+                    <p className="mt-1 text-sm text-slate-400">
+                      打完就能直接回看，不再是“玩了但没有留下任何结果”。
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {user && myMatches.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                      你还没有可展示的斗地主对局。
+                    </div>
+                  )}
+                  {myMatches.map((match) => (
+                    <MatchLinkCard key={`me-${match.match_id}`} match={match} mine />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/10 bg-white/[0.04] text-white">
+              <CardContent className="p-6">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Swords className="h-5 w-5 text-amber-300" />
+                    <div>
+                      <h3 className="text-2xl font-black tracking-tight text-white">全站最近对局</h3>
+                      <p className="mt-1 text-sm text-slate-400">
+                        AI 演示和真人房都能形成战报。
+                      </p>
+                    </div>
+                  </div>
+                  {metaLoading && <Loader2 className="h-4 w-4 animate-spin text-sky-300" />}
+                </div>
+
+                <div className="space-y-3">
+                  {recentMatches.length === 0 && (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                      还没有斗地主战报。
+                    </div>
+                  )}
+                  {recentMatches.map((match) => (
+                    <MatchLinkCard key={match.match_id} match={match} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="leaderboard">
+          <Card className="border-white/10 bg-white/[0.04] text-white">
+            <CardContent className="p-6">
+              <div className="mb-5 flex items-center gap-3">
+                <Trophy className="h-5 w-5 text-amber-300" />
                 <div>
-                  <h2 className="text-2xl font-black tracking-tight">最近对局</h2>
+                  <h3 className="text-2xl font-black tracking-tight text-white">排行榜</h3>
                   <p className="mt-1 text-sm text-slate-400">
-                    可以直接进入战报页查看完整操作记录。
+                    当前只统计真人对局，AI 演示房不会进入榜单。
                   </p>
                 </div>
               </div>
-              {metaLoading && <Loader2 className="h-4 w-4 animate-spin text-sky-300" />}
-            </div>
 
-            <div className="space-y-4">
-              {user && myMatches.length > 0 && (
-                <div className="space-y-3">
-                  <div className="text-sm font-medium text-sky-200">我的最近对局</div>
-                  {myMatches.map((match) => (
-                    <Link
-                      key={`me-${match.match_id}`}
-                      href={`/games/dou-dizhu/matches/${match.match_id}`}
-                      className="block rounded-[22px] border border-sky-300/15 bg-sky-300/10 px-4 py-4 transition-colors hover:border-sky-300/30 hover:bg-sky-300/14"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                          <div className="font-semibold text-white">{match.room_title}</div>
-                          <div className="mt-1 text-sm text-slate-300">
-                            {new Date(match.finished_at).toLocaleString('zh-CN')} · 倍率 x
-                            {match.multiplier}
-                          </div>
-                        </div>
-                        <Badge className="border-white/15 bg-white/8 text-white">
-                          {match.room_code}
-                        </Badge>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-white">全站最近对局</div>
-                {recentMatches.length === 0 && (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {leaderboard.length === 0 && (
                   <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                    还没有斗地主战报。
+                    还没有可展示的真人对局结果。
                   </div>
                 )}
-                {recentMatches.map((match) => (
-                  <Link
-                    key={match.match_id}
-                    href={`/games/dou-dizhu/matches/${match.match_id}`}
-                    className="block rounded-[22px] border border-white/10 bg-black/20 px-4 py-4 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white">{match.room_title}</span>
-                          <Badge className="border-white/15 bg-white/8 text-white">
-                            {match.match_mode === 'demo_ai' ? 'AI 演示' : '真人房'}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 text-sm text-slate-400">
-                          {new Date(match.finished_at).toLocaleString('zh-CN')} · 地主位{' '}
-                          {seatLabel(match.landlord_seat)} · 倍率 x{match.multiplier}
-                        </div>
-                      </div>
-
-                      <div className="text-right text-sm text-slate-300">
-                        <div>{match.winner_side === 'landlord' ? '地主胜' : '农民胜'}</div>
-                        <div className="mt-1">{match.player_count} 名玩家</div>
-                      </div>
-                    </div>
-                  </Link>
+                {leaderboard.map((entry) => (
+                  <LeaderboardCard key={`${entry.user_id ?? entry.player_name}-${entry.rank}`} entry={entry} />
                 ))}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
