@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Sparkles } from 'lucide-react';
-import { HexBlitzPrototype } from '@/components/games/hex-blitz-prototype';
+import { HexBlitzPlayStage } from '@/components/games/hex-blitz-play-stage';
 import { getGameBySlug } from '@/lib/games';
 
 export default function GamePlayPage({
@@ -45,13 +45,13 @@ export default function GamePlayPage({
           <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
             <span className="mr-2 inline-flex items-center gap-1 text-amber-300">
               <Sparkles className="h-4 w-4" />
-              Stage 1
+              Stage 2
             </span>
-            单机原型已可试玩
+            房间实验室已接入
           </div>
         </div>
 
-        <HexBlitzPrototype />
+        <HexBlitzPlayStage />
       </section>
     </main>
   );

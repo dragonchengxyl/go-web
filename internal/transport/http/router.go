@@ -51,6 +51,7 @@ type RouterConfig struct {
 	AssistantService       *usecase.AssistantService
 	AdminAIToolService     *usecase.AdminAIToolService
 	MultimodalService      *usecase.MultimodalService
+	GameService            *usecase.HexBlitzRoomService
 	Hub                    ws.HubInterface
 	TokenStore             *redis.TokenStore
 	ReportRepo             report.Repository
@@ -91,6 +92,11 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 	// Static file serving for local uploads
 	r.Static("/uploads", "./uploads")
+
+	var gameHandler *handler.GameHandler
+	if cfg.GameService != nil {
+		gameHandler = handler.NewGameHandler(cfg.GameService, cfg.Config.JWT, cfg.TokenStore, cfg.Logger)
+	}
 
 	v1 := r.Group("/api/v1")
 	{
@@ -240,6 +246,14 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			v1.GET("/users/:id/audio/works", audioWorkHandler.ListUserWorks)
 		}
 		v1.GET("/users/:id", userHandler.GetUserByID)
+
+		if gameHandler != nil {
+			games := v1.Group("/games/hex-blitz")
+			games.Use(authMiddleware.OptionalAuthenticate())
+			games.GET("/rooms", gameHandler.ListHexBlitzRooms)
+			games.GET("/rooms/:id", gameHandler.GetHexBlitzRoom)
+			games.POST("/rooms", gameHandler.CreateHexBlitzRoom)
+		}
 
 		// ── Authenticated routes ────────────────────────────────────────
 		protected := v1.Group("")
@@ -505,6 +519,9 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	// WebSocket endpoint (auth via query param token)
 	chatHandler := handler.NewChatHandler(cfg.ChatService, cfg.Hub, cfg.Logger)
 	r.GET("/ws/chat", middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore).Authenticate(), chatHandler.ServeWS)
+	if cfg.GameService != nil {
+		r.GET("/ws/game/hex-blitz", gameHandler.ServeHexBlitzWS)
+	}
 
 	return r
 }

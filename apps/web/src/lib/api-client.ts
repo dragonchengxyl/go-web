@@ -353,6 +353,43 @@ export interface AudioWork {
   author_username?: string;
 }
 
+export type HexBlitzRoomStatus =
+  | "waiting"
+  | "countdown"
+  | "running"
+  | "finished";
+
+export interface HexBlitzRoomPlayer {
+  session_id: string;
+  user_id?: string;
+  name: string;
+  ready: boolean;
+  connected: boolean;
+  is_host: boolean;
+  score: number;
+  joined_at: string;
+  updated_at: string;
+}
+
+export interface HexBlitzRoom {
+  id: string;
+  code: string;
+  game_slug: string;
+  title: string;
+  status: HexBlitzRoomStatus;
+  host_session_id: string;
+  countdown_sec: number;
+  round_duration_sec: number;
+  player_count: number;
+  ready_count: number;
+  countdown_started_at?: string;
+  started_at?: string;
+  ends_at?: string;
+  created_at: string;
+  updated_at: string;
+  players: HexBlitzRoomPlayer[];
+}
+
 export interface AdminAIToolSection {
   title: string;
   bullets?: string[];
@@ -749,6 +786,24 @@ class ApiClient {
     return this.put<Group>(`/groups/${groupId}/featured-post`, {
       post_id: postId ?? "",
     });
+  }
+
+  // ── Games / Hex Blitz ─────────────────────────────────────────────────
+
+  async getHexBlitzRooms() {
+    return this.get<{ rooms: HexBlitzRoom[] }>("/games/hex-blitz/rooms");
+  }
+
+  async getHexBlitzRoom(roomId: string) {
+    return this.get<HexBlitzRoom>(`/games/hex-blitz/rooms/${roomId}`);
+  }
+
+  async createHexBlitzRoom(data: {
+    title?: string;
+    player_name: string;
+    session_id: string;
+  }) {
+    return this.post<HexBlitzRoom>("/games/hex-blitz/rooms", data);
   }
 
   // ── Follow ────────────────────────────────────────────────────────────

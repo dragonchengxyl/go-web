@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Flame,
   Play,
@@ -301,7 +301,23 @@ function getTier(score: number) {
   return '热身中';
 }
 
-export function HexBlitzPrototype() {
+interface HexBlitzRoomMode {
+  enabled: boolean;
+  phase: 'waiting' | 'countdown' | 'running' | 'finished';
+  matchKey?: string;
+  endsAt?: string;
+  infoText?: string;
+}
+
+interface HexBlitzPrototypeProps {
+  roomMode?: HexBlitzRoomMode;
+  onScoreChange?: (score: number) => void;
+}
+
+export function HexBlitzPrototype({
+  roomMode,
+  onScoreChange,
+}: HexBlitzPrototypeProps = {}) {
   const [tiles, setTiles] = useState<Tile[]>(() => createShowcaseBoard());
   const [phase, setPhase] = useState<'idle' | 'running' | 'ended'>('idle');
   const [score, setScore] = useState(0);
@@ -314,17 +330,37 @@ export function HexBlitzPrototype() {
   const [message, setMessage] = useState('点击相邻同色六角块，尽量在 75 秒内把连击叠起来。');
   const [chainExpiresAt, setChainExpiresAt] = useState<number | null>(null);
   const [runSeed, setRunSeed] = useState(0);
+  const lastRoomMatchKeyRef = useRef<string | null>(null);
+
+  const isRoomMode = !!roomMode?.enabled;
+  const roomPhase = roomMode?.phase;
+  const roomMatchKey = roomMode?.matchKey;
+  const roomInfoText = roomMode?.infoText;
+  const remoteEndAtMs = roomMode?.endsAt ? new Date(roomMode.endsAt).getTime() : null;
 
   const previewGroup = collectGroup(tiles, hoveredTileId);
   const previewSet = new Set(previewGroup.map((tile) => tile.id));
+
+  function resetToShowcase(nextMessage: string) {
+    setTiles(createShowcaseBoard());
+    setPhase('idle');
+    setScore(0);
+    setCombo(0);
+    setMoves(0);
+    setTimeLeftMs(GAME_DURATION_MS);
+    setHoveredTileId(null);
+    setChainExpiresAt(null);
+    setMessage(nextMessage);
+  }
 
   useEffect(() => {
     if (phase !== 'running') {
       return;
     }
 
-    const endAt = Date.now() + GAME_DURATION_MS;
+    const fallbackEndAt = Date.now() + GAME_DURATION_MS;
     const timer = window.setInterval(() => {
+      const endAt = isRoomMode && remoteEndAtMs ? remoteEndAtMs : fallbackEndAt;
       const remaining = Math.max(0, endAt - Date.now());
       setTimeLeftMs(remaining);
 
@@ -337,7 +373,52 @@ export function HexBlitzPrototype() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [phase, runSeed]);
+  }, [phase, runSeed, isRoomMode, remoteEndAtMs]);
+
+  useEffect(() => {
+    if (!isRoomMode || !roomPhase) {
+      lastRoomMatchKeyRef.current = null;
+      return;
+    }
+
+    if (roomPhase === 'running' && roomMatchKey) {
+      if (lastRoomMatchKeyRef.current === roomMatchKey) {
+        return;
+      }
+      lastRoomMatchKeyRef.current = roomMatchKey;
+      setTiles(createRandomBoard());
+      setPhase('running');
+      setScore(0);
+      setBestCombo(0);
+      setCombo(0);
+      setMoves(0);
+      setHoveredTileId(null);
+      setChainExpiresAt(null);
+      setTimeLeftMs(remoteEndAtMs ? Math.max(0, remoteEndAtMs - Date.now()) : GAME_DURATION_MS);
+      setMessage(roomInfoText || '房间对局已开始，你的分数会实时同步到记分板。');
+      setRunSeed((current) => current + 1);
+      return;
+    }
+
+    if (roomPhase === 'countdown') {
+      resetToShowcase(roomInfoText || '房主已经开始倒计时，棋盘将在开局时自动激活。');
+      return;
+    }
+
+    if (roomPhase === 'waiting') {
+      lastRoomMatchKeyRef.current = null;
+      resetToShowcase(roomInfoText || '你已连接房间。等所有在线玩家准备完毕后，由房主开始。');
+      return;
+    }
+
+    if (roomPhase === 'finished') {
+      setPhase('ended');
+      setTimeLeftMs(0);
+      setChainExpiresAt(null);
+      setHoveredTileId(null);
+      setMessage(roomInfoText || `房间对局已结束，当前分数 ${score}。`);
+    }
+  }, [isRoomMode, remoteEndAtMs, roomInfoText, roomMatchKey, roomPhase, score]);
 
   useEffect(() => {
     if (!chainExpiresAt || phase !== 'running') {
@@ -369,12 +450,25 @@ export function HexBlitzPrototype() {
     setHoveredTileId(null);
     setChainExpiresAt(null);
     setCombo(0);
-    setMessage(
-      `本局结束，最终得分 ${score}。下一阶段会把这个循环接成多人房间和排行榜。`
-    );
-  }, [phase, score]);
+    setMessage(() => {
+      if (isRoomMode) {
+        return roomInfoText || `房间对局已结束，当前分数 ${score}。`;
+      }
+      return `本局结束，最终得分 ${score}。下一阶段会把这个循环接成多人房间和排行榜。`;
+    });
+  }, [isRoomMode, phase, roomInfoText, score]);
+
+  useEffect(() => {
+    if (phase !== 'running' || !onScoreChange) {
+      return;
+    }
+    onScoreChange(score);
+  }, [onScoreChange, phase, score]);
 
   function startGame() {
+    if (isRoomMode) {
+      return;
+    }
     setTiles(createRandomBoard());
     setPhase('running');
     setScore(0);
@@ -600,32 +694,50 @@ export function HexBlitzPrototype() {
 
               <Card className="border-white/10 bg-black/20 text-white">
                 <CardContent className="p-5">
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      onClick={startGame}
-                      className="border-0 bg-[linear-gradient(135deg,#ff8a3d_0%,#34d2ff_100%)] text-slate-950 hover:brightness-110"
-                    >
-                      <Play className="mr-2 h-4 w-4" />
-                      {phase === 'running' ? '重新开局' : '开始一局'}
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setTiles(createShowcaseBoard());
-                        setPhase('idle');
-                        setScore(0);
-                        setCombo(0);
-                        setMoves(0);
-                        setTimeLeftMs(GAME_DURATION_MS);
-                        setChainExpiresAt(null);
-                        setMessage('已回到展示盘面。准备好后再开始一局。');
-                      }}
-                      variant="outline"
-                      className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
-                    >
-                      <RotateCcw className="mr-2 h-4 w-4" />
-                      重置展示盘面
-                    </Button>
-                  </div>
+                  {isRoomMode ? (
+                    <div className="space-y-3">
+                      <div className="rounded-2xl border border-sky-300/15 bg-sky-300/10 px-4 py-3 text-sm leading-7 text-sky-50">
+                        当前正在房间模式下运行。棋盘会在房主开局后自动启动，分数也会实时推送到房间。
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        <Button
+                          disabled
+                          className="border-0 bg-[linear-gradient(135deg,#34d2ff_0%,#7af6b5_100%)] text-slate-950 opacity-70"
+                        >
+                          <Play className="mr-2 h-4 w-4" />
+                          等待房间控制
+                        </Button>
+                        <Button
+                          disabled
+                          variant="outline"
+                          className="border-white/15 bg-transparent text-white opacity-70"
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          房间状态驱动
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        onClick={startGame}
+                        className="border-0 bg-[linear-gradient(135deg,#ff8a3d_0%,#34d2ff_100%)] text-slate-950 hover:brightness-110"
+                      >
+                        <Play className="mr-2 h-4 w-4" />
+                        {phase === 'running' ? '重新开局' : '开始一局'}
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          resetToShowcase('已回到展示盘面。准备好后再开始一局。');
+                        }}
+                        variant="outline"
+                        className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        重置展示盘面
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

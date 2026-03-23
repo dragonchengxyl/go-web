@@ -289,6 +289,7 @@ func main() {
 		groupService,
 		eventService,
 	)
+	gameService := usecase.NewHexBlitzRoomService(logger)
 
 	// Initialize WebSocket hub (distributed mode via Redis Pub/Sub)
 	hub := ws.NewDistributedHub(redisClient, logger)
@@ -328,6 +329,7 @@ func main() {
 		AssistantService:       assistantService,
 		AdminAIToolService:     adminAIToolService,
 		MultimodalService:      multimodalService,
+		GameService:            gameService,
 		Hub:                    hub,
 		TokenStore:             tokenStore,
 		ReportRepo:             reportRepo,

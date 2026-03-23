@@ -39,6 +39,11 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     isOriginAllowed,
 }
 
+// Upgrade upgrades the request to a WebSocket connection using the shared origin policy.
+func Upgrade(w http.ResponseWriter, r *http.Request) (*websocket.Conn, error) {
+	return upgrader.Upgrade(w, r, nil)
+}
+
 // SetAllowedOrigins updates the WebSocket origin allowlist.
 func SetAllowedOrigins(origins []string) {
 	normalized := make([]string, 0, len(origins))
