@@ -316,10 +316,6 @@ func (h *GameHandler) closeRoomClients(roomID uuid.UUID) {
 	}
 }
 
-func (h *GameHandler) broadcastToRoom(roomID uuid.UUID, messageType string, payload any) {
-	h.broadcastToClients(h.roomClients(roomID), messageType, payload)
-}
-
 func (h *GameHandler) broadcastToClients(clients []*gameWSClient, messageType string, payload any) {
 	data, err := json.Marshal(gin.H{
 		"type":    messageType,
