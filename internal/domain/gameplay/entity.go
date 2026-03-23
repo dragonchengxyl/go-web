@@ -135,6 +135,7 @@ type HexBlitzMoveEvent struct {
 type MatchResult struct {
 	ID          uuid.UUID  `json:"id"`
 	MatchID     uuid.UUID  `json:"match_id"`
+	SessionID   string     `json:"session_id"`
 	RoomID      uuid.UUID  `json:"room_id"`
 	RoomCode    string     `json:"room_code"`
 	RoomTitle   string     `json:"room_title"`
@@ -173,7 +174,23 @@ type MatchSummary struct {
 }
 
 type MatchReplay struct {
-	Match   *Match              `json:"match"`
-	Results []MatchResult       `json:"results"`
-	Events  []HexBlitzMoveEvent `json:"events"`
+	Match   *Match                 `json:"match"`
+	Results []MatchResult          `json:"results"`
+	Events  []HexBlitzMoveEvent    `json:"events"`
+	Players []HexBlitzReplayPlayer `json:"players"`
+}
+
+type HexBlitzReplayFrame struct {
+	Step      int                 `json:"step"`
+	MoveIndex int                 `json:"move_index"`
+	Event     *HexBlitzMoveEvent  `json:"event,omitempty"`
+	Board     *HexBlitzBoardState `json:"board"`
+}
+
+type HexBlitzReplayPlayer struct {
+	SessionID   string                `json:"session_id"`
+	UserID      *uuid.UUID            `json:"user_id,omitempty"`
+	PlayerName  string                `json:"player_name"`
+	DisplayName string                `json:"display_name"`
+	Frames      []HexBlitzReplayFrame `json:"frames"`
 }

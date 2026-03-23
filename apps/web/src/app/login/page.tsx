@@ -35,12 +35,12 @@ function LoginForm() {
   const loginMutation = useMutation({
     mutationFn: () => apiClient.login(formData.email, formData.password),
     onSuccess: async (data) => {
-      await login(data.access_token, data.refresh_token);
+      await login(data.access_token, data.refresh_token, data.user);
       if (data.user?.force_password_reset) {
-        router.push(buildForcedResetHref(from));
+        router.replace(buildForcedResetHref(from));
         return;
       }
-      router.push(from);
+      router.replace(from);
     },
     onError: (err: any) => {
       setError(err.message || '登录失败，请检查邮箱和密码');

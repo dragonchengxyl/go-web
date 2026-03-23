@@ -61,7 +61,7 @@ function ChangePasswordForm({ forcedReset, returnTo }: { forcedReset: boolean; r
         old_password: form.old_password,
         new_password: form.new_password,
       });
-      await login(data.access_token, data.refresh_token);
+      await login(data.access_token, data.refresh_token, data.user);
       setForm({ old_password: '', new_password: '', confirm: '' });
       if (forcedReset) {
         router.replace(returnTo || '/admin');

@@ -46,8 +46,8 @@ export default function RegisterPage() {
   const registerMutation = useMutation({
     mutationFn: () => apiClient.register(formData.username, formData.email, formData.password),
     onSuccess: async (data) => {
-      await login(data.access_token, data.refresh_token);
-      router.push('/feed');
+      await login(data.access_token, data.refresh_token, data.user);
+      router.replace('/feed');
     },
     onError: (err: any) => {
       setError(err.message || '注册失败，请重试');

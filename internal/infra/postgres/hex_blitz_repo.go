@@ -39,12 +39,12 @@ func (r *HexBlitzRepository) SaveMatch(ctx context.Context, match *gameplay.Matc
 
 	for _, result := range results {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO hex_blitz_match_results (
-				id, match_id, room_id, room_code, room_title, user_id, player_name, score, rank, created_at
-			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			ON CONFLICT (id) DO NOTHING
-		`, result.ID, result.MatchID, result.RoomID, result.RoomCode, result.RoomTitle, result.UserID, result.PlayerName, result.Score, result.Rank, result.CreatedAt)
+				INSERT INTO hex_blitz_match_results (
+					id, match_id, session_id, room_id, room_code, room_title, user_id, player_name, score, rank, created_at
+				)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				ON CONFLICT (id) DO NOTHING
+			`, result.ID, result.MatchID, result.SessionID, result.RoomID, result.RoomCode, result.RoomTitle, result.UserID, result.PlayerName, result.Score, result.Rank, result.CreatedAt)
 		if err != nil {
 			return fmt.Errorf("insert hex blitz match result: %w", err)
 		}
@@ -96,6 +96,7 @@ func (r *HexBlitzRepository) GetReplay(ctx context.Context, matchID uuid.UUID) (
 		SELECT
 			r.id,
 			r.match_id,
+			r.session_id,
 			r.room_id,
 			r.room_code,
 			r.room_title,
@@ -124,6 +125,7 @@ func (r *HexBlitzRepository) GetReplay(ctx context.Context, matchID uuid.UUID) (
 		if err := resultsRows.Scan(
 			&item.ID,
 			&item.MatchID,
+			&item.SessionID,
 			&item.RoomID,
 			&item.RoomCode,
 			&item.RoomTitle,
@@ -336,6 +338,7 @@ func (r *HexBlitzRepository) listRecentMatches(ctx context.Context, userID *uuid
 		SELECT
 			r.id,
 			r.match_id,
+			r.session_id,
 			r.room_id,
 			r.room_code,
 			r.room_title,
@@ -363,6 +366,7 @@ func (r *HexBlitzRepository) listRecentMatches(ctx context.Context, userID *uuid
 		if err := resultRows.Scan(
 			&result.ID,
 			&result.MatchID,
+			&result.SessionID,
 			&result.RoomID,
 			&result.RoomCode,
 			&result.RoomTitle,

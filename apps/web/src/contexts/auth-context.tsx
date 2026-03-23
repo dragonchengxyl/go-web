@@ -16,7 +16,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoggedIn: boolean;
   loading: boolean;
-  login: (token: string, refreshToken?: string) => Promise<void>;
+  login: (token: string, refreshToken?: string, user?: Partial<AuthUser> | null) => Promise<void>;
   logout: () => void;
 }
 
@@ -24,7 +24,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   isLoggedIn: false,
   loading: true,
-  login: async (_token: string, _refreshToken?: string) => {},
+  login: async (_token: string, _refreshToken?: string, _user?: Partial<AuthUser> | null) => {},
   logout: () => {},
 });
 
@@ -32,23 +32,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const normalizeUser = useCallback((data?: Partial<AuthUser> | null): AuthUser | null => {
+    if (!data?.id || !data.username || !data.email || !data.role) {
+      return null;
+    }
+    return {
+      id: data.id,
+      username: data.username,
+      email: data.email,
+      role: data.role,
+      force_password_reset: data.force_password_reset ?? false,
+      email_verified_at: data.email_verified_at ?? null,
+    };
+  }, []);
+
   const fetchMe = useCallback(async (token: string) => {
     apiClient.setToken(token);
     try {
       const data = await apiClient.getMe();
-      setUser({
-        id: data.id,
-        username: data.username,
-        email: data.email,
-        role: data.role,
-        force_password_reset: data.force_password_reset ?? false,
-        email_verified_at: data.email_verified_at ?? null,
-      });
+      setUser(normalizeUser(data));
     } catch {
       apiClient.setToken(null);
       setUser(null);
     }
-  }, []);
+  }, [normalizeUser]);
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -59,10 +66,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchMe]);
 
-  const login = useCallback(async (token: string, refreshToken?: string) => {
+  const login = useCallback(async (token: string, refreshToken?: string, nextUser?: Partial<AuthUser> | null) => {
+    apiClient.setToken(token);
     if (refreshToken) apiClient.setRefreshToken(refreshToken);
+    const normalizedUser = normalizeUser(nextUser);
+    if (normalizedUser) {
+      setUser(normalizedUser);
+      return;
+    }
     await fetchMe(token);
-  }, [fetchMe]);
+  }, [fetchMe, normalizeUser]);
 
   const logout = useCallback(() => {
     apiClient.setToken(null);

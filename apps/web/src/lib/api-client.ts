@@ -466,6 +466,32 @@ export interface HexBlitzReplay {
     combo_after: number;
     occurred_at: string;
   }>;
+  players: Array<{
+    session_id: string;
+    user_id?: string;
+    player_name: string;
+    display_name: string;
+    frames: Array<{
+      step: number;
+      move_index: number;
+      event?: {
+        id: string;
+        match_id: string;
+        session_id: string;
+        user_id?: string;
+        player_name: string;
+        display_name: string;
+        move_index: number;
+        tile_id: string;
+        cleared_count: number;
+        gained_score: number;
+        score_after: number;
+        combo_after: number;
+        occurred_at: string;
+      };
+      board: HexBlitzBoardState;
+    }>;
+  }>;
 }
 
 export interface HexBlitzLeaderboardEntry {
@@ -481,6 +507,7 @@ export interface HexBlitzLeaderboardEntry {
 export interface HexBlitzMatchResult {
   id: string;
   match_id: string;
+  session_id: string;
   room_id: string;
   room_code: string;
   room_title: string;

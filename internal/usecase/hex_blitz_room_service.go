@@ -154,7 +154,12 @@ func (s *HexBlitzRoomService) GetReplay(ctx context.Context, matchID uuid.UUID) 
 	if s.repo == nil {
 		return nil, apperr.ErrNotFound
 	}
-	return s.repo.GetReplay(ctx, matchID)
+	replay, err := s.repo.GetReplay(ctx, matchID)
+	if err != nil {
+		return nil, err
+	}
+	replay.Players = buildHexBlitzReplayPlayers(replay)
+	return replay, nil
 }
 
 func (s *HexBlitzRoomService) ListRooms() []*gameplay.Room {
@@ -809,6 +814,7 @@ func buildHexBlitzMatch(room *hexBlitzRoomState, finishedAt time.Time) *gameplay
 		results = append(results, gameplay.MatchResult{
 			ID:          uuid.New(),
 			MatchID:     *room.currentMatchID,
+			SessionID:   player.SessionID,
 			RoomID:      room.id,
 			RoomCode:    room.code,
 			RoomTitle:   room.title,
@@ -847,6 +853,87 @@ func cloneHexBlitzMoveEvents(events []gameplay.HexBlitzMoveEvent) []gameplay.Hex
 	cloned := make([]gameplay.HexBlitzMoveEvent, len(events))
 	copy(cloned, events)
 	return cloned
+}
+
+func buildHexBlitzReplayPlayers(replay *gameplay.MatchReplay) []gameplay.HexBlitzReplayPlayer {
+	if replay == nil || replay.Match == nil {
+		return nil
+	}
+
+	players := make([]gameplay.HexBlitzReplayPlayer, 0, len(replay.Results))
+	indexBySession := make(map[string]int, len(replay.Results))
+	boardBySession := make(map[string]*hexBlitzPlayerBoard, len(replay.Results))
+
+	for _, result := range replay.Results {
+		if result.SessionID == "" {
+			continue
+		}
+		board := newHexBlitzPlayerBoard(replay.Match.Seed, replay.Match.StartedAt)
+		initialBoard := board.snapshot(result.SessionID, replay.Match.ID, gameplay.RoomStatusRunning, replay.Match.StartedAt)
+		player := gameplay.HexBlitzReplayPlayer{
+			SessionID:   result.SessionID,
+			UserID:      cloneUUIDPtr(result.UserID),
+			PlayerName:  result.PlayerName,
+			DisplayName: result.DisplayName,
+			Frames: []gameplay.HexBlitzReplayFrame{
+				{
+					Step:      0,
+					MoveIndex: 0,
+					Board:     initialBoard,
+				},
+			},
+		}
+		indexBySession[result.SessionID] = len(players)
+		players = append(players, player)
+		boardBySession[result.SessionID] = board
+	}
+
+	for _, event := range replay.Events {
+		playerIndex, ok := indexBySession[event.SessionID]
+		if !ok {
+			board := newHexBlitzPlayerBoard(replay.Match.Seed, replay.Match.StartedAt)
+			initialBoard := board.snapshot(event.SessionID, replay.Match.ID, gameplay.RoomStatusRunning, replay.Match.StartedAt)
+			player := gameplay.HexBlitzReplayPlayer{
+				SessionID:   event.SessionID,
+				UserID:      cloneUUIDPtr(event.UserID),
+				PlayerName:  event.PlayerName,
+				DisplayName: event.DisplayName,
+				Frames: []gameplay.HexBlitzReplayFrame{
+					{
+						Step:      0,
+						MoveIndex: 0,
+						Board:     initialBoard,
+					},
+				},
+			}
+			indexBySession[event.SessionID] = len(players)
+			playerIndex = len(players)
+			players = append(players, player)
+			boardBySession[event.SessionID] = board
+		}
+
+		player := &players[playerIndex]
+		board := boardBySession[event.SessionID]
+		if board == nil {
+			continue
+		}
+
+		moveCopy := event
+		moveResult, err := board.applyMove(event.SessionID, replay.Match.ID, event.TileID, event.OccurredAt)
+		if err != nil {
+			continue
+		}
+		boardSnapshot := board.snapshot(event.SessionID, replay.Match.ID, gameplay.RoomStatusFinished, event.OccurredAt)
+		boardSnapshot.Message = moveResult.Message
+		player.Frames = append(player.Frames, gameplay.HexBlitzReplayFrame{
+			Step:      len(player.Frames),
+			MoveIndex: event.MoveIndex,
+			Event:     &moveCopy,
+			Board:     boardSnapshot,
+		})
+	}
+
+	return players
 }
 
 func sanitizeHexBlitzTitle(value string) string {

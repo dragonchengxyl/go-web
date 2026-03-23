@@ -5,33 +5,20 @@ import {
   Flame,
   Play,
   RotateCcw,
-  Sparkles,
   Timer,
   Trophy,
-  Zap,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { HexBlitzBoardState } from '@/lib/api-client';
-import { cn } from '@/lib/utils';
+import { HexBlitzBoardState, HexBlitzTile } from '@/lib/api-client';
+import { HexBlitzBoard } from '@/components/games/hex-blitz-board';
 
-type TileColor = 'ember' | 'lagoon' | 'mint' | 'sun' | 'violet';
-type TileSpecial = 'none' | 'spark' | 'burst';
-
-interface Tile {
-  id: string;
-  q: number;
-  r: number;
-  color: TileColor;
-  special: TileSpecial;
-}
+type Tile = HexBlitzTile;
 
 const BOARD_RADIUS = 2;
 const GAME_DURATION_MS = 75_000;
 const COMBO_WINDOW_MS = 2_500;
-const HEX_SIZE = 34;
-const BOARD_PADDING = 56;
 const DIRECTIONS: Array<[number, number]> = [
   [1, 0],
   [1, -1],
@@ -41,38 +28,7 @@ const DIRECTIONS: Array<[number, number]> = [
   [0, 1],
 ];
 
-const COLOR_STYLES: Record<
-  TileColor,
-  { label: string; gradient: string; glow: string }
-> = {
-  ember: {
-    label: '焰橙',
-    gradient: 'linear-gradient(180deg, #ffb36a 0%, #ff7a45 48%, #eb4e30 100%)',
-    glow: '0 12px 26px rgba(255, 122, 69, 0.42)',
-  },
-  lagoon: {
-    label: '深海青',
-    gradient: 'linear-gradient(180deg, #70e7ff 0%, #2fc2ff 45%, #178fdf 100%)',
-    glow: '0 12px 26px rgba(47, 194, 255, 0.42)',
-  },
-  mint: {
-    label: '薄荷绿',
-    gradient: 'linear-gradient(180deg, #89ffd0 0%, #3fd9a5 45%, #1ca979 100%)',
-    glow: '0 12px 26px rgba(63, 217, 165, 0.4)',
-  },
-  sun: {
-    label: '日耀黄',
-    gradient: 'linear-gradient(180deg, #ffe88c 0%, #ffc847 45%, #ff9d1d 100%)',
-    glow: '0 12px 26px rgba(255, 200, 71, 0.42)',
-  },
-  violet: {
-    label: '电紫',
-    gradient: 'linear-gradient(180deg, #d8b4ff 0%, #a66cff 45%, #6b46ff 100%)',
-    glow: '0 12px 26px rgba(166, 108, 255, 0.42)',
-  },
-};
-
-const SHOWCASE_PATTERN: Array<[TileColor, TileSpecial]> = [
+const SHOWCASE_PATTERN: Array<[Tile['color'], Tile['special']]> = [
   ['ember', 'none'],
   ['ember', 'spark'],
   ['lagoon', 'none'],
@@ -114,30 +70,6 @@ function buildCoords() {
 
 const BOARD_COORDS = buildCoords();
 
-function axialToPixel(q: number, r: number) {
-  return {
-    x: Math.sqrt(3) * HEX_SIZE * (q + r / 2),
-    y: 1.5 * HEX_SIZE * r,
-  };
-}
-
-const BOARD_BOUNDS = (() => {
-  const points = BOARD_COORDS.map((coord) => axialToPixel(coord.q, coord.r));
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  return {
-    minX,
-    minY,
-    width: maxX - minX + HEX_SIZE * 2 + BOARD_PADDING * 2,
-    height: maxY - minY + HEX_SIZE * 2 + BOARD_PADDING * 2,
-  };
-})();
-
 function createShowcaseBoard() {
   return BOARD_COORDS.map((coord, index) => {
     const [color, special] = SHOWCASE_PATTERN[index % SHOWCASE_PATTERN.length];
@@ -152,12 +84,12 @@ function createShowcaseBoard() {
   });
 }
 
-function randomColor(): TileColor {
-  const colors: TileColor[] = ['ember', 'lagoon', 'mint', 'sun', 'violet'];
+function randomColor(): Tile['color'] {
+  const colors: Tile['color'][] = ['ember', 'lagoon', 'mint', 'sun', 'violet'];
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-function randomSpecial(): TileSpecial {
+function randomSpecial(): Tile['special'] {
   const roll = Math.random();
   if (roll < 0.08) {
     return 'burst';
@@ -599,66 +531,14 @@ export function HexBlitzPrototype({
                 />
               </div>
 
-              <div
-                className="relative mx-auto mt-6 rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.04),transparent_56%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.18))]"
-                style={{
-                  width: `${BOARD_BOUNDS.width}px`,
-                  height: `${BOARD_BOUNDS.height}px`,
-                }}
-              >
-                <div className="absolute inset-5 rounded-[26px] border border-white/8 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.03),transparent_45%)]" />
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_0%,rgba(0,0,0,0.2)_100%)]" />
-                {tiles.map((tile) => {
-                  const pixel = axialToPixel(tile.q, tile.r);
-                  const left =
-                    pixel.x -
-                    BOARD_BOUNDS.minX +
-                    BOARD_PADDING -
-                    Math.sqrt(3) * HEX_SIZE / 2;
-                  const top =
-                    pixel.y - BOARD_BOUNDS.minY + BOARD_PADDING - HEX_SIZE;
-                  const isPreview = previewSet.has(tile.id) && previewGroup.length >= 2;
-                  const style = COLOR_STYLES[tile.color];
-
-                  return (
-                    <button
-                      key={tile.id}
-                      type="button"
-                      aria-label={`${style.label}${tile.special !== 'none' ? `，${tile.special}` : ''}`}
-                      onMouseEnter={() => setHoveredTileId(tile.id)}
-                      onMouseLeave={() => setHoveredTileId((current) => (current === tile.id ? null : current))}
-                      onClick={() => handleTileClick(tile.id)}
-                      className={cn(
-                        'absolute flex items-center justify-center text-slate-950 transition-all duration-150',
-                        phase === 'running'
-                          ? 'cursor-pointer hover:-translate-y-1'
-                          : 'cursor-default opacity-85'
-                      )}
-                      style={{
-                        left,
-                        top,
-                        width: `${Math.sqrt(3) * HEX_SIZE}px`,
-                        height: `${HEX_SIZE * 2}px`,
-                        clipPath:
-                          'polygon(25% 6%, 75% 6%, 100% 50%, 75% 94%, 25% 94%, 0 50%)',
-                        background: style.gradient,
-                        boxShadow: isPreview
-                          ? `${style.glow}, 0 0 0 3px rgba(255,255,255,0.16)`
-                          : style.glow,
-                        transform: isPreview ? 'translateY(-4px) scale(1.04)' : 'translateY(0) scale(1)',
-                      }}
-                    >
-                      <div className="absolute inset-[2px] rounded-[22px] bg-[linear-gradient(180deg,rgba(255,255,255,0.22),transparent_55%)] opacity-70" />
-                      {tile.special === 'spark' && (
-                        <Sparkles className="relative h-5 w-5 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]" />
-                      )}
-                      {tile.special === 'burst' && (
-                        <Zap className="relative h-5 w-5 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              <HexBlitzBoard
+                className="mt-6"
+                tiles={tiles}
+                interactive={phase === 'running'}
+                highlightedTileIds={previewGroup.length >= 2 ? previewSet : undefined}
+                onHoverChange={setHoveredTileId}
+                onTileClick={handleTileClick}
+              />
             </div>
 
             <div className="space-y-4">

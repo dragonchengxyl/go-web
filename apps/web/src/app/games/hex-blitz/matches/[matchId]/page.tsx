@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -13,12 +14,15 @@ import {
 } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { apiClient, HexBlitzReplay } from '@/lib/api-client'
+import { HexBlitzBoard } from '@/components/games/hex-blitz-board'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
 export default function HexBlitzReplayPage() {
   const params = useParams<{ matchId: string }>()
   const matchId = params.matchId
+  const [selectedSession, setSelectedSession] = useState('')
+  const [selectedStep, setSelectedStep] = useState(0)
 
   const { data, isLoading, error } = useQuery<HexBlitzReplay>({
     queryKey: ['hex-blitz-replay', matchId],
@@ -26,7 +30,25 @@ export default function HexBlitzReplayPage() {
     enabled: !!matchId,
   })
 
-  const replay = data
+  useEffect(() => {
+    if (!data?.players?.length) {
+      return
+    }
+    setSelectedSession((current) => current || data.players[0].session_id)
+  }, [data])
+
+  const selectedPlayer = useMemo(
+    () => data?.players.find((player) => player.session_id === selectedSession) ?? data?.players[0],
+    [data, selectedSession]
+  )
+
+  useEffect(() => {
+    setSelectedStep(0)
+  }, [selectedPlayer?.session_id])
+
+  const selectedFrame = selectedPlayer
+    ? selectedPlayer.frames[Math.min(selectedStep, selectedPlayer.frames.length - 1)]
+    : undefined
 
   return (
     <main className="min-h-screen bg-[#07131b] pb-20 pt-24 text-white">
@@ -45,15 +67,15 @@ export default function HexBlitzReplayPage() {
               Match Replay Foundation
             </p>
             <h1 className="mt-2 text-4xl font-black tracking-tight text-white">
-              {replay?.match.room_title ?? '对局战报'}
+              {data?.match.room_title ?? '对局战报'}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
-              当前版本先提供“回放基础”：一局对局的元信息、最终结果和完整操作时间线。下一步再把它升级成逐步演示棋盘状态的可视化回放。
+              当前版本已经支持按玩家查看棋盘快照，并通过 step slider 逐步回放本局操作。下一步可以继续演进成自动播放和逐帧动画。
             </p>
           </div>
-          {replay?.match && (
+          {data?.match && (
             <Badge className="border-white/15 bg-white/8 text-white">
-              {replay.match.room_code}
+              {data.match.room_code}
             </Badge>
           )}
         </div>
@@ -74,7 +96,7 @@ export default function HexBlitzReplayPage() {
           </Card>
         )}
 
-        {replay && (
+        {data && (
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <Card className="border-white/10 bg-white/[0.04] text-white">
@@ -84,7 +106,7 @@ export default function HexBlitzReplayPage() {
                     玩家数
                   </div>
                   <div className="text-2xl font-black tracking-tight">
-                    {replay.results.length}
+                    {data.results.length}
                   </div>
                 </CardContent>
               </Card>
@@ -95,7 +117,7 @@ export default function HexBlitzReplayPage() {
                     对局时长
                   </div>
                   <div className="text-2xl font-black tracking-tight">
-                    {replay.match.duration_sec}s
+                    {data.match.duration_sec}s
                   </div>
                 </CardContent>
               </Card>
@@ -106,7 +128,7 @@ export default function HexBlitzReplayPage() {
                     Seed
                   </div>
                   <div className="text-2xl font-black tracking-tight">
-                    {replay.match.seed}
+                    {data.match.seed}
                   </div>
                 </CardContent>
               </Card>
@@ -117,13 +139,97 @@ export default function HexBlitzReplayPage() {
                     操作数
                   </div>
                   <div className="text-2xl font-black tracking-tight">
-                    {replay.events.length}
+                    {data.events.length}
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
+            <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+              <Card className="border-white/10 bg-white/[0.04] text-white">
+                <CardContent className="p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <Sparkles className="h-5 w-5 text-sky-300" />
+                    <div>
+                      <h2 className="text-2xl font-black tracking-tight">逐步回放</h2>
+                      <p className="mt-1 text-sm text-slate-400">
+                        先选择玩家，再拖动 step slider 查看该玩家棋盘如何演变。
+                      </p>
+                    </div>
+                  </div>
+
+                  {!selectedPlayer ? (
+                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                      当前没有可回放的玩家棋盘。
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div className="flex flex-wrap gap-2">
+                        {data.players.map((player) => (
+                          <button
+                            key={player.session_id}
+                            type="button"
+                            onClick={() => setSelectedSession(player.session_id)}
+                            className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                              selectedPlayer.session_id === player.session_id
+                                ? 'border-sky-300/30 bg-sky-300/10 text-sky-100'
+                                : 'border-white/10 bg-black/20 text-slate-300 hover:border-white/20 hover:text-white'
+                            }`}
+                          >
+                            {player.display_name}
+                          </button>
+                        ))}
+                      </div>
+
+                      <HexBlitzBoard tiles={selectedFrame?.board.tiles ?? []} />
+
+                      <div className="rounded-[24px] border border-white/10 bg-black/20 px-4 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                          <div>
+                            <div className="text-sm text-slate-400">
+                              {selectedStep === 0
+                                ? 'Step 0 · 初始棋盘'
+                                : `Step ${selectedStep} · move_index ${selectedFrame?.move_index ?? 0}`}
+                            </div>
+                            <div className="mt-2 text-lg font-semibold text-white">
+                              {selectedFrame?.event
+                                ? `点击 ${selectedFrame.event.tile_id}，清除 ${selectedFrame.event.cleared_count} 格`
+                                : '服务端按 seed 生成的初始棋盘'}
+                            </div>
+                            <div className="mt-2 text-sm text-slate-400">
+                              {selectedFrame?.board.message}
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                              Score
+                            </div>
+                            <div className="mt-1 text-2xl font-black tracking-tight text-white">
+                              {selectedFrame?.board.score ?? 0}
+                            </div>
+                            <div className="mt-1 text-sm text-sky-200">
+                              combo x{selectedFrame?.board.combo ?? 0}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-5">
+                          <input
+                            type="range"
+                            min={0}
+                            max={Math.max(0, (selectedPlayer?.frames.length ?? 1) - 1)}
+                            value={selectedStep}
+                            onChange={(event) => setSelectedStep(Number(event.target.value))}
+                            className="h-2 w-full cursor-pointer accent-sky-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <Card className="border-white/10 bg-white/[0.04] text-white">
                 <CardContent className="p-6">
                   <div className="mb-5 flex items-center gap-3">
@@ -131,7 +237,7 @@ export default function HexBlitzReplayPage() {
                     <h2 className="text-2xl font-black tracking-tight">结果榜</h2>
                   </div>
                   <div className="space-y-3">
-                    {replay.results.map((result) => (
+                    {data.results.map((result) => (
                       <div
                         key={result.id}
                         className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4"
@@ -149,7 +255,7 @@ export default function HexBlitzReplayPage() {
                               )}
                             </div>
                             <div className="mt-2 text-sm text-slate-400">
-                              session: {result.user_id ?? result.player_name}
+                              session: {result.session_id}
                             </div>
                           </div>
                           <div className="text-right">
@@ -158,46 +264,6 @@ export default function HexBlitzReplayPage() {
                             </div>
                             <div className="mt-1 text-2xl font-black tracking-tight text-white">
                               {result.score}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-white/10 bg-white/[0.04] text-white">
-                <CardContent className="p-6">
-                  <div className="mb-5 flex items-center gap-3">
-                    <Sparkles className="h-5 w-5 text-sky-300" />
-                    <h2 className="text-2xl font-black tracking-tight">操作时间线</h2>
-                  </div>
-                  <div className="space-y-3">
-                    {replay.events.length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                        当前这局没有操作事件。
-                      </div>
-                    )}
-
-                    {replay.events.map((event) => (
-                      <div
-                        key={event.id}
-                        className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div>
-                            <div className="font-semibold text-white">
-                              Step {event.move_index} · {event.display_name}
-                            </div>
-                            <div className="mt-2 text-sm text-slate-400">
-                              tile {event.tile_id} · combo {event.combo_after}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm text-sky-200">+{event.gained_score} 分</div>
-                            <div className="mt-1 text-sm text-slate-400">
-                              清除 {event.cleared_count} 格，累计 {event.score_after} 分
                             </div>
                           </div>
                         </div>
