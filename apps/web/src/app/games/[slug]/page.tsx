@@ -27,6 +27,12 @@ export default function GameDetailPage({
 
   const status = getStatusMeta(game.status);
   const hasPlayPage = game.playPageEnabled === true;
+  const primaryActionLabel =
+    game.slug === 'dou-dizhu'
+      ? '进入涂油大厅'
+      : game.status === 'playable'
+        ? '进入可玩原型'
+        : '进入阶段页面';
 
   return (
     <main className="min-h-screen bg-[#07131b] pb-20 pt-24 text-white">
@@ -64,10 +70,13 @@ export default function GameDetailPage({
                   <>
                     <Button
                       asChild
-                      className="border-0 bg-[linear-gradient(135deg,#ff8a3d_0%,#34d2ff_100%)] text-slate-950 hover:brightness-110"
+                      className="border-0 text-slate-950 hover:brightness-110"
+                      style={{
+                        backgroundImage: `linear-gradient(135deg, ${game.accentFrom} 0%, ${game.accentTo} 100%)`,
+                      }}
                     >
                       <Link href={`/games/${game.slug}/play`}>
-                        {game.status === 'playable' ? '进入可玩原型' : '进入阶段页面'}
+                        {primaryActionLabel}
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </Link>
                     </Button>

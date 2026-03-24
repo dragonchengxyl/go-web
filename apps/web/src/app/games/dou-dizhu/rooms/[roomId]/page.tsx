@@ -4,6 +4,7 @@ import {
   DouDizhuPlayStage,
   roomPagePath,
 } from "@/components/games/doudizhu-play-stage";
+import { DOUDIZHU_LOBBY_NAME } from "@/lib/games/doudizhu/presenter";
 
 export default function DoudizhuRoomPage({
   params,
@@ -19,12 +20,12 @@ export default function DoudizhuRoomPage({
             className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" />
-            返回大厅
+            返回{DOUDIZHU_LOBBY_NAME}
           </Link>
 
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
             <Maximize2 className="h-4 w-4 text-amber-300" />
-            房间页
+            涂油牌桌
             <span className="text-white/50">{roomPagePath(params.roomId)}</span>
           </div>
         </div>

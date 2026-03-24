@@ -13,79 +13,17 @@ import {
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { apiClient, DoudizhuReplay } from "@/lib/api-client";
+import { cardLabel } from "@/lib/games/doudizhu/cards";
+import { comboTypeLabel } from "@/lib/games/doudizhu/combo";
+import {
+  actionTypeLabel,
+  DOUDIZHU_LOBBY_NAME,
+  DOUDIZHU_REPLAY_NAME,
+  roomModeLabel,
+  seatLabel,
+} from "@/lib/games/doudizhu/presenter";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-
-function seatLabel(seat: number) {
-  switch (seat) {
-    case 0:
-      return "一号位";
-    case 1:
-      return "二号位";
-    case 2:
-      return "三号位";
-    default:
-      return "--";
-  }
-}
-
-function comboLabel(type?: string) {
-  if (!type) {
-    return "普通操作";
-  }
-  const map: Record<string, string> = {
-    single: "单张",
-    pair: "对子",
-    triple: "三张",
-    triple_with_single: "三带一",
-    triple_with_pair: "三带二",
-    straight: "顺子",
-    straight_pairs: "连对",
-    airplane: "飞机",
-    airplane_with_single: "飞机带单",
-    airplane_with_pair: "飞机带对",
-    four_with_two_single: "四带二",
-    four_with_two_pair: "四带两对",
-    bomb: "炸弹",
-    rocket: "王炸",
-  };
-  return map[type] ?? type;
-}
-
-function actionTypeLabel(type: string) {
-  const map: Record<string, string> = {
-    bid: "叫分",
-    auto_bid: "托管叫分",
-    play_cards: "出牌",
-    auto_play_cards: "托管出牌",
-    pass_turn: "过牌",
-    auto_pass_turn: "托管过牌",
-    timeout_auto_play: "超时托管",
-    landlord_assigned: "地主确定",
-    settlement: "结算",
-  };
-  return map[type] ?? type;
-}
-
-function cardLabel(card: { suit: string; rank: number }) {
-  const suitMap: Record<string, string> = {
-    spade: "♠",
-    heart: "♥",
-    club: "♣",
-    diamond: "♦",
-    joker: "J",
-  };
-  const rankMap: Record<number, string> = {
-    11: "J",
-    12: "Q",
-    13: "K",
-    14: "A",
-    15: "2",
-    16: "小王",
-    17: "大王",
-  };
-  return `${suitMap[card.suit] ?? ""}${rankMap[card.rank] ?? String(card.rank)}`;
-}
 
 export default function DoudizhuReplayPage() {
   const params = useParams<{ matchId: string }>();
@@ -105,25 +43,30 @@ export default function DoudizhuReplayPage() {
           className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          返回斗地主实验页
+          返回{DOUDIZHU_LOBBY_NAME}
         </Link>
 
         <div className="mt-6 mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.32em] text-slate-500">
-              Match Replay
+              对局战报
             </p>
             <h1 className="mt-2 text-4xl font-black tracking-tight text-white">
-              {data?.match.room_title ?? "斗地主战报"}
+              {data?.match.room_title ?? DOUDIZHU_REPLAY_NAME}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
-              当前版本先提供完整操作时间线和结果榜，便于验证服务端裁决、战报落库和最近对局链路。
+              这里保留了整局时间线、倍率变化和最终结算，方便回看这把牌是怎么打成的。
             </p>
           </div>
           {data?.match && (
-            <Badge className="border-white/15 bg-white/8 text-white">
-              {data.match.room_code}
-            </Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className="border-white/15 bg-white/8 text-white">
+                {data.match.room_code}
+              </Badge>
+              <Badge className="border-amber-300/20 bg-amber-300/10 text-amber-100">
+                {roomModeLabel(data.match.match_mode)}
+              </Badge>
+            </div>
           )}
         </div>
 
@@ -234,7 +177,7 @@ export default function DoudizhuReplayPage() {
                   <div className="mb-5 flex items-center gap-3">
                     <Trophy className="h-5 w-5 text-amber-300" />
                     <h2 className="text-2xl font-black tracking-tight">
-                      结果榜
+                      本局结算
                     </h2>
                   </div>
                   <div className="space-y-3">
@@ -263,7 +206,7 @@ export default function DoudizhuReplayPage() {
                               </Badge>
                               {result.is_bot && (
                                 <Badge className="border-amber-300/20 bg-amber-300/10 text-amber-100">
-                                  机器人
+                                  陪练
                                 </Badge>
                               )}
                             </div>
@@ -295,7 +238,7 @@ export default function DoudizhuReplayPage() {
                   <div className="mb-5 flex items-center gap-3">
                     <ListOrdered className="h-5 w-5 text-sky-300" />
                     <h2 className="text-2xl font-black tracking-tight">
-                      操作时间线
+                      出牌过程
                     </h2>
                   </div>
                   <div className="space-y-3">
@@ -330,7 +273,7 @@ export default function DoudizhuReplayPage() {
                             </div>
                             {event.combo && (
                               <div className="mt-2 text-sm text-slate-300">
-                                {comboLabel(event.combo.type)} · 主值{" "}
+                                {comboTypeLabel(event.combo.type)} · 主值{" "}
                                 {event.combo.main_rank}
                               </div>
                             )}

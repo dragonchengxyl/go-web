@@ -14,11 +14,11 @@ const playPageConfig = {
     badgeText: '房间实验室已接入',
   },
   'dou-dizhu': {
-    eyebrow: 'Playable Integration',
+    eyebrow: 'Professional Table',
     description:
-      '当前版本已经接入真人房入口、快速 AI 演示、基础房间状态同步和战报查询链路。接下来继续完善前端出牌体验、查询页和后台多游戏观测。',
-    badgeLabel: 'Phase 4',
-    badgeText: '大厅与战报已接入',
+      '这里是涂油斗地主的正式大厅。你可以直接开始一局人机热身，也可以创建三人牌局，最近战报和排行榜会直接跟着这条产品线走。',
+    badgeLabel: 'Table Upgrade',
+    badgeText: '涂油大厅已开放',
   },
 } as const;
 

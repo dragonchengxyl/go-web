@@ -28,7 +28,31 @@ import {
   DoudizhuRoom,
   DoudizhuRoomPlayer,
 } from "@/lib/api-client";
+import {
+  DoudizhuLeaderboardCard,
+  DoudizhuMatchLinkCard,
+} from "@/components/games/doudizhu/doudizhu-history-panel";
+import { DoudizhuLobbyPanel } from "@/components/games/doudizhu/doudizhu-lobby-panel";
+import { DoudizhuPlayCard } from "@/components/games/doudizhu/doudizhu-play-card";
+import { DoudizhuSeat } from "@/components/games/doudizhu/doudizhu-seat";
 import { cn } from "@/lib/utils";
+import { cardKey, cardLabel } from "@/lib/games/doudizhu/cards";
+import {
+  comboLabel,
+  evaluateSelectedCombo,
+} from "@/lib/games/doudizhu/combo";
+import {
+  actionTypeLabel,
+  buildRoomNotice,
+  connectionStatusLabel,
+  DOUDIZHU_LOBBY_NAME,
+  DOUDIZHU_PRODUCT_NAME,
+  formatRemaining,
+  roleLabel,
+  roomModeLabel,
+  roomStatusLabel,
+  seatLabel,
+} from "@/lib/games/doudizhu/presenter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,445 +99,6 @@ function createLocalSessionID() {
   return `session-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-function roomStatusLabel(status?: string) {
-  switch (status) {
-    case "bidding":
-      return "叫分中";
-    case "playing":
-      return "对局中";
-    case "settlement":
-      return "已结算";
-    case "redeal":
-      return "流局重发";
-    default:
-      return "待准备";
-  }
-}
-
-function roomModeLabel(mode?: string) {
-  return mode === "demo_ai" ? "AI 演示" : "真人房";
-}
-
-function seatLabel(seat?: number) {
-  switch (seat) {
-    case 0:
-      return "一号位";
-    case 1:
-      return "二号位";
-    case 2:
-      return "三号位";
-    default:
-      return "--";
-  }
-}
-
-function formatRemaining(target?: string, nowMs: number = Date.now()) {
-  if (!target) {
-    return "--";
-  }
-  const targetMs = new Date(target).getTime();
-  const remaining = Math.max(0, targetMs - nowMs);
-  return `${Math.ceil(remaining / 1000)}s`;
-}
-
-function cardKey(card: DoudizhuCard) {
-  return `${card.suit}-${card.rank}`;
-}
-
-function cardSuit(card: DoudizhuCard) {
-  switch (card.suit) {
-    case "spade":
-      return "♠";
-    case "heart":
-      return "♥";
-    case "club":
-      return "♣";
-    case "diamond":
-      return "♦";
-    default:
-      return "J";
-  }
-}
-
-function cardRank(card: DoudizhuCard) {
-  const rankMap: Record<number, string> = {
-    11: "J",
-    12: "Q",
-    13: "K",
-    14: "A",
-    15: "2",
-    16: "SJ",
-    17: "BJ",
-  };
-  return rankMap[card.rank] ?? String(card.rank);
-}
-
-function cardLabel(card: DoudizhuCard) {
-  return `${cardSuit(card)}${cardRank(card)}`;
-}
-
-function comboLabel(combo?: DoudizhuCombo | null) {
-  if (!combo) {
-    return "等待首家出牌";
-  }
-
-  const typeLabelMap: Record<DoudizhuCombo["type"], string> = {
-    single: "单张",
-    pair: "对子",
-    triple: "三张",
-    triple_with_single: "三带一",
-    triple_with_pair: "三带二",
-    straight: "顺子",
-    straight_pairs: "连对",
-    airplane: "飞机",
-    airplane_with_single: "飞机带单",
-    airplane_with_pair: "飞机带对",
-    four_with_two_single: "四带二",
-    four_with_two_pair: "四带两对",
-    bomb: "炸弹",
-    rocket: "王炸",
-  };
-  return `${typeLabelMap[combo.type]} · 主值 ${combo.main_rank}`;
-}
-
-function actionTypeLabel(actionType?: string) {
-  switch (actionType) {
-    case "bid":
-      return "叫分";
-    case "auto_bid":
-      return "托管叫分";
-    case "play_cards":
-      return "出牌";
-    case "auto_play_cards":
-      return "托管出牌";
-    case "pass_turn":
-      return "过牌";
-    case "auto_pass_turn":
-      return "托管过牌";
-    case "timeout_auto_play":
-      return "超时托管";
-    case "landlord_assigned":
-      return "地主确定";
-    case "settlement":
-      return "本局结算";
-    default:
-      return actionType ?? "操作";
-  }
-}
-
-function sortedSelection(cards: DoudizhuCard[]) {
-  return [...cards].sort((a, b) => {
-    if (a.rank === b.rank) {
-      return a.suit.localeCompare(b.suit);
-    }
-    return a.rank - b.rank;
-  });
-}
-
-function rankCounts(cards: DoudizhuCard[]) {
-  const counts = new Map<number, number>();
-  for (const card of cards) {
-    counts.set(card.rank, (counts.get(card.rank) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function sortedRanks(counts: Map<number, number>) {
-  return [...counts.keys()].sort((a, b) => a - b);
-}
-
-function rankWithCount(counts: Map<number, number>, expected: number) {
-  for (const [rank, count] of counts.entries()) {
-    if (count === expected) {
-      return rank;
-    }
-  }
-  return null;
-}
-
-function hasCount(counts: Map<number, number>, expected: number) {
-  return [...counts.values()].some((count) => count === expected);
-}
-
-function countPattern(counts: Map<number, number>, pattern: number[]) {
-  const found = [...counts.values()].sort((a, b) => a - b);
-  const expected = [...pattern].sort((a, b) => a - b);
-  return (
-    found.length === expected.length &&
-    found.every((value, index) => value === expected[index])
-  );
-}
-
-function areConsecutive(ranks: number[]) {
-  for (let index = 1; index < ranks.length; index += 1) {
-    if (ranks[index] !== ranks[index - 1] + 1) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function isStraight(counts: Map<number, number>) {
-  if (counts.size < 5) {
-    return false;
-  }
-  const ranks = sortedRanks(counts);
-  return ranks.every((rank, index) => {
-    if (rank > 14 || counts.get(rank) !== 1) {
-      return false;
-    }
-    return index === 0 || rank === ranks[index - 1] + 1;
-  });
-}
-
-function isStraightPairs(counts: Map<number, number>) {
-  if (counts.size < 3) {
-    return false;
-  }
-  const ranks = sortedRanks(counts);
-  return ranks.every((rank, index) => {
-    if (rank > 14 || counts.get(rank) !== 2) {
-      return false;
-    }
-    return index === 0 || rank === ranks[index - 1] + 1;
-  });
-}
-
-function remainingPattern(
-  counts: Map<number, number>,
-  expectedCount: number,
-  expectedKinds: number,
-) {
-  let kinds = 0;
-  for (const count of counts.values()) {
-    if (count === 0) {
-      continue;
-    }
-    if (count !== expectedCount) {
-      return false;
-    }
-    kinds += 1;
-  }
-  return kinds === expectedKinds;
-}
-
-function airplaneCombo(
-  counts: Map<number, number>,
-  segment: number[],
-  total: number,
-): DoudizhuCombo | null {
-  const remaining = new Map(counts);
-  for (const rank of segment) {
-    remaining.set(rank, (remaining.get(rank) ?? 0) - 3);
-  }
-  const runLength = segment.length;
-  const remainingCards = total - runLength * 3;
-
-  let type: DoudizhuCombo["type"] | null = null;
-  if (remainingCards === 0) {
-    type = "airplane";
-  } else if (
-    remainingCards === runLength &&
-    remainingPattern(remaining, 1, runLength)
-  ) {
-    type = "airplane_with_single";
-  } else if (
-    remainingCards === runLength * 2 &&
-    remainingPattern(remaining, 2, runLength)
-  ) {
-    type = "airplane_with_pair";
-  }
-
-  if (!type) {
-    return null;
-  }
-  return {
-    type,
-    main_rank: segment[segment.length - 1],
-    sequence_length: runLength,
-    total_cards: total,
-  };
-}
-
-function findAirplane(counts: Map<number, number>, total: number) {
-  const triples = [...counts.entries()]
-    .filter(([rank, count]) => count >= 3 && rank <= 14)
-    .map(([rank]) => rank)
-    .sort((a, b) => a - b);
-
-  for (let runLength = triples.length; runLength >= 2; runLength -= 1) {
-    for (let start = 0; start + runLength <= triples.length; start += 1) {
-      const segment = triples.slice(start, start + runLength);
-      if (!areConsecutive(segment)) {
-        continue;
-      }
-      const combo = airplaneCombo(counts, segment, total);
-      if (combo) {
-        return combo;
-      }
-    }
-  }
-  return null;
-}
-
-function evaluateSelectedCombo(cards: DoudizhuCard[]): {
-  combo: DoudizhuCombo | null;
-  error: string;
-} {
-  if (cards.length === 0) {
-    return { combo: null as DoudizhuCombo | null, error: "" };
-  }
-
-  const sorted = sortedSelection(cards);
-  const counts = rankCounts(sorted);
-  const ranks = sortedRanks(counts);
-  const total = sorted.length;
-
-  if (total === 1) {
-    return {
-      combo: {
-        type: "single",
-        main_rank: sorted[0].rank,
-        sequence_length: 1,
-        total_cards: total,
-      },
-      error: "",
-    };
-  }
-  if (total === 2) {
-    if (sorted[0].rank === 16 && sorted[1].rank === 17) {
-      return {
-        combo: {
-          type: "rocket",
-          main_rank: 17,
-          sequence_length: 1,
-          total_cards: total,
-        },
-        error: "",
-      };
-    }
-    if (ranks.length === 1) {
-      return {
-        combo: {
-          type: "pair",
-          main_rank: ranks[0],
-          sequence_length: 1,
-          total_cards: total,
-        },
-        error: "",
-      };
-    }
-  }
-  if (total === 3 && ranks.length === 1) {
-    return {
-      combo: {
-        type: "triple",
-        main_rank: ranks[0],
-        sequence_length: 1,
-        total_cards: total,
-      },
-      error: "",
-    };
-  }
-  if (total === 4) {
-    if (ranks.length === 1) {
-      return {
-        combo: {
-          type: "bomb",
-          main_rank: ranks[0],
-          sequence_length: 1,
-          total_cards: total,
-        },
-        error: "",
-      };
-    }
-    const tripleRank = rankWithCount(counts, 3);
-    if (tripleRank) {
-      return {
-        combo: {
-          type: "triple_with_single",
-          main_rank: tripleRank,
-          sequence_length: 1,
-          total_cards: total,
-        },
-        error: "",
-      };
-    }
-  }
-  if (total === 5) {
-    const tripleRank = rankWithCount(counts, 3);
-    if (tripleRank && hasCount(counts, 2)) {
-      return {
-        combo: {
-          type: "triple_with_pair",
-          main_rank: tripleRank,
-          sequence_length: 1,
-          total_cards: total,
-        },
-        error: "",
-      };
-    }
-  }
-  if (isStraight(counts)) {
-    return {
-      combo: {
-        type: "straight",
-        main_rank: ranks[ranks.length - 1],
-        sequence_length: ranks.length,
-        total_cards: total,
-      },
-      error: "",
-    };
-  }
-  if (isStraightPairs(counts)) {
-    return {
-      combo: {
-        type: "straight_pairs",
-        main_rank: ranks[ranks.length - 1],
-        sequence_length: ranks.length,
-        total_cards: total,
-      },
-      error: "",
-    };
-  }
-  const airplane = findAirplane(counts, total);
-  if (airplane) {
-    return { combo: airplane, error: "" };
-  }
-  if (total === 6) {
-    const fourRank = rankWithCount(counts, 4);
-    if (fourRank && countPattern(counts, [4, 1, 1])) {
-      return {
-        combo: {
-          type: "four_with_two_single",
-          main_rank: fourRank,
-          sequence_length: 1,
-          total_cards: total,
-        },
-        error: "",
-      };
-    }
-  }
-  if (total === 8) {
-    const fourRank = rankWithCount(counts, 4);
-    if (fourRank && countPattern(counts, [4, 2, 2])) {
-      return {
-        combo: {
-          type: "four_with_two_pair",
-          main_rank: fourRank,
-          sequence_length: 1,
-          total_cards: total,
-        },
-        error: "",
-      };
-    }
-  }
-  return {
-    combo: null as DoudizhuCombo | null,
-    error: "当前选择不是可出的合法牌型",
-  };
-}
-
 function playerSort(a: DoudizhuRoomPlayer, b: DoudizhuRoomPlayer) {
   return a.seat - b.seat;
 }
@@ -532,242 +117,23 @@ function buildBoardSeats(
 
   const players = [...activeRoom.players].sort(playerSort);
   const bottom = me ?? players[0] ?? null;
-  const others = players.filter((player) =>
-    bottom ? player.seat !== bottom.seat : true,
+  if (!bottom) {
+    return {
+      bottom: null as DoudizhuRoomPlayer | null,
+      left: null as DoudizhuRoomPlayer | null,
+      right: null as DoudizhuRoomPlayer | null,
+    };
+  }
+
+  const seatMap = new Map<number, DoudizhuRoomPlayer>(
+    players.map((player) => [player.seat, player]),
   );
 
   return {
     bottom,
-    left: others[0] ?? null,
-    right: others[1] ?? null,
+    left: seatMap.get((bottom.seat + 1) % 3) ?? null,
+    right: seatMap.get((bottom.seat + 2) % 3) ?? null,
   };
-}
-
-function TablePlayerSeat({
-  player,
-  position,
-  isCurrentTurn,
-  isCurrentBidder,
-  isLandlord,
-  isMe,
-}: {
-  player: DoudizhuRoomPlayer | null;
-  position: "left" | "right" | "bottom";
-  isCurrentTurn: boolean;
-  isCurrentBidder: boolean;
-  isLandlord: boolean;
-  isMe: boolean;
-}) {
-  if (!player) {
-    return null;
-  }
-
-  return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-[30px] border px-4 py-4 backdrop-blur-md",
-        isMe
-          ? "border-amber-300/35 bg-[linear-gradient(180deg,rgba(255,203,120,0.16),rgba(255,203,120,0.06))]"
-          : "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.03))]",
-        position === "bottom"
-          ? "shadow-[0_28px_90px_-34px_rgba(0,0,0,0.65)]"
-          : "",
-      )}
-    >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_35%)]" />
-      <div className="relative flex items-start gap-3">
-        <div
-          className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-lg font-black",
-            isLandlord
-              ? "border-red-300/30 bg-red-400/15 text-red-50"
-              : "border-white/10 bg-black/25 text-white",
-          )}
-        >
-          {isLandlord ? <Crown className="h-5 w-5" /> : player.name.slice(0, 1)}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-lg font-semibold text-white">
-              {player.name}
-            </span>
-            <Badge className="border-white/15 bg-black/25 text-white">
-              {seatLabel(player.seat)}
-            </Badge>
-            {player.is_host && (
-              <Badge className="border-sky-300/20 bg-sky-300/10 text-sky-100">
-                房主
-              </Badge>
-            )}
-            {player.is_bot && (
-              <Badge className="border-amber-300/20 bg-amber-300/10 text-amber-100">
-                机器人
-              </Badge>
-            )}
-            {isLandlord && (
-              <Badge className="border-red-400/20 bg-red-400/10 text-red-100">
-                地主
-              </Badge>
-            )}
-            {(isCurrentTurn || isCurrentBidder) && (
-              <Badge className="border-emerald-300/20 bg-emerald-300/10 text-emerald-100">
-                <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-300" />
-                {isCurrentTurn ? "行动中" : "叫分中"}
-              </Badge>
-            )}
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
-            <div>手牌 {player.card_count} 张</div>
-            <div>{player.connected ? "在线" : "离线"}</div>
-            <div>{player.auto_play ? "托管中" : "手动操作"}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative mt-4 flex flex-wrap gap-2">
-        {Array.from({
-          length: Math.min(player.card_count, position === "bottom" ? 10 : 8),
-        }).map((_, index) => (
-          <div
-            key={`${player.session_id}-${index}`}
-            className={cn(
-              "rounded-xl border px-2 py-1 text-xs font-medium shadow-[0_14px_28px_-20px_rgba(0,0,0,0.8)]",
-              position === "bottom"
-                ? "border-white/10 bg-black/35 text-slate-300"
-                : "border-white/10 bg-white/8 text-slate-300",
-            )}
-          >
-            牌
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PlayCard({
-  card,
-  selected,
-  invalid,
-  pulse,
-  onClick,
-}: {
-  card: DoudizhuCard;
-  selected: boolean;
-  invalid?: boolean;
-  pulse?: boolean;
-  onClick: () => void;
-}) {
-  const red =
-    card.suit === "heart" || card.suit === "diamond" || card.suit === "joker";
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "relative h-28 w-20 shrink-0 rounded-[22px] border bg-[linear-gradient(180deg,#fffaf1_0%,#ffffff_55%,#f0ece4_100%)] px-3 py-2 text-left shadow-[0_24px_42px_-20px_rgba(0,0,0,0.65)] transition-all",
-        pulse ? "scale-[1.03]" : "",
-        selected
-          ? "-translate-y-5 border-amber-400 ring-2 ring-amber-300/40"
-          : "border-slate-300/90 hover:-translate-y-2",
-        invalid ? "border-red-400 ring-2 ring-red-300/40" : "",
-      )}
-    >
-      <div className="absolute inset-x-2 top-1 h-5 rounded-full bg-white/80 blur-sm" />
-      <div
-        className={cn(
-          "text-xs font-semibold",
-          red ? "text-red-500" : "text-slate-900",
-        )}
-      >
-        {cardSuit(card)}
-      </div>
-      <div
-        className={cn(
-          "mt-2 text-2xl font-black",
-          red ? "text-red-500" : "text-slate-900",
-        )}
-      >
-        {cardRank(card)}
-      </div>
-      <div
-        className={cn(
-          "absolute bottom-2 right-2 text-lg font-semibold",
-          red ? "text-red-400" : "text-slate-400",
-        )}
-      >
-        {cardSuit(card)}
-      </div>
-    </button>
-  );
-}
-
-function MatchLinkCard({
-  match,
-  mine = false,
-}: {
-  match: DoudizhuMatchSummary;
-  mine?: boolean;
-}) {
-  return (
-    <Link
-      href={`/games/dou-dizhu/matches/${match.match_id}`}
-      className={cn(
-        "block rounded-[24px] border px-4 py-4 transition-colors",
-        mine
-          ? "border-sky-300/15 bg-sky-300/10 hover:border-sky-300/30 hover:bg-sky-300/14"
-          : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.05]",
-      )}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-white">{match.room_title}</span>
-            <Badge className="border-white/15 bg-white/8 text-white">
-              {match.match_mode === "demo_ai" ? "AI 演示" : "真人房"}
-            </Badge>
-          </div>
-          <div className="mt-1 text-sm text-slate-400">
-            {new Date(match.finished_at).toLocaleString("zh-CN")} · 地主{" "}
-            {seatLabel(match.landlord_seat)}
-          </div>
-        </div>
-
-        <div className="text-right text-sm text-slate-300">
-          <div>{match.winner_side === "landlord" ? "地主胜" : "农民胜"}</div>
-          <div className="mt-1">倍率 x{match.multiplier}</div>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-function LeaderboardCard({ entry }: { entry: DoudizhuLeaderboardEntry }) {
-  return (
-    <div className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="font-semibold text-white">
-            #{entry.rank} {entry.display_name}
-          </div>
-          <div className="mt-1 text-sm text-slate-400">
-            {entry.matches} 局 · 胜 {entry.wins} 局
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-            Total
-          </div>
-          <div className="mt-1 text-2xl font-black tracking-tight text-white">
-            {entry.total_score}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export function roomPagePath(roomId: string) {
@@ -787,7 +153,7 @@ export function DouDizhuPlayStage({
   const router = useRouter();
   const [sessionId, setSessionId] = useState("");
   const [playerName, setPlayerName] = useState("");
-  const [roomTitle, setRoomTitle] = useState("周末牌局");
+  const [roomTitle, setRoomTitle] = useState("涂油牌局");
   const [rooms, setRooms] = useState<DoudizhuRoom[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
@@ -807,9 +173,7 @@ export function DouDizhuPlayStage({
   const [settlementVisible, setSettlementVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [wsStatus, setWsStatus] = useState<RoomWSStatus>("idle");
-  const [notice, setNotice] = useState(
-    "直接开始 AI 演示，或者创建一个真人房。",
-  );
+  const [notice, setNotice] = useState("直接开始一局人机热身，或者拉起一桌三人牌局。");
   const [errorMessage, setErrorMessage] = useState("");
   const [timeTick, setTimeTick] = useState(Date.now());
   const [leaderboard, setLeaderboard] = useState<DoudizhuLeaderboardEntry[]>(
@@ -823,9 +187,12 @@ export function DouDizhuPlayStage({
   const wsRef = useRef<WebSocket | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
   const reconnectEnabledRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSettledRoomRef = useRef<string | null>(null);
-  const connectToRoomRef = useRef<(roomId: string) => void>(() => {});
+  const connectToRoomRef = useRef<
+    (roomId: string, isReconnect?: boolean) => void
+  >(() => {});
   const playFeedbackToneRef = useRef<
     (effect: "hint" | "play" | "bomb" | "settlement" | "error") => void
   >(() => {});
@@ -848,7 +215,7 @@ export function DouDizhuPlayStage({
     } else if (user?.username) {
       setPlayerName(user.username);
     } else {
-      setPlayerName("牌桌玩家");
+      setPlayerName("涂油牌手");
     }
   }, [user?.username]);
 
@@ -1062,31 +429,7 @@ export function DouDizhuPlayStage({
     setActiveRoom(nextRoom);
     setActiveRoomId(nextRoom.id);
     activeRoomIdRef.current = nextRoom.id;
-
-    switch (nextRoom.status) {
-      case "bidding":
-        setNotice("叫分阶段已开始。地主归属由服务端统一裁定。");
-        break;
-      case "playing":
-        setNotice(
-          nextRoom.match_mode === "demo_ai"
-            ? "AI 演示局进行中。你现在在真正的牌桌里和两名机器人对局。"
-            : "真人对局进行中。当前轮转、压牌和胜负都由服务端处理。",
-        );
-        break;
-      case "settlement":
-        setNotice("本局已结算。你可以继续留在房间再开一局，或直接查看战报。");
-        break;
-      case "redeal":
-        setNotice("这轮没有确定地主，服务端会重新发起一轮。");
-        break;
-      default:
-        setNotice(
-          nextRoom.match_mode === "demo_ai"
-            ? "这是 AI 演示房。点准备后，房主可以直接开始。"
-            : "这是真人房。凑齐 3 人并全部准备后即可开始。",
-        );
-    }
+    setNotice(buildRoomNotice(nextRoom));
   }
 
   useEffect(() => {
@@ -1146,7 +489,7 @@ export function DouDizhuPlayStage({
     }
   }
 
-  function connectToRoom(roomId: string) {
+  function connectToRoom(roomId: string, isReconnect = false) {
     if (!sessionId) {
       setErrorMessage("本地 session 还未准备好，请稍后重试。");
       return;
@@ -1157,6 +500,9 @@ export function DouDizhuPlayStage({
     }
 
     closeSocket(false);
+    if (!isReconnect) {
+      reconnectAttemptsRef.current = 0;
+    }
     setErrorMessage("");
     setWsStatus("connecting");
     setNotice("正在连接牌桌...");
@@ -1184,6 +530,7 @@ export function DouDizhuPlayStage({
     wsRef.current = ws;
 
     ws.onopen = () => {
+      reconnectAttemptsRef.current = 0;
       setWsStatus("connected");
     };
 
@@ -1331,11 +678,27 @@ export function DouDizhuPlayStage({
         return;
       }
 
+      reconnectAttemptsRef.current += 1;
+      if (reconnectAttemptsRef.current > 6) {
+        reconnectEnabledRef.current = false;
+        setWsStatus("idle");
+        setErrorMessage(`牌桌连接已中断，请返回${DOUDIZHU_LOBBY_NAME}重新进入。`);
+        setNotice("当前牌桌连接已断开，回到大厅后重新入桌更稳妥。");
+        if (immersive) {
+          navigateToLobby();
+        }
+        return;
+      }
+
+      const reconnectDelay = Math.min(
+        1200 * 2 ** (reconnectAttemptsRef.current - 1),
+        8000,
+      );
       window.setTimeout(() => {
         if (activeRoomIdRef.current) {
-          connectToRoom(activeRoomIdRef.current);
+          connectToRoom(activeRoomIdRef.current, true);
         }
-      }, 1200);
+      }, reconnectDelay);
     };
   }
 
@@ -1365,7 +728,7 @@ export function DouDizhuPlayStage({
     setErrorMessage("");
     try {
       const room = await apiClient.createDoudizhuRoom({
-        title: roomTitle.trim() || "周末牌局",
+        title: roomTitle.trim() || "涂油牌局",
         player_name: playerName.trim(),
         session_id: sessionId,
       });
@@ -1396,7 +759,7 @@ export function DouDizhuPlayStage({
     setErrorMessage("");
     try {
       const room = await apiClient.createDoudizhuDemoRoom({
-        title: roomTitle.trim() || "单人演示房",
+        title: roomTitle.trim() || "人机热身房",
         player_name: playerName.trim(),
         session_id: sessionId,
       });
@@ -1411,7 +774,7 @@ export function DouDizhuPlayStage({
       }
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "创建演示房失败",
+        error instanceof Error ? error.message : "创建热身房失败",
       );
     }
   }
@@ -1508,26 +871,25 @@ export function DouDizhuPlayStage({
                     className="inline-flex items-center gap-2 text-sm text-emerald-50/70 transition-colors hover:text-white"
                   >
                     <ArrowLeft className="h-4 w-4" />
-                    返回斗地主大厅
+                    返回{DOUDIZHU_LOBBY_NAME}
                   </Link>
                   <h2 className="mt-4 text-3xl font-black tracking-tight text-white md:text-4xl">
                     {activeRoom?.title ?? "正在进入牌桌"}
                   </h2>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
-                    这是独立的大屏牌桌页。大厅、排行榜和最近对局已从这里剥离，当前页面只承载对局本身。
+                    这是独立的涂油牌桌页。大厅、战报和排行榜都退到旁路，当前页面只服务这一局本身。
                   </p>
                 </>
               ) : (
                 <>
                   <p className="text-xs uppercase tracking-[0.32em] text-emerald-100/50">
-                    Game Table
+                    Oil Table
                   </p>
                   <h2 className="mt-3 text-3xl font-black tracking-tight text-white md:text-5xl">
-                    经典斗地主
+                    {DOUDIZHU_PRODUCT_NAME}
                   </h2>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
-                    现在页面的中心是牌桌本身，而不是房间工具。你可以直接开始 AI
-                    演示，或者创建真人房，把叫分、 出牌和结算完整走一遍。
+                    这里先把牌桌体验立住。你可以直接开一把人机热身，也可以创建三人牌局，把叫分、出牌和结算完整走一遍。
                   </p>
                 </>
               )}
@@ -1535,7 +897,7 @@ export function DouDizhuPlayStage({
 
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="border-white/15 bg-white/8 text-white">
-                WS: {wsStatus}
+                连线: {connectionStatusLabel(wsStatus)}
               </Badge>
               {activeRoom && (
                 <Badge className="border-amber-300/20 bg-amber-300/10 text-amber-100">
@@ -1544,108 +906,22 @@ export function DouDizhuPlayStage({
               )}
               {activeRoom && (
                 <Badge className="border-white/15 bg-black/25 text-white">
-                  {activeRoom.match_mode === "demo_ai" ? "AI 演示" : "真人房"}
+                  {roomModeLabel(activeRoom.match_mode)}
                 </Badge>
               )}
             </div>
           </div>
 
           {!activeRoom && !immersive && (
-            <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-              <div className="rounded-[30px] border border-white/10 bg-black/20 p-6">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="ddz-player-name" className="text-white/85">
-                      玩家名称
-                    </Label>
-                    <Input
-                      id="ddz-player-name"
-                      value={playerName}
-                      onChange={(event) => setPlayerName(event.target.value)}
-                      className="border-white/10 bg-black/30 text-white placeholder:text-emerald-50/35"
-                      placeholder="输入一个牌桌显示名称"
-                    />
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="ddz-room-title" className="text-white/85">
-                      房间标题
-                    </Label>
-                    <Input
-                      id="ddz-room-title"
-                      value={roomTitle}
-                      onChange={(event) => setRoomTitle(event.target.value)}
-                      className="border-white/10 bg-black/30 text-white placeholder:text-emerald-50/35"
-                      placeholder="例如：周五牌局"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Button
-                    onClick={handleCreateDemoRoom}
-                    className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
-                  >
-                    <Bot className="mr-2 h-4 w-4" />
-                    立即开始 AI 对局
-                  </Button>
-                  <Button
-                    onClick={handleCreateRoom}
-                    variant="outline"
-                    className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
-                  >
-                    <Users2 className="mr-2 h-4 w-4" />
-                    创建真人房
-                  </Button>
-                </div>
-
-                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm leading-7 text-emerald-50/70">
-                  这页优先保证单人也能直接进入一局真实对战，不需要先理解房间系统。AI
-                  演示房会自动补齐两名机器人， 你点准备后由房主直接开始。
-                </div>
-
-                {errorMessage && (
-                  <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
-                    {errorMessage}
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))] p-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  {[
-                    {
-                      title: "真正的牌桌布局",
-                      text: "中央展示当前阶段、上一手和玩家座位，底部手牌和操作直接围绕对局展开。",
-                    },
-                    {
-                      title: "AI 演示兜底",
-                      text: "单人也能完整跑一局，适合演示、录屏和服务端联调。",
-                    },
-                    {
-                      title: "真人房继续保留",
-                      text: "需要 3 个真实玩家时，仍然可以从当前页面创建并进入真人房。",
-                    },
-                    {
-                      title: "战报已接入",
-                      text: "打完一局即可在最近对局里跳转到战报页，不再是打一局就蒸发。",
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.title}
-                      className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4"
-                    >
-                      <div className="font-semibold text-white">
-                        {item.title}
-                      </div>
-                      <div className="mt-2 text-sm leading-6 text-emerald-50/70">
-                        {item.text}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <DoudizhuLobbyPanel
+              playerName={playerName}
+              roomTitle={roomTitle}
+              errorMessage={errorMessage}
+              onPlayerNameChange={setPlayerName}
+              onRoomTitleChange={setRoomTitle}
+              onCreateDemoRoom={handleCreateDemoRoom}
+              onCreateRoom={handleCreateRoom}
+            />
           )}
 
           {!activeRoom && immersive && (
@@ -1766,7 +1042,7 @@ export function DouDizhuPlayStage({
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,214,120,0.18),transparent_28%),radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_24%),radial-gradient(circle_at_bottom,rgba(0,0,0,0.26),transparent_38%)]" />
                   <div className="relative p-4 md:p-6">
                     <div className="grid gap-4 lg:grid-cols-2 xl:hidden">
-                      <TablePlayerSeat
+                      <DoudizhuSeat
                         player={boardSeats.left}
                         position="left"
                         isCurrentTurn={
@@ -1785,7 +1061,7 @@ export function DouDizhuPlayStage({
                           !!boardSeats.left && me?.seat === boardSeats.left.seat
                         }
                       />
-                      <TablePlayerSeat
+                      <DoudizhuSeat
                         player={boardSeats.right}
                         position="right"
                         isCurrentTurn={
@@ -1810,7 +1086,7 @@ export function DouDizhuPlayStage({
                     <div className="relative min-h-[460px] xl:min-h-[590px]">
                       <div className="hidden xl:block">
                         <div className="absolute left-0 top-4 w-[285px]">
-                          <TablePlayerSeat
+                          <DoudizhuSeat
                             player={boardSeats.left}
                             position="left"
                             isCurrentTurn={
@@ -1832,7 +1108,7 @@ export function DouDizhuPlayStage({
                           />
                         </div>
                         <div className="absolute right-0 top-4 w-[285px]">
-                          <TablePlayerSeat
+                          <DoudizhuSeat
                             player={boardSeats.right}
                             position="right"
                             isCurrentTurn={
@@ -2018,7 +1294,7 @@ export function DouDizhuPlayStage({
                       </div>
 
                       <div className="mt-6 xl:absolute xl:bottom-0 xl:left-1/2 xl:w-[82%] xl:-translate-x-1/2">
-                        <TablePlayerSeat
+                        <DoudizhuSeat
                           player={boardSeats.bottom}
                           position="bottom"
                           isCurrentTurn={
@@ -2051,7 +1327,7 @@ export function DouDizhuPlayStage({
                       </div>
                       <div className="mt-1 text-sm text-slate-400">
                         {privateState
-                          ? `角色：${privateState.role === "landlord" ? "地主" : "农民"} · 共 ${currentHand.length} 张`
+                          ? `角色：${roleLabel(privateState.role)} · 共 ${currentHand.length} 张`
                           : "进入房间后会显示你的实际手牌"}
                       </div>
                     </div>
@@ -2097,7 +1373,7 @@ export function DouDizhuPlayStage({
                               cardKey(card),
                             );
                             return (
-                              <PlayCard
+                              <DoudizhuPlayCard
                                 key={cardKey(card)}
                                 card={card}
                                 selected={selected}
@@ -2237,7 +1513,7 @@ export function DouDizhuPlayStage({
                       我的角色
                     </div>
                     <div className="mt-2 text-3xl font-black tracking-tight text-white">
-                      {privateState?.role === "landlord" ? "地主" : "农民"}
+                      {roleLabel(privateState?.role)}
                     </div>
                   </div>
                   <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
@@ -2253,7 +1529,7 @@ export function DouDizhuPlayStage({
                       当前连线
                     </div>
                     <div className="mt-2 text-3xl font-black tracking-tight text-white">
-                      {wsStatus === "connected" ? "稳定" : "重连中"}
+                      {connectionStatusLabel(wsStatus)}
                     </div>
                   </div>
                 </div>
@@ -2340,7 +1616,7 @@ export function DouDizhuPlayStage({
               value="start"
               className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
             >
-              房间大厅
+              {DOUDIZHU_LOBBY_NAME}
             </TabsTrigger>
             <TabsTrigger
               value="matches"
@@ -2364,10 +1640,10 @@ export function DouDizhuPlayStage({
                     <Sparkles className="h-5 w-5 text-amber-300" />
                     <div>
                       <h3 className="text-2xl font-black tracking-tight text-white">
-                        快速开局
+                        立刻上桌
                       </h3>
                       <p className="mt-1 text-sm text-slate-400">
-                        继续保留房间能力，但它现在退到辅助入口，不再压过牌桌本身。
+                        房间能力还在，但现在退到辅助入口，不再压过真正的牌桌体验。
                       </p>
                     </div>
                   </div>
@@ -2378,14 +1654,14 @@ export function DouDizhuPlayStage({
                         htmlFor="ddz-room-title-panel"
                         className="text-white/85"
                       >
-                        房间标题
+                        牌局标题
                       </Label>
                       <Input
                         id="ddz-room-title-panel"
                         value={roomTitle}
                         onChange={(event) => setRoomTitle(event.target.value)}
                         className="border-white/10 bg-black/20 text-white placeholder:text-slate-500"
-                        placeholder="例如：夜场训练局"
+                        placeholder="例如：夜场涂油局"
                       />
                     </div>
 
@@ -2395,7 +1671,7 @@ export function DouDizhuPlayStage({
                         className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
                       >
                         <Bot className="mr-2 h-4 w-4" />
-                        开始 AI 演示
+                        开始人机热身
                       </Button>
                       <Button
                         onClick={handleCreateRoom}
@@ -2403,7 +1679,7 @@ export function DouDizhuPlayStage({
                         className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
                       >
                         <Users2 className="mr-2 h-4 w-4" />
-                        创建真人房
+                        创建三人牌局
                       </Button>
                     </div>
                   </div>
@@ -2417,10 +1693,10 @@ export function DouDizhuPlayStage({
                       <Users2 className="h-5 w-5 text-sky-300" />
                       <div>
                         <h3 className="text-2xl font-black tracking-tight text-white">
-                          房间列表
+                          牌桌列表
                         </h3>
                         <p className="mt-1 text-sm text-slate-400">
-                          如果你要和真人联机，这里仍然可以直接加入当前开放中的房间。
+                          想直接加入正在开放中的牌局，这里就是入口。
                         </p>
                       </div>
                     </div>
@@ -2437,7 +1713,7 @@ export function DouDizhuPlayStage({
                   <div className="space-y-3">
                     {rooms.length === 0 && (
                       <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                        当前还没有房间。最简单的试玩方式依然是直接点 AI 演示。
+                        当前还没有可加入的牌桌。最简单的试玩方式是先开一把人机热身。
                       </div>
                     )}
 
@@ -2475,9 +1751,7 @@ export function DouDizhuPlayStage({
                                       : "border-sky-300/20 bg-sky-300/10 text-sky-100"
                                   }
                                 >
-                                  {room.match_mode === "demo_ai"
-                                    ? "AI 演示"
-                                    : "真人房"}
+                                  {roomModeLabel(room.match_mode)}
                                 </Badge>
                               </div>
                               <div className="mt-2 text-sm text-slate-400">
@@ -2509,18 +1783,18 @@ export function DouDizhuPlayStage({
                         我的最近对局
                       </h3>
                       <p className="mt-1 text-sm text-slate-400">
-                        打完就能直接回看，不再是“玩了但没有留下任何结果”。
+                        打完就能直接回看，不会再出现“这一把打完就蒸发”的情况。
                       </p>
                     </div>
                   </div>
                   <div className="space-y-3">
                     {user && myMatches.length === 0 && (
                       <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                        你还没有可展示的斗地主对局。
+                        你还没有可展示的涂油牌局。
                       </div>
                     )}
                     {myMatches.map((match) => (
-                      <MatchLinkCard
+                      <DoudizhuMatchLinkCard
                         key={`me-${match.match_id}`}
                         match={match}
                         mine
@@ -2540,7 +1814,7 @@ export function DouDizhuPlayStage({
                           全站最近对局
                         </h3>
                         <p className="mt-1 text-sm text-slate-400">
-                          AI 演示和真人房都能形成战报。
+                          人机热身和三人联机都会留下战报。
                         </p>
                       </div>
                     </div>
@@ -2552,11 +1826,14 @@ export function DouDizhuPlayStage({
                   <div className="space-y-3">
                     {recentMatches.length === 0 && (
                       <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                        还没有斗地主战报。
+                        还没有新的涂油战报。
                       </div>
                     )}
                     {recentMatches.map((match) => (
-                      <MatchLinkCard key={match.match_id} match={match} />
+                      <DoudizhuMatchLinkCard
+                        key={match.match_id}
+                        match={match}
+                      />
                     ))}
                   </div>
                 </CardContent>
@@ -2574,7 +1851,7 @@ export function DouDizhuPlayStage({
                       排行榜
                     </h3>
                     <p className="mt-1 text-sm text-slate-400">
-                      当前只统计真人对局，AI 演示房不会进入榜单。
+                      当前只统计三人联机，人机热身不会进入榜单。
                     </p>
                   </div>
                 </div>
@@ -2586,7 +1863,7 @@ export function DouDizhuPlayStage({
                     </div>
                   )}
                   {leaderboard.map((entry) => (
-                    <LeaderboardCard
+                    <DoudizhuLeaderboardCard
                       key={`${entry.user_id ?? entry.player_name}-${entry.rank}`}
                       entry={entry}
                     />
