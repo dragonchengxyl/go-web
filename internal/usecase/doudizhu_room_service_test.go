@@ -210,6 +210,77 @@ func TestDoudizhuRoomServiceRequestHint(t *testing.T) {
 	require.NotNil(t, playHint.Combo)
 }
 
+func TestDoudizhuRoomServiceTimeoutTurnsOnAutoPlay(t *testing.T) {
+	svc := NewDoudizhuRoomService(
+		zap.NewNop(),
+		WithDoudizhuSeedSource(func() int64 { return 42 }),
+		WithDoudizhuTurnDuration(40*time.Millisecond),
+	)
+
+	room, err := svc.CreateDemoRoom(CreateDoudizhuRoomInput{
+		SessionID:  "host-session",
+		PlayerName: "Host",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.JoinRoom(JoinDoudizhuRoomInput{
+		RoomID:     room.ID,
+		SessionID:  "host-session",
+		PlayerName: "Host",
+	})
+	require.NoError(t, err)
+
+	ready := true
+	_, err = svc.SetReady(SetDoudizhuReadyInput{
+		RoomID:    room.ID,
+		SessionID: "host-session",
+		Ready:     &ready,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.StartRound(room.ID, "host-session")
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		state, ok := svc.GetRoom(room.ID)
+		if !ok {
+			return false
+		}
+		host := sessionIDBySeat(state, doudizhu.Seat0)
+		privateState, exists := svc.GetPrivateState(room.ID, host)
+		if !exists {
+			return false
+		}
+		player := roomPlayerBySeat(state, doudizhu.Seat0)
+		return player != nil && player.AutoPlay && privateState.Status != doudizhu.RoundPhaseBidding
+	}, time.Second, 30*time.Millisecond)
+}
+
+func TestDoudizhuSpringFlags(t *testing.T) {
+	room := &doudizhuRoomState{
+		round: &DoudizhuRoundState{
+			Landlord: seatPtr(doudizhu.Seat0),
+		},
+		winningSide: rolePtr(doudizhu.PlayerRoleLandlord),
+		actionLog: []doudizhu.ActionRecord{
+			{Seat: doudizhu.Seat0, ActionType: "play_cards"},
+			{Seat: doudizhu.Seat0, ActionType: "play_cards"},
+		},
+	}
+	spring, antiSpring := doudizhuSpringFlags(room)
+	require.True(t, spring)
+	require.False(t, antiSpring)
+
+	room.winningSide = rolePtr(doudizhu.PlayerRoleFarmer)
+	room.actionLog = []doudizhu.ActionRecord{
+		{Seat: doudizhu.Seat0, ActionType: "play_cards"},
+		{Seat: doudizhu.Seat1, ActionType: "play_cards"},
+	}
+	spring, antiSpring = doudizhuSpringFlags(room)
+	require.False(t, spring)
+	require.True(t, antiSpring)
+}
+
 func sessionIDBySeat(room *doudizhu.Room, seat doudizhu.Seat) string {
 	for _, player := range room.Players {
 		if player.Seat == seat {
@@ -217,4 +288,14 @@ func sessionIDBySeat(room *doudizhu.Room, seat doudizhu.Seat) string {
 		}
 	}
 	return ""
+}
+
+func roomPlayerBySeat(room *doudizhu.Room, seat doudizhu.Seat) *doudizhu.RoomPlayer {
+	for _, player := range room.Players {
+		if player.Seat == seat {
+			item := player
+			return &item
+		}
+	}
+	return nil
 }

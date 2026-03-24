@@ -1,5 +1,4 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 
 interface ApiResponse<T> {
@@ -390,12 +389,7 @@ export interface HexBlitzRoom {
   players: HexBlitzRoomPlayer[];
 }
 
-export type HexBlitzTileColor =
-  | "ember"
-  | "lagoon"
-  | "mint"
-  | "sun"
-  | "violet";
+export type HexBlitzTileColor = "ember" | "lagoon" | "mint" | "sun" | "violet";
 
 export type HexBlitzTileSpecial = "none" | "spark" | "burst";
 
@@ -657,8 +651,13 @@ export interface DoudizhuRoom {
   landlord?: number;
   current_turn?: number;
   last_play?: DoudizhuCombo;
+  last_play_cards?: DoudizhuCard[];
   last_play_seat?: number;
   winning_side?: DoudizhuPlayerRole;
+  multiplier: number;
+  bomb_count: number;
+  spring: boolean;
+  anti_spring: boolean;
   turn_expires_at?: string;
   bottom_cards?: DoudizhuCard[];
   players: DoudizhuRoomPlayer[];
@@ -1191,23 +1190,25 @@ class ApiClient {
 
   async getHexBlitzLeaderboard(limit = 10) {
     return this.get<{ entries: HexBlitzLeaderboardEntry[] }>(
-      `/games/hex-blitz/leaderboard?limit=${limit}`
+      `/games/hex-blitz/leaderboard?limit=${limit}`,
     );
   }
 
   async getHexBlitzRecentMatches(limit = 8) {
     return this.get<{ matches: HexBlitzMatchSummary[] }>(
-      `/games/hex-blitz/matches?limit=${limit}`
+      `/games/hex-blitz/matches?limit=${limit}`,
     );
   }
 
   async getHexBlitzReplay(matchId: string) {
-    return this.get<HexBlitzReplay>(`/games/hex-blitz/matches/${matchId}/replay`);
+    return this.get<HexBlitzReplay>(
+      `/games/hex-blitz/matches/${matchId}/replay`,
+    );
   }
 
   async getMyHexBlitzRecentMatches(limit = 8) {
     return this.get<{ matches: HexBlitzMatchSummary[] }>(
-      `/games/hex-blitz/matches/me?limit=${limit}`
+      `/games/hex-blitz/matches/me?limit=${limit}`,
     );
   }
 
@@ -1239,24 +1240,26 @@ class ApiClient {
 
   async getDoudizhuLeaderboard(limit = 10) {
     return this.get<{ entries: DoudizhuLeaderboardEntry[] }>(
-      `/games/dou-dizhu/leaderboard?limit=${limit}`
+      `/games/dou-dizhu/leaderboard?limit=${limit}`,
     );
   }
 
   async getDoudizhuRecentMatches(limit = 8) {
     return this.get<{ matches: DoudizhuMatchSummary[] }>(
-      `/games/dou-dizhu/matches?limit=${limit}`
+      `/games/dou-dizhu/matches?limit=${limit}`,
     );
   }
 
   async getMyDoudizhuRecentMatches(limit = 8) {
     return this.get<{ matches: DoudizhuMatchSummary[] }>(
-      `/games/dou-dizhu/matches/me?limit=${limit}`
+      `/games/dou-dizhu/matches/me?limit=${limit}`,
     );
   }
 
   async getDoudizhuReplay(matchId: string) {
-    return this.get<DoudizhuReplay>(`/games/dou-dizhu/matches/${matchId}/replay`);
+    return this.get<DoudizhuReplay>(
+      `/games/dou-dizhu/matches/${matchId}/replay`,
+    );
   }
 
   // ── Follow ────────────────────────────────────────────────────────────
@@ -1581,10 +1584,7 @@ class ApiClient {
     return this.post<AudioWork>(`/audio/jobs/${id}/publish`, data ?? {});
   }
 
-  async listMyAudioWorks(options?: {
-    page?: number;
-    page_size?: number;
-  }) {
+  async listMyAudioWorks(options?: { page?: number; page_size?: number }) {
     const q = new URLSearchParams();
     if (options?.page) q.set("page", String(options.page));
     if (options?.page_size) q.set("page_size", String(options.page_size));
@@ -1642,18 +1642,30 @@ class ApiClient {
   async getRelatedAudioWorks(id: string, limit = 6) {
     const q = new URLSearchParams();
     if (limit > 0) q.set("limit", String(limit));
-    return this.get<{ items: AudioWork[] }>(`/audio/works/${id}/related?${q.toString()}`);
+    return this.get<{ items: AudioWork[] }>(
+      `/audio/works/${id}/related?${q.toString()}`,
+    );
   }
 
   async recordAudioPlaybackEvent(
     id: string,
     payload: {
-      event: "open" | "play" | "pause" | "seek" | "complete" | "skip_next" | "skip_previous";
+      event:
+        | "open"
+        | "play"
+        | "pause"
+        | "seek"
+        | "complete"
+        | "skip_next"
+        | "skip_previous";
       position_sec?: number;
       source_kind?: string;
     },
   ) {
-    return this.post<{ recorded: boolean }>(`/audio/works/${id}/playback-events`, payload);
+    return this.post<{ recorded: boolean }>(
+      `/audio/works/${id}/playback-events`,
+      payload,
+    );
   }
 
   async updateAudioWork(
@@ -1674,7 +1686,9 @@ class ApiClient {
   }
 
   async getAudioWorkMeState(id: string) {
-    return this.get<{ liked: boolean; bookmarked: boolean }>(`/audio/works/${id}/me-state`);
+    return this.get<{ liked: boolean; bookmarked: boolean }>(
+      `/audio/works/${id}/me-state`,
+    );
   }
 
   async likeAudioWork(id: string) {
@@ -1927,7 +1941,9 @@ class ApiClient {
       total: number;
       page: number;
       size: number;
-    }>(`/bookmarks/audio/works?page=${page}&page_size=${pageSize}&sort=${sort}`);
+    }>(
+      `/bookmarks/audio/works?page=${page}&page_size=${pageSize}&sort=${sort}`,
+    );
   }
 
   async batchDeleteBookmarks(
@@ -2104,7 +2120,9 @@ class ApiClient {
   }
 
   async updateAdminOrderStatus(id: string, status: string) {
-    return this.put<{ status: string }>(`/admin/orders/${id}/status`, { status });
+    return this.put<{ status: string }>(`/admin/orders/${id}/status`, {
+      status,
+    });
   }
 
   async getAdminGroups(params?: {
@@ -2181,11 +2199,18 @@ class ApiClient {
     }>(`/admin/audio/works?${q.toString()}`);
   }
 
-  async updateAdminAudioWorkModeration(id: string, status: ModerationStatus, note?: string) {
-    return this.put<{ status: ModerationStatus; note?: string }>(`/admin/audio/works/${id}/moderation`, {
-      status,
-      note,
-    });
+  async updateAdminAudioWorkModeration(
+    id: string,
+    status: ModerationStatus,
+    note?: string,
+  ) {
+    return this.put<{ status: ModerationStatus; note?: string }>(
+      `/admin/audio/works/${id}/moderation`,
+      {
+        status,
+        note,
+      },
+    );
   }
 
   async updateAdminGroup(id: string, data: { privacy: "public" | "private" }) {
@@ -2214,21 +2239,30 @@ class ApiClient {
   }
 
   async generateAdminReportSummary(reportId: string) {
-    return this.post<AdminAIToolResult>("/admin/assistant/tools/report-summary", {
-      report_id: reportId,
-    });
+    return this.post<AdminAIToolResult>(
+      "/admin/assistant/tools/report-summary",
+      {
+        report_id: reportId,
+      },
+    );
   }
 
   async generateAdminWeeklyReport(days = 7) {
-    return this.post<AdminAIToolResult>("/admin/assistant/tools/weekly-report", {
-      days,
-    });
+    return this.post<AdminAIToolResult>(
+      "/admin/assistant/tools/weekly-report",
+      {
+        days,
+      },
+    );
   }
 
   async generateAdminCreatorRecommendation(userId: string) {
-    return this.post<AdminAIToolResult>("/admin/assistant/tools/creator-recommendation", {
-      user_id: userId,
-    });
+    return this.post<AdminAIToolResult>(
+      "/admin/assistant/tools/creator-recommendation",
+      {
+        user_id: userId,
+      },
+    );
   }
 
   async generateAdminEventCopy(eventId: string) {
@@ -2238,9 +2272,12 @@ class ApiClient {
   }
 
   async generateAdminModerationExplanation(postId: string) {
-    return this.post<AdminAIToolResult>("/admin/assistant/tools/moderation-explanation", {
-      post_id: postId,
-    });
+    return this.post<AdminAIToolResult>(
+      "/admin/assistant/tools/moderation-explanation",
+      {
+        post_id: postId,
+      },
+    );
   }
 
   async getAdminAuditLogs(params?: {
@@ -2298,10 +2335,13 @@ class ApiClient {
       headers["Authorization"] = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(`${this.baseUrl}/admin/audit-logs/export?${q.toString()}`, {
-      method: "GET",
-      headers,
-    });
+    const response = await fetch(
+      `${this.baseUrl}/admin/audit-logs/export?${q.toString()}`,
+      {
+        method: "GET",
+        headers,
+      },
+    );
     if (!response.ok) {
       throw new Error("导出审计日志失败");
     }

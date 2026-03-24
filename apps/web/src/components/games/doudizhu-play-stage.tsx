@@ -174,6 +174,344 @@ function comboLabel(combo?: DoudizhuCombo | null) {
   return `${typeLabelMap[combo.type]} · 主值 ${combo.main_rank}`;
 }
 
+function actionTypeLabel(actionType?: string) {
+  switch (actionType) {
+    case "bid":
+      return "叫分";
+    case "auto_bid":
+      return "托管叫分";
+    case "play_cards":
+      return "出牌";
+    case "auto_play_cards":
+      return "托管出牌";
+    case "pass_turn":
+      return "过牌";
+    case "auto_pass_turn":
+      return "托管过牌";
+    case "timeout_auto_play":
+      return "超时托管";
+    case "landlord_assigned":
+      return "地主确定";
+    case "settlement":
+      return "本局结算";
+    default:
+      return actionType ?? "操作";
+  }
+}
+
+function sortedSelection(cards: DoudizhuCard[]) {
+  return [...cards].sort((a, b) => {
+    if (a.rank === b.rank) {
+      return a.suit.localeCompare(b.suit);
+    }
+    return a.rank - b.rank;
+  });
+}
+
+function rankCounts(cards: DoudizhuCard[]) {
+  const counts = new Map<number, number>();
+  for (const card of cards) {
+    counts.set(card.rank, (counts.get(card.rank) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function sortedRanks(counts: Map<number, number>) {
+  return [...counts.keys()].sort((a, b) => a - b);
+}
+
+function rankWithCount(counts: Map<number, number>, expected: number) {
+  for (const [rank, count] of counts.entries()) {
+    if (count === expected) {
+      return rank;
+    }
+  }
+  return null;
+}
+
+function hasCount(counts: Map<number, number>, expected: number) {
+  return [...counts.values()].some((count) => count === expected);
+}
+
+function countPattern(counts: Map<number, number>, pattern: number[]) {
+  const found = [...counts.values()].sort((a, b) => a - b);
+  const expected = [...pattern].sort((a, b) => a - b);
+  return (
+    found.length === expected.length &&
+    found.every((value, index) => value === expected[index])
+  );
+}
+
+function areConsecutive(ranks: number[]) {
+  for (let index = 1; index < ranks.length; index += 1) {
+    if (ranks[index] !== ranks[index - 1] + 1) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isStraight(counts: Map<number, number>) {
+  if (counts.size < 5) {
+    return false;
+  }
+  const ranks = sortedRanks(counts);
+  return ranks.every((rank, index) => {
+    if (rank > 14 || counts.get(rank) !== 1) {
+      return false;
+    }
+    return index === 0 || rank === ranks[index - 1] + 1;
+  });
+}
+
+function isStraightPairs(counts: Map<number, number>) {
+  if (counts.size < 3) {
+    return false;
+  }
+  const ranks = sortedRanks(counts);
+  return ranks.every((rank, index) => {
+    if (rank > 14 || counts.get(rank) !== 2) {
+      return false;
+    }
+    return index === 0 || rank === ranks[index - 1] + 1;
+  });
+}
+
+function remainingPattern(
+  counts: Map<number, number>,
+  expectedCount: number,
+  expectedKinds: number,
+) {
+  let kinds = 0;
+  for (const count of counts.values()) {
+    if (count === 0) {
+      continue;
+    }
+    if (count !== expectedCount) {
+      return false;
+    }
+    kinds += 1;
+  }
+  return kinds === expectedKinds;
+}
+
+function airplaneCombo(
+  counts: Map<number, number>,
+  segment: number[],
+  total: number,
+): DoudizhuCombo | null {
+  const remaining = new Map(counts);
+  for (const rank of segment) {
+    remaining.set(rank, (remaining.get(rank) ?? 0) - 3);
+  }
+  const runLength = segment.length;
+  const remainingCards = total - runLength * 3;
+
+  let type: DoudizhuCombo["type"] | null = null;
+  if (remainingCards === 0) {
+    type = "airplane";
+  } else if (
+    remainingCards === runLength &&
+    remainingPattern(remaining, 1, runLength)
+  ) {
+    type = "airplane_with_single";
+  } else if (
+    remainingCards === runLength * 2 &&
+    remainingPattern(remaining, 2, runLength)
+  ) {
+    type = "airplane_with_pair";
+  }
+
+  if (!type) {
+    return null;
+  }
+  return {
+    type,
+    main_rank: segment[segment.length - 1],
+    sequence_length: runLength,
+    total_cards: total,
+  };
+}
+
+function findAirplane(counts: Map<number, number>, total: number) {
+  const triples = [...counts.entries()]
+    .filter(([rank, count]) => count >= 3 && rank <= 14)
+    .map(([rank]) => rank)
+    .sort((a, b) => a - b);
+
+  for (let runLength = triples.length; runLength >= 2; runLength -= 1) {
+    for (let start = 0; start + runLength <= triples.length; start += 1) {
+      const segment = triples.slice(start, start + runLength);
+      if (!areConsecutive(segment)) {
+        continue;
+      }
+      const combo = airplaneCombo(counts, segment, total);
+      if (combo) {
+        return combo;
+      }
+    }
+  }
+  return null;
+}
+
+function evaluateSelectedCombo(cards: DoudizhuCard[]): {
+  combo: DoudizhuCombo | null;
+  error: string;
+} {
+  if (cards.length === 0) {
+    return { combo: null as DoudizhuCombo | null, error: "" };
+  }
+
+  const sorted = sortedSelection(cards);
+  const counts = rankCounts(sorted);
+  const ranks = sortedRanks(counts);
+  const total = sorted.length;
+
+  if (total === 1) {
+    return {
+      combo: {
+        type: "single",
+        main_rank: sorted[0].rank,
+        sequence_length: 1,
+        total_cards: total,
+      },
+      error: "",
+    };
+  }
+  if (total === 2) {
+    if (sorted[0].rank === 16 && sorted[1].rank === 17) {
+      return {
+        combo: {
+          type: "rocket",
+          main_rank: 17,
+          sequence_length: 1,
+          total_cards: total,
+        },
+        error: "",
+      };
+    }
+    if (ranks.length === 1) {
+      return {
+        combo: {
+          type: "pair",
+          main_rank: ranks[0],
+          sequence_length: 1,
+          total_cards: total,
+        },
+        error: "",
+      };
+    }
+  }
+  if (total === 3 && ranks.length === 1) {
+    return {
+      combo: {
+        type: "triple",
+        main_rank: ranks[0],
+        sequence_length: 1,
+        total_cards: total,
+      },
+      error: "",
+    };
+  }
+  if (total === 4) {
+    if (ranks.length === 1) {
+      return {
+        combo: {
+          type: "bomb",
+          main_rank: ranks[0],
+          sequence_length: 1,
+          total_cards: total,
+        },
+        error: "",
+      };
+    }
+    const tripleRank = rankWithCount(counts, 3);
+    if (tripleRank) {
+      return {
+        combo: {
+          type: "triple_with_single",
+          main_rank: tripleRank,
+          sequence_length: 1,
+          total_cards: total,
+        },
+        error: "",
+      };
+    }
+  }
+  if (total === 5) {
+    const tripleRank = rankWithCount(counts, 3);
+    if (tripleRank && hasCount(counts, 2)) {
+      return {
+        combo: {
+          type: "triple_with_pair",
+          main_rank: tripleRank,
+          sequence_length: 1,
+          total_cards: total,
+        },
+        error: "",
+      };
+    }
+  }
+  if (isStraight(counts)) {
+    return {
+      combo: {
+        type: "straight",
+        main_rank: ranks[ranks.length - 1],
+        sequence_length: ranks.length,
+        total_cards: total,
+      },
+      error: "",
+    };
+  }
+  if (isStraightPairs(counts)) {
+    return {
+      combo: {
+        type: "straight_pairs",
+        main_rank: ranks[ranks.length - 1],
+        sequence_length: ranks.length,
+        total_cards: total,
+      },
+      error: "",
+    };
+  }
+  const airplane = findAirplane(counts, total);
+  if (airplane) {
+    return { combo: airplane, error: "" };
+  }
+  if (total === 6) {
+    const fourRank = rankWithCount(counts, 4);
+    if (fourRank && countPattern(counts, [4, 1, 1])) {
+      return {
+        combo: {
+          type: "four_with_two_single",
+          main_rank: fourRank,
+          sequence_length: 1,
+          total_cards: total,
+        },
+        error: "",
+      };
+    }
+  }
+  if (total === 8) {
+    const fourRank = rankWithCount(counts, 4);
+    if (fourRank && countPattern(counts, [4, 2, 2])) {
+      return {
+        combo: {
+          type: "four_with_two_pair",
+          main_rank: fourRank,
+          sequence_length: 1,
+          total_cards: total,
+        },
+        error: "",
+      };
+    }
+  }
+  return {
+    combo: null as DoudizhuCombo | null,
+    error: "当前选择不是可出的合法牌型",
+  };
+}
+
 function playerSort(a: DoudizhuRoomPlayer, b: DoudizhuRoomPlayer) {
   return a.seat - b.seat;
 }
@@ -201,19 +539,6 @@ function buildBoardSeats(
     left: others[0] ?? null,
     right: others[1] ?? null,
   };
-}
-
-function findLastPlayAction(room: DoudizhuRoom | null) {
-  if (!room) {
-    return null;
-  }
-  return (
-    [...(room.recent_actions ?? [])]
-      .reverse()
-      .find(
-        (action) => Array.isArray(action.cards) && action.cards.length > 0,
-      ) ?? null
-  );
 }
 
 function TablePlayerSeat({
@@ -323,10 +648,14 @@ function TablePlayerSeat({
 function PlayCard({
   card,
   selected,
+  invalid,
+  pulse,
   onClick,
 }: {
   card: DoudizhuCard;
   selected: boolean;
+  invalid?: boolean;
+  pulse?: boolean;
   onClick: () => void;
 }) {
   const red =
@@ -338,9 +667,11 @@ function PlayCard({
       onClick={onClick}
       className={cn(
         "relative h-28 w-20 shrink-0 rounded-[22px] border bg-[linear-gradient(180deg,#fffaf1_0%,#ffffff_55%,#f0ece4_100%)] px-3 py-2 text-left shadow-[0_24px_42px_-20px_rgba(0,0,0,0.65)] transition-all",
+        pulse ? "scale-[1.03]" : "",
         selected
           ? "-translate-y-5 border-amber-400 ring-2 ring-amber-300/40"
           : "border-slate-300/90 hover:-translate-y-2",
+        invalid ? "border-red-400 ring-2 ring-red-300/40" : "",
       )}
     >
       <div className="absolute inset-x-2 top-1 h-5 rounded-full bg-white/80 blur-sm" />
@@ -454,6 +785,12 @@ export function DouDizhuPlayStage() {
     null,
   );
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
+  const [selectionError, setSelectionError] = useState("");
+  const [tableEffect, setTableEffect] = useState<
+    "idle" | "play" | "bomb" | "settlement" | "error"
+  >("idle");
+  const [settlementVisible, setSettlementVisible] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [wsStatus, setWsStatus] = useState<RoomWSStatus>("idle");
   const [notice, setNotice] = useState(
     "直接开始 AI 演示，或者创建一个真人房。",
@@ -471,6 +808,11 @@ export function DouDizhuPlayStage() {
   const wsRef = useRef<WebSocket | null>(null);
   const activeRoomIdRef = useRef<string | null>(null);
   const reconnectEnabledRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastSettledRoomRef = useRef<string | null>(null);
+  const playFeedbackToneRef = useRef<
+    (effect: "hint" | "play" | "bomb" | "settlement" | "error") => void
+  >(() => {});
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -625,6 +967,55 @@ export function DouDizhuPlayStage() {
     );
   }, [privateState]);
 
+  function triggerTableEffect(
+    effect: "play" | "bomb" | "settlement" | "error",
+    duration = 850,
+  ) {
+    setTableEffect(effect);
+    window.setTimeout(() => {
+      setTableEffect((current) => (current === effect ? "idle" : current));
+    }, duration);
+  }
+
+  function playFeedbackTone(
+    effect: "hint" | "play" | "bomb" | "settlement" | "error",
+  ) {
+    if (!soundEnabled || typeof window === "undefined") {
+      return;
+    }
+
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+    const context = audioContextRef.current ?? new AudioContextClass();
+    audioContextRef.current = context;
+
+    const patterns: Record<typeof effect, number[]> = {
+      hint: [620],
+      play: [480],
+      bomb: [220, 160],
+      settlement: [520, 660, 820],
+      error: [180, 150],
+    };
+
+    let offset = 0;
+    for (const frequency of patterns[effect]) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = effect === "bomb" ? "square" : "triangle";
+      oscillator.frequency.value = frequency;
+      gain.gain.value = effect === "error" ? 0.015 : 0.025;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(context.currentTime + offset);
+      oscillator.stop(context.currentTime + offset + 0.08);
+      offset += 0.1;
+    }
+  }
+
+  playFeedbackToneRef.current = playFeedbackTone;
+
   function updateActiveRoom(room: DoudizhuRoom) {
     const nextPlayers = [...room.players].sort(playerSort);
     const nextRoom = { ...room, players: nextPlayers };
@@ -658,6 +1049,54 @@ export function DouDizhuPlayStage() {
     }
   }
 
+  useEffect(() => {
+    if (!activeRoom) {
+      lastSettledRoomRef.current = null;
+      setSettlementVisible(false);
+      return;
+    }
+
+    let effectTimer: number | undefined;
+    let hideTimer: number | undefined;
+    if (
+      activeRoom.status === "settlement" &&
+      lastSettledRoomRef.current !== activeRoom.id
+    ) {
+      lastSettledRoomRef.current = activeRoom.id;
+      setSettlementVisible(true);
+      setTableEffect("settlement");
+      effectTimer = window.setTimeout(() => {
+        setTableEffect((current) =>
+          current === "settlement" ? "idle" : current,
+        );
+      }, 1400);
+      playFeedbackToneRef.current("settlement");
+      hideTimer = window.setTimeout(() => {
+        setSettlementVisible(false);
+      }, 3200);
+      return () => {
+        if (effectTimer) {
+          window.clearTimeout(effectTimer);
+        }
+        if (hideTimer) {
+          window.clearTimeout(hideTimer);
+        }
+      };
+    }
+    if (activeRoom.status !== "settlement") {
+      setSettlementVisible(false);
+      lastSettledRoomRef.current = null;
+    }
+    return () => {
+      if (effectTimer) {
+        window.clearTimeout(effectTimer);
+      }
+      if (hideTimer) {
+        window.clearTimeout(hideTimer);
+      }
+    };
+  }, [activeRoom, soundEnabled]);
+
   function closeSocket(allowReconnect: boolean) {
     reconnectEnabledRef.current = allowReconnect;
     if (wsRef.current) {
@@ -686,6 +1125,7 @@ export function DouDizhuPlayStage() {
     reconnectEnabledRef.current = true;
     setPrivateState(null);
     setLatestAction(null);
+    setSelectionError("");
     setSelectedCards([]);
 
     const query = new URLSearchParams({
@@ -741,6 +1181,7 @@ export function DouDizhuPlayStage() {
             break;
           case "action_result":
             setLatestAction(message.payload as DoudizhuActionResult);
+            setSelectionError("");
             if (typeof message.payload?.message === "string") {
               setNotice(message.payload.message);
             }
@@ -750,9 +1191,22 @@ export function DouDizhuPlayStage() {
             ) {
               setSelectedCards([]);
             }
+            if (message.payload?.action_type === "play_cards") {
+              if (
+                message.payload?.combo?.type === "bomb" ||
+                message.payload?.combo?.type === "rocket"
+              ) {
+                triggerTableEffect("bomb", 1100);
+                playFeedbackTone("bomb");
+              } else {
+                triggerTableEffect("play");
+                playFeedbackTone("play");
+              }
+            }
             break;
           case "hint_result": {
             const hint = message.payload as RoomHintResult;
+            setSelectionError("");
             if (
               hint.action_type === "play_cards" &&
               Array.isArray(hint.cards)
@@ -762,6 +1216,7 @@ export function DouDizhuPlayStage() {
             if (hint.action_type === "pass_turn") {
               setSelectedCards([]);
             }
+            playFeedbackTone("hint");
             if (typeof hint.message === "string") {
               if (
                 hint.action_type === "bid" &&
@@ -786,8 +1241,17 @@ export function DouDizhuPlayStage() {
             activeRoomIdRef.current = null;
             reconnectEnabledRef.current = false;
             setWsStatus("idle");
+            setSelectionError("");
             break;
           case "error":
+            if (
+              typeof message.payload?.message === "string" &&
+              /出牌|牌型|压过|不匹配|过牌/.test(message.payload.message)
+            ) {
+              setSelectionError(message.payload.message);
+              triggerTableEffect("error", 700);
+              playFeedbackTone("error");
+            }
             setErrorMessage(
               typeof message.payload?.message === "string"
                 ? message.payload.message
@@ -816,6 +1280,7 @@ export function DouDizhuPlayStage() {
         setPrivateState(null);
         setLatestAction(null);
         setSelectedCards([]);
+        setSelectionError("");
         setNotice("你已离开房间。");
         return;
       }
@@ -832,6 +1297,9 @@ export function DouDizhuPlayStage() {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       setErrorMessage("房间连接尚未建立");
       return;
+    }
+    if (audioContextRef.current?.state === "suspended") {
+      void audioContextRef.current.resume();
     }
     wsRef.current.send(JSON.stringify({ type, payload }));
   }
@@ -931,9 +1399,9 @@ export function DouDizhuPlayStage() {
   const currentHand = Array.isArray(privateState?.hand)
     ? privateState.hand
     : [];
-  const lastPlayAction = useMemo(
-    () => findLastPlayAction(activeRoom),
-    [activeRoom],
+  const selectedComboPreview = useMemo(
+    () => evaluateSelectedCombo(selectedHandCards),
+    [selectedHandCards],
   );
 
   useEffect(() => {
@@ -1280,7 +1748,23 @@ export function DouDizhuPlayStage() {
                         </div>
                       </div>
 
-                      <div className="mx-auto flex max-w-[500px] flex-col items-center gap-5 rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(0,0,0,0.26),rgba(255,255,255,0.05))] px-5 py-6 text-center shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]">
+                      <div
+                        className={cn(
+                          "mx-auto flex max-w-[500px] flex-col items-center gap-5 rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(0,0,0,0.26),rgba(255,255,255,0.05))] px-5 py-6 text-center shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)] transition-all duration-300",
+                          tableEffect === "play"
+                            ? "scale-[1.01] border-emerald-300/30 shadow-[0_24px_90px_-34px_rgba(16,185,129,0.45)]"
+                            : "",
+                          tableEffect === "bomb"
+                            ? "scale-[1.02] border-amber-300/35 shadow-[0_24px_100px_-34px_rgba(245,158,11,0.55)]"
+                            : "",
+                          tableEffect === "error"
+                            ? "border-red-300/30 shadow-[0_24px_80px_-34px_rgba(239,68,68,0.45)]"
+                            : "",
+                          tableEffect === "settlement"
+                            ? "border-sky-300/35 shadow-[0_24px_100px_-34px_rgba(59,130,246,0.48)]"
+                            : "",
+                        )}
+                      >
                         <div className="grid w-full gap-3 sm:grid-cols-3">
                           <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
                             <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
@@ -1363,16 +1847,24 @@ export function DouDizhuPlayStage() {
                                   )}`
                                 : "等待首家出牌"}
                             </div>
-                            {lastPlayAction?.cards?.length ? (
+                            {activeRoom.last_play_cards?.length ? (
                               <div className="mt-4 flex flex-wrap justify-center gap-2">
-                                {lastPlayAction.cards.map((card, index) => (
-                                  <div
-                                    key={`${cardKey(card)}-${index}`}
-                                    className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white"
-                                  >
-                                    {cardLabel(card)}
-                                  </div>
-                                ))}
+                                {activeRoom.last_play_cards.map(
+                                  (card, index) => (
+                                    <div
+                                      key={`${cardKey(card)}-${index}`}
+                                      className={cn(
+                                        "rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-all",
+                                        tableEffect === "play" ||
+                                          tableEffect === "bomb"
+                                          ? "translate-y-0 scale-100"
+                                          : "",
+                                      )}
+                                    >
+                                      {cardLabel(card)}
+                                    </div>
+                                  ),
+                                )}
                               </div>
                             ) : null}
                           </div>
@@ -1382,6 +1874,37 @@ export function DouDizhuPlayStage() {
                           <div className="w-full rounded-2xl border border-sky-300/15 bg-sky-300/10 px-4 py-3 text-sm text-sky-50">
                             {latestAction.message ??
                               `${latestAction.actor_name} 完成了一次操作。`}
+                          </div>
+                        )}
+
+                        {settlementVisible && activeRoom.winning_side && (
+                          <div className="w-full rounded-[26px] border border-amber-300/20 bg-[linear-gradient(135deg,rgba(244,182,63,0.24),rgba(59,130,246,0.14))] px-5 py-5 text-white">
+                            <div className="text-xs uppercase tracking-[0.28em] text-white/60">
+                              Settlement
+                            </div>
+                            <div className="mt-2 text-3xl font-black tracking-tight">
+                              {activeRoom.winning_side === "landlord"
+                                ? "地主胜利"
+                                : "农民胜利"}
+                            </div>
+                            <div className="mt-3 flex flex-wrap justify-center gap-2 text-sm">
+                              <Badge className="border-white/15 bg-black/20 text-white">
+                                倍率 x{activeRoom.multiplier}
+                              </Badge>
+                              <Badge className="border-white/15 bg-black/20 text-white">
+                                炸弹 {activeRoom.bomb_count}
+                              </Badge>
+                              {activeRoom.spring && (
+                                <Badge className="border-white/15 bg-black/20 text-white">
+                                  春天
+                                </Badge>
+                              )}
+                              {activeRoom.anti_spring && (
+                                <Badge className="border-white/15 bg-black/20 text-white">
+                                  反春
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1429,6 +1952,28 @@ export function DouDizhuPlayStage() {
                     </div>
                   </div>
 
+                  <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm">
+                      <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                        牌型提示
+                      </div>
+                      <div className="mt-2 font-medium text-white">
+                        {selectedHandCards.length === 0
+                          ? "未选中手牌"
+                          : selectedComboPreview.combo
+                            ? comboLabel(selectedComboPreview.combo)
+                            : selectedComboPreview.error}
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => setSoundEnabled((current) => !current)}
+                      variant="outline"
+                      className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                    >
+                      {soundEnabled ? "音效开" : "音效关"}
+                    </Button>
+                  </div>
+
                   {!privateState && (
                     <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-4 py-8 text-center text-sm text-slate-400">
                       先加入一个房间，再开始叫分和出牌。
@@ -1448,20 +1993,29 @@ export function DouDizhuPlayStage() {
                                 key={cardKey(card)}
                                 card={card}
                                 selected={selected}
-                                onClick={() =>
+                                invalid={selected && !!selectionError}
+                                pulse={selected && tableEffect === "error"}
+                                onClick={() => {
+                                  setSelectionError("");
                                   setSelectedCards((current) =>
                                     current.includes(cardKey(card))
                                       ? current.filter(
                                           (item) => item !== cardKey(card),
                                         )
                                       : [...current, cardKey(card)],
-                                  )
-                                }
+                                  );
+                                }}
                               />
                             );
                           })}
                         </div>
                       </div>
+
+                      {selectionError && (
+                        <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+                          {selectionError}
+                        </div>
+                      )}
 
                       <div className="mt-5 flex flex-wrap gap-3">
                         {isMyBidTurn && (
@@ -1517,7 +2071,9 @@ export function DouDizhuPlayStage() {
                                 })
                               }
                               disabled={
-                                !isMyPlayTurn || selectedHandCards.length === 0
+                                !isMyPlayTurn ||
+                                selectedHandCards.length === 0 ||
+                                !selectedComboPreview.combo
                               }
                               className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110 disabled:opacity-50"
                             >
@@ -1532,7 +2088,10 @@ export function DouDizhuPlayStage() {
                               过牌
                             </Button>
                             <Button
-                              onClick={() => setSelectedCards([])}
+                              onClick={() => {
+                                setSelectionError("");
+                                setSelectedCards([]);
+                              }}
                               variant="outline"
                               className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
                             >
@@ -1555,6 +2114,14 @@ export function DouDizhuPlayStage() {
                     </div>
                     <div className="mt-2 text-3xl font-black tracking-tight text-white">
                       {activeRoom.highest_bid}
+                    </div>
+                  </div>
+                  <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
+                    <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                      当前倍率
+                    </div>
+                    <div className="mt-2 text-3xl font-black tracking-tight text-white">
+                      x{activeRoom.multiplier}
                     </div>
                   </div>
                   <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
@@ -1585,6 +2152,32 @@ export function DouDizhuPlayStage() {
 
                 <div className="rounded-[30px] border border-white/10 bg-black/20 p-5">
                   <div className="mb-3 text-lg font-semibold text-white">
+                    倍率细节
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className="border-white/15 bg-white/8 text-white">
+                      炸弹 {activeRoom.bomb_count}
+                    </Badge>
+                    {activeRoom.spring && (
+                      <Badge className="border-white/15 bg-white/8 text-white">
+                        春天
+                      </Badge>
+                    )}
+                    {activeRoom.anti_spring && (
+                      <Badge className="border-white/15 bg-white/8 text-white">
+                        反春
+                      </Badge>
+                    )}
+                    {!activeRoom.spring && !activeRoom.anti_spring && (
+                      <Badge className="border-white/15 bg-white/8 text-white">
+                        常规倍率
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-[30px] border border-white/10 bg-black/20 p-5">
+                  <div className="mb-3 text-lg font-semibold text-white">
                     最近操作
                   </div>
                   <div className="space-y-2">
@@ -1610,7 +2203,8 @@ export function DouDizhuPlayStage() {
                             </div>
                           </div>
                           <div className="mt-1">
-                            {action.message ?? action.action_type}
+                            {action.message ??
+                              actionTypeLabel(action.action_type)}
                           </div>
                           {action.cards?.length ? (
                             <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">

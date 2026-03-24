@@ -35,6 +35,8 @@ type DoudizhuRoomService struct {
 	seedSource    func() int64
 }
 
+const doudizhuTimeoutTick = 300 * time.Millisecond
+
 type DoudizhuRoomServiceOption func(*DoudizhuRoomService)
 
 type CreateDoudizhuRoomInput struct {
@@ -143,6 +145,7 @@ func NewDoudizhuRoomService(logger *zap.Logger, opts ...DoudizhuRoomServiceOptio
 	for _, opt := range opts {
 		opt(svc)
 	}
+	go svc.timeoutLoop()
 	return svc
 }
 
@@ -178,6 +181,56 @@ func (s *DoudizhuRoomService) SetNotifier(notifier func(uuid.UUID)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.notifier = notifier
+}
+
+func (s *DoudizhuRoomService) timeoutLoop() {
+	ticker := time.NewTicker(doudizhuTimeoutTick)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.handleExpiredTurns()
+	}
+}
+
+func (s *DoudizhuRoomService) handleExpiredTurns() {
+	now := time.Now()
+	changedRooms := make([]uuid.UUID, 0)
+	payloads := make([]*doudizhuPersistPayload, 0)
+
+	s.mu.Lock()
+	for _, room := range s.rooms {
+		if room == nil || room.round == nil || room.turnExpiresAt == nil || room.turnExpiresAt.After(now) {
+			continue
+		}
+		seat, player, ok := currentActingPlayer(room)
+		if !ok {
+			room.turnExpiresAt = nil
+			continue
+		}
+		if player != nil && !player.isBot && !player.autoPlay {
+			player.autoPlay = true
+			player.updatedAt = now
+			room.updatedAt = now
+			recordDoudizhuAction(room, doudizhu.ActionRecord{
+				Seat:       seat,
+				ActionType: "timeout_auto_play",
+				At:         now,
+				Message:    player.name + " 超时，已切换托管",
+				ActorName:  player.name,
+			})
+		}
+		s.drainAutoActorsLocked(room)
+		payloads = append(payloads, s.maybeBuildPersistPayloadLocked(room))
+		changedRooms = append(changedRooms, room.id)
+	}
+	s.mu.Unlock()
+
+	for _, payload := range payloads {
+		s.persistMatch(payload)
+	}
+	for _, roomID := range changedRooms {
+		s.notify(roomID)
+	}
 }
 
 func (s *DoudizhuRoomService) ListLeaderboard(ctx context.Context, limit int) ([]*doudizhu.LeaderboardEntry, error) {
@@ -972,7 +1025,8 @@ func buildDoudizhuMatch(room *doudizhuRoomState) (*doudizhu.Match, []doudizhu.Ma
 	room.round.FinishedAt = &finishedAt
 	bombCount := countDoudizhuBombActions(room.actionLog)
 	baseScore := doudizhuMaxInt(1, room.round.HighestBid)
-	multiplier := baseScore * (1 << bombCount)
+	spring, antiSpring := doudizhuSpringFlags(room)
+	multiplier := doudizhuCurrentMultiplier(baseScore, bombCount, spring, antiSpring)
 	matchID := uuid.New()
 
 	match := &doudizhu.Match{
@@ -987,8 +1041,8 @@ func buildDoudizhuMatch(room *doudizhuRoomState) (*doudizhu.Match, []doudizhu.Ma
 		WinnerSide:   *room.winningSide,
 		Multiplier:   multiplier,
 		BombCount:    bombCount,
-		Spring:       false,
-		AntiSpring:   false,
+		Spring:       spring,
+		AntiSpring:   antiSpring,
 		CreatedAt:    finishedAt,
 	}
 
@@ -1061,7 +1115,7 @@ func buildDoudizhuMatch(room *doudizhuRoomState) (*doudizhu.Match, []doudizhu.Ma
 			ActionType:      action.ActionType,
 			Cards:           append([]doudizhu.Card(nil), action.Cards...),
 			Combo:           comboPtr(action.Combo),
-			MultiplierAfter: multiplierAfterAction(room.actionLog[:index+1], baseScore),
+			MultiplierAfter: doudizhuEventMultiplier(room.actionLog[:index+1], baseScore, action.ActionType, multiplier),
 			OccurredAt:      action.At,
 		})
 	}
@@ -1097,6 +1151,33 @@ func currentAutoActor(room *doudizhuRoomState) (doudizhu.Seat, *doudizhuPlayerSt
 		}
 	}
 	return 0, nil, false
+}
+
+func currentActingPlayer(room *doudizhuRoomState) (doudizhu.Seat, *doudizhuPlayerState, bool) {
+	if room == nil || room.round == nil {
+		return 0, nil, false
+	}
+	switch room.round.Phase {
+	case doudizhu.RoundPhaseBidding:
+		seat := room.round.CurrentBidder
+		player := room.players[seat]
+		if player == nil {
+			return 0, nil, false
+		}
+		return seat, player, true
+	case doudizhu.RoundPhasePlaying:
+		if room.round.CurrentTurn == nil {
+			return 0, nil, false
+		}
+		seat := *room.round.CurrentTurn
+		player := room.players[seat]
+		if player == nil {
+			return 0, nil, false
+		}
+		return seat, player, true
+	default:
+		return 0, nil, false
+	}
 }
 
 func snapshotDoudizhuRoom(room *doudizhuRoomState) *doudizhu.Room {
@@ -1151,10 +1232,21 @@ func snapshotDoudizhuRoom(room *doudizhuRoomState) *doudizhu.Room {
 		cloned := *room.lastPlay
 		lastPlay = &cloned
 	}
+	lastPlayCards := append([]doudizhu.Card(nil), room.lastPlayCards...)
 
 	var bottomCards []doudizhu.Card
 	if room.round != nil && room.round.Landlord != nil {
 		bottomCards = append([]doudizhu.Card(nil), room.round.BottomCards...)
+	}
+	bombCount := countDoudizhuBombActions(room.actionLog)
+	baseScore := 1
+	spring := false
+	antiSpring := false
+	if room.round != nil {
+		baseScore = doudizhuMaxInt(1, room.round.HighestBid)
+	}
+	if room.winningSide != nil {
+		spring, antiSpring = doudizhuSpringFlags(room)
 	}
 
 	return &doudizhu.Room{
@@ -1172,8 +1264,13 @@ func snapshotDoudizhuRoom(room *doudizhuRoomState) *doudizhu.Room {
 		Landlord:      landlord,
 		CurrentTurn:   currentTurn,
 		LastPlay:      lastPlay,
+		LastPlayCards: lastPlayCards,
 		LastPlaySeat:  seatPtrFromPtr(room.lastPlaySeat),
 		WinningSide:   rolePtrFromPtr(room.winningSide),
+		Multiplier:    doudizhuCurrentMultiplier(baseScore, bombCount, spring, antiSpring),
+		BombCount:     bombCount,
+		Spring:        spring,
+		AntiSpring:    antiSpring,
 		TurnExpiresAt: timePtr(room.turnExpiresAt),
 		BottomCards:   bottomCards,
 		Players:       players,
@@ -1520,6 +1617,50 @@ func sessionIDForAction(room *doudizhuRoomState, seat doudizhu.Seat) string {
 func multiplierAfterAction(actions []doudizhu.ActionRecord, baseScore int) int {
 	totalBombs := countDoudizhuBombActions(actions)
 	return doudizhuMaxInt(1, baseScore) * (1 << totalBombs)
+}
+
+func doudizhuEventMultiplier(actions []doudizhu.ActionRecord, baseScore int, actionType string, finalMultiplier int) int {
+	if actionType == "settlement" {
+		return finalMultiplier
+	}
+	return multiplierAfterAction(actions, baseScore)
+}
+
+func doudizhuCurrentMultiplier(baseScore, bombCount int, spring, antiSpring bool) int {
+	multiplier := doudizhuMaxInt(1, baseScore) * (1 << bombCount)
+	if spring || antiSpring {
+		multiplier *= 2
+	}
+	return multiplier
+}
+
+func doudizhuSpringFlags(room *doudizhuRoomState) (spring bool, antiSpring bool) {
+	if room == nil || room.round == nil || room.winningSide == nil || room.round.Landlord == nil {
+		return false, false
+	}
+
+	landlord := *room.round.Landlord
+	landlordPlays := 0
+	farmerPlays := 0
+	for _, action := range room.actionLog {
+		if action.ActionType != "play_cards" && action.ActionType != "auto_play_cards" {
+			continue
+		}
+		if action.Seat == landlord {
+			landlordPlays++
+			continue
+		}
+		farmerPlays++
+	}
+
+	switch *room.winningSide {
+	case doudizhu.PlayerRoleLandlord:
+		return farmerPlays == 0, false
+	case doudizhu.PlayerRoleFarmer:
+		return false, landlordPlays <= 1
+	default:
+		return false, false
+	}
 }
 
 func doudizhuMaxInt(a, b int) int {

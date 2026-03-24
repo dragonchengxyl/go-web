@@ -133,8 +133,13 @@ type Room struct {
 	Landlord      *Seat          `json:"landlord,omitempty"`
 	CurrentTurn   *Seat          `json:"current_turn,omitempty"`
 	LastPlay      *Combo         `json:"last_play,omitempty"`
+	LastPlayCards []Card         `json:"last_play_cards,omitempty"`
 	LastPlaySeat  *Seat          `json:"last_play_seat,omitempty"`
 	WinningSide   *PlayerRole    `json:"winning_side,omitempty"`
+	Multiplier    int            `json:"multiplier"`
+	BombCount     int            `json:"bomb_count"`
+	Spring        bool           `json:"spring"`
+	AntiSpring    bool           `json:"anti_spring"`
 	TurnExpiresAt *time.Time     `json:"turn_expires_at,omitempty"`
 	BottomCards   []Card         `json:"bottom_cards,omitempty"`
 	Players       []RoomPlayer   `json:"players"`
