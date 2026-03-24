@@ -1,6 +1,6 @@
 "use client";
 
-import { DoudizhuCard } from "@/lib/api-client";
+import type { DoudizhuCard } from "@/lib/api-client";
 import {
   cardRankLabel,
   cardSuitSymbol,

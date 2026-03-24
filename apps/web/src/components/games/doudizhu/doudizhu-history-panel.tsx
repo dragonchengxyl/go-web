@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { DoudizhuLeaderboardEntry, DoudizhuMatchSummary } from "@/lib/api-client";
+import type {
+  DoudizhuLeaderboardEntry,
+  DoudizhuMatchSummary,
+} from "@/lib/api-client";
 import {
   roomModeLabel,
   seatLabel,

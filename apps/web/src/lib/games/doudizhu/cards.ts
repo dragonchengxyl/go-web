@@ -1,4 +1,4 @@
-import { DoudizhuCard } from "@/lib/api-client";
+import type { DoudizhuCard } from "@/lib/api-client";
 
 export function cardKey(card: DoudizhuCard): string {
   return `${card.suit}-${card.rank}`;

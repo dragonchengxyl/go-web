@@ -1,7 +1,7 @@
 "use client";
 
 import { Crown } from "lucide-react";
-import { DoudizhuRoomPlayer } from "@/lib/api-client";
+import type { DoudizhuRoomPlayer } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { seatLabel } from "@/lib/games/doudizhu/presenter";
 import { Badge } from "@/components/ui/badge";
