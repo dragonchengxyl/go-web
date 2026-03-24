@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   Bot,
   Crown,
   DoorOpen,
@@ -768,8 +770,21 @@ function LeaderboardCard({ entry }: { entry: DoudizhuLeaderboardEntry }) {
   );
 }
 
-export function DouDizhuPlayStage() {
+export function roomPagePath(roomId: string) {
+  return `/games/dou-dizhu/rooms/${roomId}`;
+}
+
+interface DouDizhuPlayStageProps {
+  immersive?: boolean;
+  fixedRoomId?: string;
+}
+
+export function DouDizhuPlayStage({
+  immersive = false,
+  fixedRoomId,
+}: DouDizhuPlayStageProps = {}) {
   const { user } = useAuth();
+  const router = useRouter();
   const [sessionId, setSessionId] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [roomTitle, setRoomTitle] = useState("周末牌局");
@@ -810,6 +825,7 @@ export function DouDizhuPlayStage() {
   const reconnectEnabledRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSettledRoomRef = useRef<string | null>(null);
+  const connectToRoomRef = useRef<(roomId: string) => void>(() => {});
   const playFeedbackToneRef = useRef<
     (effect: "hint" | "play" | "bomb" | "settlement" | "error") => void
   >(() => {});
@@ -846,6 +862,9 @@ export function DouDizhuPlayStage() {
   }, [playerName]);
 
   useEffect(() => {
+    if (immersive) {
+      return;
+    }
     let cancelled = false;
 
     async function loadRooms() {
@@ -888,9 +907,12 @@ export function DouDizhuPlayStage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeRoomId]);
+  }, [activeRoomId, immersive]);
 
   useEffect(() => {
+    if (immersive) {
+      return;
+    }
     let cancelled = false;
 
     async function loadMeta() {
@@ -932,7 +954,7 @@ export function DouDizhuPlayStage() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [user]);
+  }, [user, immersive]);
 
   useEffect(() => {
     if (!activeRoom) {
@@ -944,6 +966,16 @@ export function DouDizhuPlayStage() {
     }, 250);
     return () => window.clearInterval(timer);
   }, [activeRoom]);
+
+  useEffect(() => {
+    if (!immersive || !fixedRoomId || !sessionId || !playerName.trim()) {
+      return;
+    }
+    if (activeRoomIdRef.current === fixedRoomId && wsRef.current) {
+      return;
+    }
+    connectToRoomRef.current(fixedRoomId);
+  }, [fixedRoomId, immersive, playerName, sessionId]);
 
   useEffect(() => {
     return () => {
@@ -1015,6 +1047,14 @@ export function DouDizhuPlayStage() {
   }
 
   playFeedbackToneRef.current = playFeedbackTone;
+
+  function navigateToRoomPage(roomId: string) {
+    router.push(roomPagePath(roomId));
+  }
+
+  function navigateToLobby() {
+    router.push("/games/dou-dizhu/play");
+  }
 
   function updateActiveRoom(room: DoudizhuRoom) {
     const nextPlayers = [...room.players].sort(playerSort);
@@ -1242,6 +1282,9 @@ export function DouDizhuPlayStage() {
             reconnectEnabledRef.current = false;
             setWsStatus("idle");
             setSelectionError("");
+            if (immersive) {
+              navigateToLobby();
+            }
             break;
           case "error":
             if (
@@ -1282,6 +1325,9 @@ export function DouDizhuPlayStage() {
         setSelectedCards([]);
         setSelectionError("");
         setNotice("你已离开房间。");
+        if (immersive) {
+          navigateToLobby();
+        }
         return;
       }
 
@@ -1292,6 +1338,8 @@ export function DouDizhuPlayStage() {
       }, 1200);
     };
   }
+
+  connectToRoomRef.current = connectToRoom;
 
   function sendRoomMessage(type: string, payload?: Record<string, unknown>) {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -1325,7 +1373,11 @@ export function DouDizhuPlayStage() {
         const next = current.filter((item) => item.id !== room.id);
         return [room, ...next];
       });
-      connectToRoom(room.id);
+      if (immersive) {
+        connectToRoom(room.id);
+      } else {
+        navigateToRoomPage(room.id);
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "创建房间失败");
     }
@@ -1352,7 +1404,11 @@ export function DouDizhuPlayStage() {
         const next = current.filter((item) => item.id !== room.id);
         return [room, ...next];
       });
-      connectToRoom(room.id);
+      if (immersive) {
+        connectToRoom(room.id);
+      } else {
+        navigateToRoomPage(room.id);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "创建演示房失败",
@@ -1430,22 +1486,51 @@ export function DouDizhuPlayStage() {
   }, [activeRoom, user]);
 
   return (
-    <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-[36px] border border-white/10 bg-[#081013] text-white shadow-[0_30px_90px_-50px_rgba(0,0,0,0.85)]">
+    <div
+      className={cn("space-y-6", immersive ? "min-h-[calc(100vh-48px)]" : "")}
+    >
+      <section
+        className={cn(
+          "relative overflow-hidden border border-white/10 bg-[#081013] text-white shadow-[0_30px_90px_-50px_rgba(0,0,0,0.85)]",
+          immersive
+            ? "min-h-[calc(100vh-48px)] rounded-[28px]"
+            : "rounded-[36px]",
+        )}
+      >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,207,120,0.15),transparent_28%),radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.08),transparent_18%),linear-gradient(180deg,#0d382c_0%,#082019_100%)]" />
         <div className="relative p-5 md:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.32em] text-emerald-100/50">
-                Game Table
-              </p>
-              <h2 className="mt-3 text-3xl font-black tracking-tight text-white md:text-5xl">
-                经典斗地主
-              </h2>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
-                现在页面的中心是牌桌本身，而不是房间工具。你可以直接开始 AI
-                演示，或者创建真人房，把叫分、 出牌和结算完整走一遍。
-              </p>
+              {immersive ? (
+                <>
+                  <Link
+                    href="/games/dou-dizhu/play"
+                    className="inline-flex items-center gap-2 text-sm text-emerald-50/70 transition-colors hover:text-white"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    返回斗地主大厅
+                  </Link>
+                  <h2 className="mt-4 text-3xl font-black tracking-tight text-white md:text-4xl">
+                    {activeRoom?.title ?? "正在进入牌桌"}
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
+                    这是独立的大屏牌桌页。大厅、排行榜和最近对局已从这里剥离，当前页面只承载对局本身。
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs uppercase tracking-[0.32em] text-emerald-100/50">
+                    Game Table
+                  </p>
+                  <h2 className="mt-3 text-3xl font-black tracking-tight text-white md:text-5xl">
+                    经典斗地主
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
+                    现在页面的中心是牌桌本身，而不是房间工具。你可以直接开始 AI
+                    演示，或者创建真人房，把叫分、 出牌和结算完整走一遍。
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -1465,7 +1550,7 @@ export function DouDizhuPlayStage() {
             </div>
           </div>
 
-          {!activeRoom && (
+          {!activeRoom && !immersive && (
             <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
               <div className="rounded-[30px] border border-white/10 bg-black/20 p-6">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1559,6 +1644,29 @@ export function DouDizhuPlayStage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {!activeRoom && immersive && (
+            <div className="mt-8 rounded-[32px] border border-white/10 bg-black/20 px-6 py-12 text-center">
+              <div className="mx-auto max-w-xl">
+                <div className="text-xs uppercase tracking-[0.28em] text-emerald-100/45">
+                  Room Loading
+                </div>
+                <div className="mt-3 text-3xl font-black tracking-tight text-white">
+                  正在连接牌桌
+                </div>
+                <div className="mt-4 text-sm leading-7 text-emerald-50/75">
+                  {fixedRoomId
+                    ? `房间 ${fixedRoomId.slice(0, 8)} 已进入独立大屏模式，正在建立实时连接。`
+                    : "正在准备独立牌桌页面。"}
+                </div>
+                {errorMessage && (
+                  <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+                    {errorMessage}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2225,264 +2333,270 @@ export function DouDizhuPlayStage() {
         </div>
       </section>
 
-      <Tabs defaultValue="start" className="space-y-4">
-        <TabsList className="border border-white/10 bg-black/20">
-          <TabsTrigger
-            value="start"
-            className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
-          >
-            房间大厅
-          </TabsTrigger>
-          <TabsTrigger
-            value="matches"
-            className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
-          >
-            最近对局
-          </TabsTrigger>
-          <TabsTrigger
-            value="leaderboard"
-            className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
-          >
-            排行榜
-          </TabsTrigger>
-        </TabsList>
+      {!immersive && (
+        <Tabs defaultValue="start" className="space-y-4">
+          <TabsList className="border border-white/10 bg-black/20">
+            <TabsTrigger
+              value="start"
+              className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
+            >
+              房间大厅
+            </TabsTrigger>
+            <TabsTrigger
+              value="matches"
+              className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
+            >
+              最近对局
+            </TabsTrigger>
+            <TabsTrigger
+              value="leaderboard"
+              className="data-[state=active]:bg-white data-[state=active]:text-slate-950"
+            >
+              排行榜
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="start">
-          <div className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
-            <Card className="border-white/10 bg-white/[0.04] text-white">
-              <CardContent className="p-6">
-                <div className="mb-5 flex items-center gap-3">
-                  <Sparkles className="h-5 w-5 text-amber-300" />
-                  <div>
-                    <h3 className="text-2xl font-black tracking-tight text-white">
-                      快速开局
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-400">
-                      继续保留房间能力，但它现在退到辅助入口，不再压过牌桌本身。
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="ddz-room-title-panel"
-                      className="text-white/85"
-                    >
-                      房间标题
-                    </Label>
-                    <Input
-                      id="ddz-room-title-panel"
-                      value={roomTitle}
-                      onChange={(event) => setRoomTitle(event.target.value)}
-                      className="border-white/10 bg-black/20 text-white placeholder:text-slate-500"
-                      placeholder="例如：夜场训练局"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <Button
-                      onClick={handleCreateDemoRoom}
-                      className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
-                    >
-                      <Bot className="mr-2 h-4 w-4" />
-                      开始 AI 演示
-                    </Button>
-                    <Button
-                      onClick={handleCreateRoom}
-                      variant="outline"
-                      className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
-                    >
-                      <Users2 className="mr-2 h-4 w-4" />
-                      创建真人房
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-white/10 bg-white/[0.04] text-white">
-              <CardContent className="p-6">
-                <div className="mb-5 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Users2 className="h-5 w-5 text-sky-300" />
+          <TabsContent value="start">
+            <div className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
+              <Card className="border-white/10 bg-white/[0.04] text-white">
+                <CardContent className="p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <Sparkles className="h-5 w-5 text-amber-300" />
                     <div>
                       <h3 className="text-2xl font-black tracking-tight text-white">
-                        房间列表
+                        快速开局
                       </h3>
                       <p className="mt-1 text-sm text-slate-400">
-                        如果你要和真人联机，这里仍然可以直接加入当前开放中的房间。
+                        继续保留房间能力，但它现在退到辅助入口，不再压过牌桌本身。
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-300">
-                    {roomsLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
-                    ) : (
-                      <Radio className="h-4 w-4 text-emerald-300" />
-                    )}
-                    {rooms.length} 个房间
-                  </div>
-                </div>
 
-                <div className="space-y-3">
-                  {rooms.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                      当前还没有房间。最简单的试玩方式依然是直接点 AI 演示。
-                    </div>
-                  )}
-
-                  {rooms.map((room) => {
-                    const active = activeRoomId === room.id;
-                    return (
-                      <button
-                        key={room.id}
-                        type="button"
-                        onClick={() => connectToRoom(room.id)}
-                        className={cn(
-                          "w-full rounded-[22px] border px-4 py-4 text-left transition-all",
-                          active
-                            ? "border-amber-300/35 bg-amber-300/10"
-                            : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]",
-                        )}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="ddz-room-title-panel"
+                        className="text-white/85"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-white">
-                                {room.title}
-                              </span>
-                              <Badge className="border-white/15 bg-white/8 text-white">
-                                {room.code}
-                              </Badge>
-                              <Badge
-                                className={
-                                  room.match_mode === "demo_ai"
-                                    ? "border-amber-300/20 bg-amber-300/10 text-amber-100"
-                                    : "border-sky-300/20 bg-sky-300/10 text-sky-100"
-                                }
-                              >
-                                {room.match_mode === "demo_ai"
-                                  ? "AI 演示"
-                                  : "真人房"}
-                              </Badge>
-                            </div>
-                            <div className="mt-2 text-sm text-slate-400">
-                              {room.player_count} / 3 人，状态{" "}
-                              {roomStatusLabel(room.status)}
-                            </div>
-                          </div>
-                          <div className="text-sm text-slate-300">
-                            {active ? "已连接" : "进入房间"}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+                        房间标题
+                      </Label>
+                      <Input
+                        id="ddz-room-title-panel"
+                        value={roomTitle}
+                        onChange={(event) => setRoomTitle(event.target.value)}
+                        className="border-white/10 bg-black/20 text-white placeholder:text-slate-500"
+                        placeholder="例如：夜场训练局"
+                      />
+                    </div>
 
-        <TabsContent value="matches">
-          <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        onClick={handleCreateDemoRoom}
+                        className="border-0 bg-[linear-gradient(135deg,#f4b63f_0%,#db5a3f_100%)] text-slate-950 hover:brightness-110"
+                      >
+                        <Bot className="mr-2 h-4 w-4" />
+                        开始 AI 演示
+                      </Button>
+                      <Button
+                        onClick={handleCreateRoom}
+                        variant="outline"
+                        className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                      >
+                        <Users2 className="mr-2 h-4 w-4" />
+                        创建真人房
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-white/10 bg-white/[0.04] text-white">
+                <CardContent className="p-6">
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Users2 className="h-5 w-5 text-sky-300" />
+                      <div>
+                        <h3 className="text-2xl font-black tracking-tight text-white">
+                          房间列表
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-400">
+                          如果你要和真人联机，这里仍然可以直接加入当前开放中的房间。
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-300">
+                      {roomsLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
+                      ) : (
+                        <Radio className="h-4 w-4 text-emerald-300" />
+                      )}
+                      {rooms.length} 个房间
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {rooms.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                        当前还没有房间。最简单的试玩方式依然是直接点 AI 演示。
+                      </div>
+                    )}
+
+                    {rooms.map((room) => {
+                      const active = activeRoomId === room.id;
+                      return (
+                        <button
+                          key={room.id}
+                          type="button"
+                          onClick={() =>
+                            immersive
+                              ? connectToRoom(room.id)
+                              : navigateToRoomPage(room.id)
+                          }
+                          className={cn(
+                            "w-full rounded-[22px] border px-4 py-4 text-left transition-all",
+                            active
+                              ? "border-amber-300/35 bg-amber-300/10"
+                              : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]",
+                          )}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-white">
+                                  {room.title}
+                                </span>
+                                <Badge className="border-white/15 bg-white/8 text-white">
+                                  {room.code}
+                                </Badge>
+                                <Badge
+                                  className={
+                                    room.match_mode === "demo_ai"
+                                      ? "border-amber-300/20 bg-amber-300/10 text-amber-100"
+                                      : "border-sky-300/20 bg-sky-300/10 text-sky-100"
+                                  }
+                                >
+                                  {room.match_mode === "demo_ai"
+                                    ? "AI 演示"
+                                    : "真人房"}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 text-sm text-slate-400">
+                                {room.player_count} / 3 人，状态{" "}
+                                {roomStatusLabel(room.status)}
+                              </div>
+                            </div>
+                            <div className="text-sm text-slate-300">
+                              {active ? "已连接" : "进入房间"}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="matches">
+            <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+              <Card className="border-white/10 bg-white/[0.04] text-white">
+                <CardContent className="p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <Crown className="h-5 w-5 text-sky-300" />
+                    <div>
+                      <h3 className="text-2xl font-black tracking-tight text-white">
+                        我的最近对局
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-400">
+                        打完就能直接回看，不再是“玩了但没有留下任何结果”。
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {user && myMatches.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                        你还没有可展示的斗地主对局。
+                      </div>
+                    )}
+                    {myMatches.map((match) => (
+                      <MatchLinkCard
+                        key={`me-${match.match_id}`}
+                        match={match}
+                        mine
+                      />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-white/10 bg-white/[0.04] text-white">
+                <CardContent className="p-6">
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <Swords className="h-5 w-5 text-amber-300" />
+                      <div>
+                        <h3 className="text-2xl font-black tracking-tight text-white">
+                          全站最近对局
+                        </h3>
+                        <p className="mt-1 text-sm text-slate-400">
+                          AI 演示和真人房都能形成战报。
+                        </p>
+                      </div>
+                    </div>
+                    {metaLoading && (
+                      <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    {recentMatches.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
+                        还没有斗地主战报。
+                      </div>
+                    )}
+                    {recentMatches.map((match) => (
+                      <MatchLinkCard key={match.match_id} match={match} />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="leaderboard">
             <Card className="border-white/10 bg-white/[0.04] text-white">
               <CardContent className="p-6">
                 <div className="mb-5 flex items-center gap-3">
-                  <Crown className="h-5 w-5 text-sky-300" />
+                  <Trophy className="h-5 w-5 text-amber-300" />
                   <div>
                     <h3 className="text-2xl font-black tracking-tight text-white">
-                      我的最近对局
+                      排行榜
                     </h3>
                     <p className="mt-1 text-sm text-slate-400">
-                      打完就能直接回看，不再是“玩了但没有留下任何结果”。
+                      当前只统计真人对局，AI 演示房不会进入榜单。
                     </p>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  {user && myMatches.length === 0 && (
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {leaderboard.length === 0 && (
                     <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                      你还没有可展示的斗地主对局。
+                      还没有可展示的真人对局结果。
                     </div>
                   )}
-                  {myMatches.map((match) => (
-                    <MatchLinkCard
-                      key={`me-${match.match_id}`}
-                      match={match}
-                      mine
+                  {leaderboard.map((entry) => (
+                    <LeaderboardCard
+                      key={`${entry.user_id ?? entry.player_name}-${entry.rank}`}
+                      entry={entry}
                     />
                   ))}
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="border-white/10 bg-white/[0.04] text-white">
-              <CardContent className="p-6">
-                <div className="mb-5 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <Swords className="h-5 w-5 text-amber-300" />
-                    <div>
-                      <h3 className="text-2xl font-black tracking-tight text-white">
-                        全站最近对局
-                      </h3>
-                      <p className="mt-1 text-sm text-slate-400">
-                        AI 演示和真人房都能形成战报。
-                      </p>
-                    </div>
-                  </div>
-                  {metaLoading && (
-                    <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  {recentMatches.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                      还没有斗地主战报。
-                    </div>
-                  )}
-                  {recentMatches.map((match) => (
-                    <MatchLinkCard key={match.match_id} match={match} />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="leaderboard">
-          <Card className="border-white/10 bg-white/[0.04] text-white">
-            <CardContent className="p-6">
-              <div className="mb-5 flex items-center gap-3">
-                <Trophy className="h-5 w-5 text-amber-300" />
-                <div>
-                  <h3 className="text-2xl font-black tracking-tight text-white">
-                    排行榜
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-400">
-                    当前只统计真人对局，AI 演示房不会进入榜单。
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 lg:grid-cols-2">
-                {leaderboard.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-slate-400">
-                    还没有可展示的真人对局结果。
-                  </div>
-                )}
-                {leaderboard.map((entry) => (
-                  <LeaderboardCard
-                    key={`${entry.user_id ?? entry.player_name}-${entry.rank}`}
-                    entry={entry}
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }

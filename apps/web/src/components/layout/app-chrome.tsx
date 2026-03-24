@@ -10,8 +10,9 @@ import { FurryAssistant } from "@/components/assistant/furry-assistant";
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdminRoute = pathname.startsWith("/admin");
+  const isImmersiveGameRoute = pathname.startsWith("/games/dou-dizhu/rooms/");
 
-  if (isAdminRoute) {
+  if (isAdminRoute || isImmersiveGameRoute) {
     return <>{children}</>;
   }
 
