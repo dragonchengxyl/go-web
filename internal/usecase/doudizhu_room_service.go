@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -68,6 +69,14 @@ type DoudizhuPlayInput struct {
 	Cards     []doudizhu.Card
 }
 
+type DoudizhuHintResult struct {
+	ActionType string          `json:"action_type"`
+	BidScore   *int            `json:"bid_score,omitempty"`
+	Cards      []doudizhu.Card `json:"cards,omitempty"`
+	Combo      *doudizhu.Combo `json:"combo,omitempty"`
+	Message    string          `json:"message,omitempty"`
+}
+
 type ToggleDoudizhuAutoPlayInput struct {
 	RoomID    uuid.UUID
 	SessionID string
@@ -95,7 +104,8 @@ type doudizhuRoomState struct {
 	lastPlaySeat   *doudizhu.Seat
 	passCount      int
 	winningSide    *doudizhu.PlayerRole
-	actions        []doudizhu.ActionRecord
+	recentActions  []doudizhu.ActionRecord
+	actionLog      []doudizhu.ActionRecord
 	matchPersisted bool
 	createdAt      time.Time
 	updatedAt      time.Time
@@ -246,6 +256,63 @@ func (s *DoudizhuRoomService) GetPrivateState(roomID uuid.UUID, sessionID string
 		return nil, false
 	}
 	return snapshotDoudizhuPrivateState(room, seat), true
+}
+
+func (s *DoudizhuRoomService) RequestHint(roomID uuid.UUID, sessionID string) (*DoudizhuHintResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return nil, apperr.ErrNotFound
+	}
+	seat, exists := room.sessionSeat[sessionID]
+	if !exists {
+		return nil, apperr.BadRequest("你不在该房间内")
+	}
+	if room.round == nil {
+		return nil, apperr.BadRequest("当前还没有开始对局")
+	}
+
+	switch room.round.Phase {
+	case doudizhu.RoundPhaseBidding:
+		if room.round.CurrentBidder != seat {
+			return nil, apperr.ErrForbidden
+		}
+		score := chooseDoudizhuBid(room.round.Hands[seat], room.round.HighestBid)
+		message := "建议不叫"
+		if score > 0 {
+			message = fmt.Sprintf("建议叫 %d 分", score)
+		}
+		return &DoudizhuHintResult{
+			ActionType: "bid",
+			BidScore:   &score,
+			Message:    message,
+		}, nil
+	case doudizhu.RoundPhasePlaying:
+		if room.round.CurrentTurn == nil || *room.round.CurrentTurn != seat {
+			return nil, apperr.ErrForbidden
+		}
+		cards := chooseDoudizhuPlay(room.round.Hands[seat], room.lastPlay, room.lastPlaySeat, seat)
+		if len(cards) == 0 {
+			return &DoudizhuHintResult{
+				ActionType: "pass_turn",
+				Message:    "当前没有更优压牌，建议过牌。",
+			}, nil
+		}
+		combo, err := DoudizhuEvaluateCombo(cards)
+		if err != nil {
+			return nil, apperr.BadRequest("当前无法生成提示")
+		}
+		return &DoudizhuHintResult{
+			ActionType: "play_cards",
+			Cards:      doudizhuSortedCards(cards),
+			Combo:      combo,
+			Message:    "已为你选出当前建议出牌。",
+		}, nil
+	default:
+		return nil, apperr.BadRequest("当前阶段暂无出牌提示")
+	}
 }
 
 func (s *DoudizhuRoomService) CreateRoom(input CreateDoudizhuRoomInput) (*doudizhu.Room, error) {
@@ -544,7 +611,8 @@ func (s *DoudizhuRoomService) StartRound(roomID uuid.UUID, sessionID string) (*d
 	room.lastPlayCards = nil
 	room.lastPlaySeat = nil
 	room.passCount = 0
-	room.actions = nil
+	room.recentActions = nil
+	room.actionLog = nil
 	room.winningSide = nil
 	room.matchPersisted = false
 	room.updatedAt = time.Now()
@@ -572,7 +640,7 @@ func (s *DoudizhuRoomService) Bid(input DoudizhuBidInput) (*doudizhu.ActionResul
 		s.mu.Unlock()
 		return nil, apperr.ErrNotFound
 	}
-	result, err := s.applyBidLocked(room, input.SessionID, input.Score)
+	result, err := s.applyBidLocked(room, input.SessionID, input.Score, false)
 	if err != nil {
 		s.mu.Unlock()
 		return nil, err
@@ -666,7 +734,7 @@ func (s *DoudizhuRoomService) ToggleAutoPlay(input ToggleDoudizhuAutoPlayInput) 
 	return snapshot, nil
 }
 
-func (s *DoudizhuRoomService) applyBidLocked(room *doudizhuRoomState, sessionID string, score int) (*doudizhu.ActionResult, error) {
+func (s *DoudizhuRoomService) applyBidLocked(room *doudizhuRoomState, sessionID string, score int, auto bool) (*doudizhu.ActionResult, error) {
 	if room.round == nil || room.round.Phase != doudizhu.RoundPhaseBidding {
 		return nil, apperr.BadRequest("当前不在叫分阶段")
 	}
@@ -686,9 +754,9 @@ func (s *DoudizhuRoomService) applyBidLocked(room *doudizhuRoomState, sessionID 
 	room.status = room.round.Phase
 	room.updatedAt = now
 	record := doudizhu.BidRecord{Seat: seat, Score: score, At: now}
-	room.actions = appendActionRecord(room.actions, doudizhu.ActionRecord{
+	recordDoudizhuAction(room, doudizhu.ActionRecord{
 		Seat:       seat,
-		ActionType: "bid",
+		ActionType: actionType(auto, "bid"),
 		At:         now,
 		Message:    bidActionMessage(room.players[seat].name, score),
 		ActorName:  room.players[seat].name,
@@ -696,7 +764,7 @@ func (s *DoudizhuRoomService) applyBidLocked(room *doudizhuRoomState, sessionID 
 
 	if room.status == doudizhu.RoundPhasePlaying && room.round.Landlord != nil {
 		landlord := *room.round.Landlord
-		room.actions = appendActionRecord(room.actions, doudizhu.ActionRecord{
+		recordDoudizhuAction(room, doudizhu.ActionRecord{
 			Seat:       landlord,
 			ActionType: "landlord_assigned",
 			At:         now,
@@ -712,7 +780,7 @@ func (s *DoudizhuRoomService) applyBidLocked(room *doudizhuRoomState, sessionID 
 	_ = record
 
 	return &doudizhu.ActionResult{
-		ActionType: "bid",
+		ActionType: actionType(auto, "bid"),
 		Seat:       seat,
 		ActorName:  room.players[seat].name,
 		HandCount:  len(room.round.Hands[seat]),
@@ -776,7 +844,7 @@ func (s *DoudizhuRoomService) playCardsLocked(room *doudizhuRoomState, sessionID
 		room.round.Phase = doudizhu.RoundPhaseSettlement
 		room.status = room.round.Phase
 		room.turnExpiresAt = nil
-		room.actions = appendActionRecord(room.actions, doudizhu.ActionRecord{
+		recordDoudizhuAction(room, doudizhu.ActionRecord{
 			Seat:        seat,
 			ActionType:  "settlement",
 			Cards:       doudizhuSortedCards(cards),
@@ -795,7 +863,7 @@ func (s *DoudizhuRoomService) playCardsLocked(room *doudizhuRoomState, sessionID
 	room.round.CurrentTurn = &next
 	room.status = room.round.Phase
 	s.setTurnExpiryLocked(room)
-	room.actions = appendActionRecord(room.actions, doudizhu.ActionRecord{
+	recordDoudizhuAction(room, doudizhu.ActionRecord{
 		Seat:       seat,
 		ActionType: actionType(auto, "play_cards"),
 		Cards:      doudizhuSortedCards(cards),
@@ -851,7 +919,7 @@ func (s *DoudizhuRoomService) passTurnLocked(room *doudizhuRoomState, sessionID 
 
 	room.updatedAt = now
 	s.setTurnExpiryLocked(room)
-	room.actions = appendActionRecord(room.actions, doudizhu.ActionRecord{
+	recordDoudizhuAction(room, doudizhu.ActionRecord{
 		Seat:       seat,
 		ActionType: actionType(auto, "pass_turn"),
 		At:         now,
@@ -871,7 +939,7 @@ func (s *DoudizhuRoomService) drainAutoActorsLocked(room *doudizhuRoomState) {
 		switch room.round.Phase {
 		case doudizhu.RoundPhaseBidding:
 			score := chooseDoudizhuBid(room.round.Hands[seat], room.round.HighestBid)
-			if _, err := s.applyBidLocked(room, player.sessionID, score); err != nil {
+			if _, err := s.applyBidLocked(room, player.sessionID, score, true); err != nil {
 				s.logger.Warn("auto bid failed", zap.Error(err), zap.String("session_id", player.sessionID))
 				return
 			}
@@ -902,7 +970,7 @@ func buildDoudizhuMatch(room *doudizhuRoomState) (*doudizhu.Match, []doudizhu.Ma
 
 	finishedAt := room.updatedAt
 	room.round.FinishedAt = &finishedAt
-	bombCount := countDoudizhuBombActions(room.actions)
+	bombCount := countDoudizhuBombActions(room.actionLog)
 	baseScore := doudizhuMaxInt(1, room.round.HighestBid)
 	multiplier := baseScore * (1 << bombCount)
 	matchID := uuid.New()
@@ -967,9 +1035,9 @@ func buildDoudizhuMatch(room *doudizhuRoomState) (*doudizhu.Match, []doudizhu.Ma
 	})
 	match.Results = append([]doudizhu.MatchPlayerResult(nil), results...)
 
-	events := make([]doudizhu.ActionEvent, 0, len(room.actions))
+	events := make([]doudizhu.ActionEvent, 0, len(room.actionLog))
 	turnNo := 0
-	for index, action := range room.actions {
+	for index, action := range room.actionLog {
 		if action.ActionType == "play_cards" || action.ActionType == "auto_play_cards" {
 			turnNo++
 		}
@@ -993,7 +1061,7 @@ func buildDoudizhuMatch(room *doudizhuRoomState) (*doudizhu.Match, []doudizhu.Ma
 			ActionType:      action.ActionType,
 			Cards:           append([]doudizhu.Card(nil), action.Cards...),
 			Combo:           comboPtr(action.Combo),
-			MultiplierAfter: multiplierAfterAction(room.actions[:index+1], baseScore),
+			MultiplierAfter: multiplierAfterAction(room.actionLog[:index+1], baseScore),
 			OccurredAt:      action.At,
 		})
 	}
@@ -1072,11 +1140,11 @@ func snapshotDoudizhuRoom(room *doudizhuRoomState) *doudizhu.Room {
 		highestBidder = seatPtrFromPtr(room.round.HighestBidder)
 		landlord = seatPtrFromPtr(room.round.Landlord)
 		currentTurn = seatPtrFromPtr(room.round.CurrentTurn)
-		bidHistory = make([]doudizhu.BidRecord, len(room.actions)) // overwritten below if records exist
+		bidHistory = make([]doudizhu.BidRecord, len(room.actionLog)) // overwritten below if records exist
 		_ = bidHistory
 	}
-	bids := extractDoudizhuBidHistory(room.actions)
-	actions := append([]doudizhu.ActionRecord(nil), room.actions...)
+	bids := extractDoudizhuBidHistory(room.actionLog)
+	actions := append([]doudizhu.ActionRecord(nil), room.recentActions...)
 
 	var lastPlay *doudizhu.Combo
 	if room.lastPlay != nil {
@@ -1215,6 +1283,14 @@ func appendActionRecord(items []doudizhu.ActionRecord, item doudizhu.ActionRecor
 		next = append([]doudizhu.ActionRecord(nil), next[len(next)-doudizhuRecentActionsLimit:]...)
 	}
 	return next
+}
+
+func recordDoudizhuAction(room *doudizhuRoomState, item doudizhu.ActionRecord) {
+	if room == nil {
+		return
+	}
+	room.actionLog = append(room.actionLog, item)
+	room.recentActions = appendActionRecord(room.recentActions, item)
 }
 
 func currentHighestBid(room *doudizhuRoomState) int {

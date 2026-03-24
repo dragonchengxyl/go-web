@@ -143,6 +143,73 @@ func TestDoudizhuRoomServicePVPStartAndPlay(t *testing.T) {
 	require.Equal(t, len(privateState.Hand)-1, len(nextState.Hand))
 }
 
+func TestDoudizhuRoomServiceRequestHint(t *testing.T) {
+	svc := NewDoudizhuRoomService(
+		zap.NewNop(),
+		WithDoudizhuSeedSource(func() int64 { return 7 }),
+	)
+
+	room, err := svc.CreateRoom(CreateDoudizhuRoomInput{
+		SessionID:  "alpha",
+		PlayerName: "Alpha",
+		UserID:     uuidPtr(uuid.New()),
+	})
+	require.NoError(t, err)
+
+	for _, player := range []struct {
+		sessionID string
+		name      string
+	}{
+		{sessionID: "alpha", name: "Alpha"},
+		{sessionID: "beta", name: "Beta"},
+		{sessionID: "gamma", name: "Gamma"},
+	} {
+		_, err = svc.JoinRoom(JoinDoudizhuRoomInput{
+			RoomID:     room.ID,
+			SessionID:  player.sessionID,
+			PlayerName: player.name,
+			UserID:     uuidPtr(uuid.New()),
+		})
+		require.NoError(t, err)
+	}
+
+	ready := true
+	for _, sessionID := range []string{"alpha", "beta", "gamma"} {
+		_, err = svc.SetReady(SetDoudizhuReadyInput{
+			RoomID:    room.ID,
+			SessionID: sessionID,
+			Ready:     &ready,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = svc.StartRound(room.ID, "alpha")
+	require.NoError(t, err)
+
+	bidHint, err := svc.RequestHint(room.ID, "alpha")
+	require.NoError(t, err)
+	require.Equal(t, "bid", bidHint.ActionType)
+	require.NotNil(t, bidHint.BidScore)
+
+	_, err = svc.Bid(DoudizhuBidInput{RoomID: room.ID, SessionID: "alpha", Score: 1})
+	require.NoError(t, err)
+	_, err = svc.Bid(DoudizhuBidInput{RoomID: room.ID, SessionID: "beta", Score: 2})
+	require.NoError(t, err)
+	_, err = svc.Bid(DoudizhuBidInput{RoomID: room.ID, SessionID: "gamma", Score: 0})
+	require.NoError(t, err)
+
+	playingRoom, ok := svc.GetRoom(room.ID)
+	require.True(t, ok)
+	require.NotNil(t, playingRoom.Landlord)
+
+	landlordSession := sessionIDBySeat(playingRoom, *playingRoom.Landlord)
+	playHint, err := svc.RequestHint(room.ID, landlordSession)
+	require.NoError(t, err)
+	require.Equal(t, "play_cards", playHint.ActionType)
+	require.NotEmpty(t, playHint.Cards)
+	require.NotNil(t, playHint.Combo)
+}
+
 func sessionIDBySeat(room *doudizhu.Room, seat doudizhu.Seat) string {
 	for _, player := range room.Players {
 		if player.Seat == seat {

@@ -472,6 +472,13 @@ func (c *doudizhuWSClient) readPump() {
 				continue
 			}
 			c.handler.sendToClient(c, "action_result", result)
+		case "request_hint":
+			result, err := c.handler.service.RequestHint(c.roomID, c.sessionID)
+			if err != nil {
+				c.handler.sendToClient(c, "error", gin.H{"message": err.Error()})
+				continue
+			}
+			c.handler.sendToClient(c, "hint_result", result)
 		case "toggle_auto_play":
 			var payload struct {
 				Enabled *bool `json:"enabled"`
