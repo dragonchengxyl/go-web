@@ -34,6 +34,8 @@ import (
 
 func main() {
 	configFile := flag.String("config", "configs/config.local.yaml", "path to config file")
+	runMigrations := flag.Bool("run-migrations", true, "run database migrations before starting the server")
+	migrateOnly := flag.Bool("migrate-only", false, "run database migrations and exit")
 	flag.Parse()
 
 	// Load configuration
@@ -63,10 +65,18 @@ func main() {
 	defer pool.Close()
 	logger.Info("Connected to PostgreSQL")
 
-	// Run database migrations
-	migrator := postgres.NewMigrator(logger)
-	if err := migrator.RunMigrations(cfg.Database.DSN, "migrations"); err != nil {
-		logger.Fatal("Failed to run migrations", zap.Error(err))
+	if *runMigrations || *migrateOnly {
+		migrator := postgres.NewMigrator(logger)
+		if err := migrator.RunMigrations(cfg.Database.DSN, "migrations"); err != nil {
+			logger.Fatal("Failed to run migrations", zap.Error(err))
+		}
+		logger.Info("Database migrations completed")
+	} else {
+		logger.Info("Skipping database migrations")
+	}
+	if *migrateOnly {
+		logger.Info("Migration-only mode complete")
+		return
 	}
 
 	// Initialize Redis

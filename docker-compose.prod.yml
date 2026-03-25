@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:13-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-15432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    shm_size: "256m"
+    networks:
+      - studio
+
+  redis:
+    image: redis:6.2-alpine
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--save",
+        "900",
+        "1",
+        "--save",
+        "300",
+        "10",
+        "--loglevel",
+        "warning",
+        "--requirepass",
+        "${REDIS_PASSWORD}"
+      ]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - studio
+
+  migrate:
+    image: ${BACKEND_IMAGE}
+    restart: "no"
+    env_file:
+      - .env.prod
+    command: ["./server", "-config", "configs/config.yaml", "-migrate-only"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - studio
+
+  backend:
+    image: ${BACKEND_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    command: ["./server", "-config", "configs/config.yaml", "-run-migrations=false"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-18080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - studio
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-13000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - studio
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  studio:
+    driver: bridge
