@@ -96,7 +96,7 @@ export function HexBlitzPlayStage() {
   const [activeRoom, setActiveRoom] = useState<HexBlitzRoom | null>(null);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [wsStatus, setWsStatus] = useState<RoomWSStatus>('idle');
-  const [notice, setNotice] = useState('可以先单机试玩，也可以创建房间进入多人实验室。');
+  const [notice, setNotice] = useState('可以先单人开玩，也可以创建房间和朋友一起冲分。');
   const [errorMessage, setErrorMessage] = useState('');
   const [timeTick, setTimeTick] = useState(Date.now());
   const [leaderboard, setLeaderboard] = useState<HexBlitzLeaderboardEntry[]>([]);
@@ -466,10 +466,7 @@ export function HexBlitzPlayStage() {
             <div className="mb-5 flex items-center gap-3">
               <Rocket className="h-5 w-5 text-amber-300" />
               <div>
-                <h2 className="text-2xl font-black tracking-tight">Room Lab</h2>
-                <p className="mt-1 text-sm text-slate-400">
-                  Phase 2 的目标是把“休闲原型”接成“多人实验室”。
-                </p>
+                <h2 className="text-2xl font-black tracking-tight">多人房间</h2>
               </div>
             </div>
 
@@ -528,16 +525,6 @@ export function HexBlitzPlayStage() {
                 </Button>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm leading-7 text-slate-300">
-                这轮多人版先做成房间实验室：房间创建、准备、倒计时、开局和实时记分板都是真实的
-                Go + WebSocket 链路，但棋盘解题仍然由前端本地执行。
-              </div>
-
-              <div className="rounded-2xl border border-amber-300/15 bg-amber-300/10 px-4 py-3 text-sm leading-7 text-amber-50">
-                现在服务端已经增加了基础约束：分数不能倒退、不能异常跳涨、也不能超过当前实验室允许的上限。
-                这一步先解决“任何客户端都能随便报分”的问题。
-              </div>
-
               {errorMessage && (
                 <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
                   {errorMessage}
@@ -550,15 +537,12 @@ export function HexBlitzPlayStage() {
         <Card className="border-white/10 bg-white/[0.04] text-white">
           <CardContent className="p-6">
             <div className="mb-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Users2 className="h-5 w-5 text-sky-300" />
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight">房间列表</h2>
-                  <p className="mt-1 text-sm text-slate-400">
-                    当前可加入的实验室房间。房主开始后，新玩家就不能中途加入。
-                  </p>
+                <div className="flex items-center gap-3">
+                  <Users2 className="h-5 w-5 text-sky-300" />
+                  <div>
+                    <h2 className="text-2xl font-black tracking-tight">房间列表</h2>
+                  </div>
                 </div>
-              </div>
               <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-300">
                 {roomsLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin text-sky-300" />
@@ -737,14 +721,9 @@ export function HexBlitzPlayStage() {
                   </Button>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm leading-7 text-slate-300">
-                  现在这条链路已经具备真实的多人房间状态机：创建房间、进入房间、在线状态、
-                  准备、倒计时、开始、局内记分同步、结束。
-                </div>
-
                 {lastMoveResult && (
                   <div className="rounded-2xl border border-sky-300/15 bg-sky-300/10 px-4 py-4 text-sm leading-7 text-sky-50">
-                    服务端最近一次判定：清除 {lastMoveResult.cleared_count} 格，获得{' '}
+                    最近一次操作：清除 {lastMoveResult.cleared_count} 格，获得{' '}
                     {lastMoveResult.gained_score} 分，当前连击 x{lastMoveResult.combo}，
                     总分 {lastMoveResult.score}。
                   </div>
@@ -802,10 +781,7 @@ export function HexBlitzPlayStage() {
 
           <div className="mt-5 flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm leading-7 text-slate-300">
             <AlertCircle className="mt-1 h-4 w-4 flex-shrink-0 text-amber-300" />
-            <div>
-              当前多人版已经进一步升级为“客户端发送操作，服务端维护棋盘和分数”。房间状态、
-              棋盘状态、得分变化和战报都由服务端统一裁定与广播。
-            </div>
+            <div>房间里的进度、分数和战报会随着对局实时更新。</div>
           </div>
         </CardContent>
       </Card>

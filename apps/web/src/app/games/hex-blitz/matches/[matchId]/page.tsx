@@ -58,7 +58,7 @@ export default function HexBlitzReplayPage() {
           className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          返回 Hex Blitz 实验室
+          返回 Hex Blitz
         </Link>
 
         <div className="mt-6 mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -194,7 +194,7 @@ export default function HexBlitzReplayPage() {
                             <div className="mt-2 text-lg font-semibold text-white">
                               {selectedFrame?.event
                                 ? `点击 ${selectedFrame.event.tile_id}，清除 ${selectedFrame.event.cleared_count} 格`
-                                : '服务端按 seed 生成的初始棋盘'}
+                                : '本局初始棋盘'}
                             </div>
                             <div className="mt-2 text-sm text-slate-400">
                               {selectedFrame?.board.message}

@@ -31,8 +31,8 @@ export default function GameDetailPage({
     game.slug === 'dou-dizhu'
       ? '进入涂油大厅'
       : game.status === 'playable'
-        ? '进入可玩原型'
-        : '进入阶段页面';
+        ? '直接开玩'
+        : '查看内容';
 
   return (
     <main className="min-h-screen bg-[#07131b] pb-20 pt-24 text-white">
@@ -42,7 +42,7 @@ export default function GameDetailPage({
           className="inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          返回 Games Hub
+          返回游戏中心
         </Link>
 
         <div
@@ -85,7 +85,7 @@ export default function GameDetailPage({
                       variant="outline"
                       className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
                     >
-                      <Link href="/games">查看其他游戏规划</Link>
+                      <Link href="/games">查看其他游戏</Link>
                     </Button>
                   </>
                 ) : (
@@ -166,7 +166,7 @@ export default function GameDetailPage({
 
         <Card className="border-white/10 bg-white/[0.04] text-white">
           <CardContent className="p-7">
-            <h2 className="text-2xl font-black tracking-tight">为什么先做它</h2>
+            <h2 className="text-2xl font-black tracking-tight">适合谁玩</h2>
             <div className="mt-5 space-y-3">
               {game.fitForJD.map((item) => (
                 <div
@@ -182,7 +182,7 @@ export default function GameDetailPage({
 
         <Card className="border-white/10 bg-white/[0.04] text-white">
           <CardContent className="p-7">
-            <h2 className="text-2xl font-black tracking-tight">当前实现重点</h2>
+            <h2 className="text-2xl font-black tracking-tight">亮点</h2>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               {game.highlights.map((item) => (
                 <div
@@ -198,7 +198,7 @@ export default function GameDetailPage({
 
         <Card className="border-white/10 bg-white/[0.04] text-white">
           <CardContent className="p-7">
-            <h2 className="text-2xl font-black tracking-tight">开发路线</h2>
+            <h2 className="text-2xl font-black tracking-tight">更多看点</h2>
             <div className="mt-5 space-y-3">
               {game.roadmap.map((item) => (
                 <div

@@ -329,7 +329,7 @@ export function HexBlitzPrototype({
       setHoveredTileId(null);
       setChainExpiresAt(null);
       setTimeLeftMs(remoteEndAtMs ? Math.max(0, remoteEndAtMs - Date.now()) : GAME_DURATION_MS);
-      setMessage(roomInfoText || '房间对局已开始，正在等待服务端棋盘状态。');
+      setMessage(roomInfoText || '房间对局已开始，正在等待棋盘同步。');
       setRunSeed((current) => current + 1);
       return;
     }
@@ -372,7 +372,7 @@ export function HexBlitzPrototype({
     setCombo(boardState.combo);
     setBestCombo(boardState.best_combo);
     setMoves(boardState.moves);
-    setMessage(boardState.message || roomInfoText || '服务端棋盘已同步。');
+    setMessage(boardState.message || roomInfoText || '棋盘已同步。');
     if (boardState.phase === 'running') {
       setPhase('running');
     } else if (boardState.phase === 'finished') {
@@ -678,33 +678,33 @@ export function HexBlitzPrototype({
         <Card className="border-white/10 bg-white/[0.04] text-white">
           <CardContent className="p-6">
             <div className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">
-              Phase 2
+              More
             </div>
             <h3 className="text-xl font-semibold">房间和同步</h3>
             <p className="mt-3 text-sm leading-7 text-slate-300">
-              下一阶段会把这个得分循环接成 2-4 人房间模式，服务端统一发题、统一计时、统一结算。
+              后续会开放 2-4 人同场对局，让冲分节奏更热闹。
             </p>
           </CardContent>
         </Card>
         <Card className="border-white/10 bg-white/[0.04] text-white">
           <CardContent className="p-6">
             <div className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">
-              Phase 3
+              More
             </div>
             <h3 className="text-xl font-semibold">排行榜和战报</h3>
             <p className="mt-3 text-sm leading-7 text-slate-300">
-              结算结果会落 PostgreSQL，生成日榜、周榜，并可以一键分享本局战绩到社区帖子。
+              打完以后会更方便地回看成绩，也能和其他玩家比一比。
             </p>
           </CardContent>
         </Card>
         <Card className="border-white/10 bg-white/[0.04] text-white">
           <CardContent className="p-6">
             <div className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">
-              Phase 4
+              More
             </div>
-            <h3 className="text-xl font-semibold">面试可讲的工程化</h3>
+            <h3 className="text-xl font-semibold">更多玩法空间</h3>
             <p className="mt-3 text-sm leading-7 text-slate-300">
-              补日志、指标、压测和断线恢复后，这条线就可以完整覆盖“设计、开发、优化、稳定性”。
+              后面还能继续补更多模式、活动和不同节奏的挑战。
             </p>
           </CardContent>
         </Card>

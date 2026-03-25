@@ -20,45 +20,44 @@ export default function GamesPage() {
         <div className="relative container mx-auto px-4 py-16 md:py-24">
           <div className="max-w-4xl">
             <Badge className="border-white/15 bg-white/8 text-white">
-              阶段一已启动
+              游戏中心
             </Badge>
             <h1 className="mt-6 max-w-3xl text-4xl font-black tracking-tight text-white md:text-6xl">
-              Games Hub
+              游戏中心
               <span className="block bg-[linear-gradient(90deg,#ffd572_0%,#7ce6ff_100%)] bg-clip-text text-transparent">
-                把社区扩展成一个休闲游戏实验场
+                随时开一局
               </span>
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-              这不是把旧商城模型捡回来，而是基于现有的用户、社区、WebSocket
-              和排行榜能力，先做一个能真正玩的网页休闲游戏中心，再逐步扩成多人实时产品。
+              这里放的是可以直接进入的休闲玩法。短局、轻竞技、牌桌和冲分都可以从这里开始。
             </p>
 
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
-                <div className="mb-2 text-sm text-slate-400">当前阶段</div>
+                <div className="mb-2 text-sm text-slate-400">现在能玩</div>
                 <div className="text-xl font-semibold text-white">
-                  Phase 1
+                  多款短局
                 </div>
                 <div className="mt-2 text-sm leading-6 text-slate-300">
-                  游戏中心、详情页、单机原型先落地，保证能演示、能试玩、能继续长。
+                  直接进入大厅或开一局，少解释，先上手。
                 </div>
               </div>
               <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
-                <div className="mb-2 text-sm text-slate-400">核心方向</div>
+                <div className="mb-2 text-sm text-slate-400">整体风格</div>
                 <div className="text-xl font-semibold text-white">
                   休闲竞技
                 </div>
                 <div className="mt-2 text-sm leading-6 text-slate-300">
-                  先做短回合高反馈玩法，后续再接房间、同步、结算和周榜。
+                  短回合、高反馈、开局快，适合随时玩。
                 </div>
               </div>
               <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur-sm">
-                <div className="mb-2 text-sm text-slate-400">和 JD 的关系</div>
+                <div className="mb-2 text-sm text-slate-400">适合场景</div>
                 <div className="text-xl font-semibold text-white">
-                  可讲服务端
+                  随时开玩
                 </div>
                 <div className="mt-2 text-sm leading-6 text-slate-300">
-                  不只是页面原型，而是天然能延伸到游戏房间、性能优化和稳定性。
+                  一个人能玩，朋友来了也能一起开桌。
                 </div>
               </div>
             </div>
@@ -69,7 +68,7 @@ export default function GamesPage() {
                 className="border-0 bg-[linear-gradient(135deg,#ff8a3d_0%,#34d2ff_100%)] text-slate-950 hover:brightness-110"
               >
                 <Link href="/games/hex-blitz/play">
-                  直接试玩第一款
+                  直接开玩
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
@@ -78,7 +77,7 @@ export default function GamesPage() {
                 variant="outline"
                 className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
               >
-                <Link href="/games/hex-blitz">查看产品定义</Link>
+                <Link href="/games/hex-blitz">查看详情</Link>
               </Button>
             </div>
           </div>
@@ -89,10 +88,10 @@ export default function GamesPage() {
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Featured Build
+              Featured
             </p>
             <h2 className="mt-2 text-3xl font-black tracking-tight text-white">
-              第一款真游戏
+              本周主打
             </h2>
           </div>
           <Link
@@ -110,7 +109,7 @@ export default function GamesPage() {
         <div className="mb-6 flex items-center gap-3">
           <Sparkles className="h-5 w-5 text-sky-300" />
           <h2 className="text-2xl font-black tracking-tight text-white">
-            游戏池规划
+            全部游戏
           </h2>
         </div>
         <div className="grid gap-6 lg:grid-cols-2">
@@ -126,15 +125,15 @@ export default function GamesPage() {
             <div className="mb-5 flex items-center gap-3">
               <TowerControl className="h-5 w-5 text-amber-300" />
               <h3 className="text-xl font-semibold text-white">
-                接下来怎么分阶段做
+                最近更新
               </h3>
             </div>
             <div className="space-y-3">
               {[
-                'Phase 1：Games Hub、Hex Blitz 详情页、单机可玩原型。',
-                'Phase 2：Go 房间服务、准备态、比赛开始、实时同步。',
-                'Phase 3：结算落库、排行榜、分享战报到社区。',
-                'Phase 4：压测、日志、指标、断线恢复和后台观测。',
+                '游戏中心已经可以直接进入多种玩法。',
+                '涂油斗地主支持人机热身和三人牌局。',
+                '最近对局和战报会继续补得更完整。',
+                '后续还会陆续加入新的轻竞技内容。',
               ].map((item) => (
                 <div
                   key={item}
@@ -150,20 +149,18 @@ export default function GamesPage() {
             <div className="mb-5 flex items-center gap-3">
               <Trophy className="h-5 w-5 text-sky-300" />
               <h3 className="text-xl font-semibold text-white">
-                这套方案为什么适合面试
+                为什么值得玩
               </h3>
             </div>
             <div className="space-y-3 text-sm leading-6 text-slate-300">
               <p>
-                它既有产品感，也能自然展开到游戏服务器设计，不会陷在纯页面 Demo
-                或重型棋牌规则里。
+                这里的游戏都偏短局和高反馈，打开就能玩，不需要先读一堆说明。
               </p>
               <p>
-                你后续可以很清楚地讲：为什么先选休闲竞技、为什么先做单机手感验证、为什么服务端用房间
-                + Tick + WebSocket。
+                有的适合一个人冲分，有的适合直接拉朋友开桌，节奏都尽量做得轻快。
               </p>
               <p>
-                对 HR 来说，方向更贴合休闲游戏平台；对面试官来说，技术链路也足够完整。
+                如果你喜欢短回合、即时反馈和一点点胜负感，这里会比纯展示页更有意思。
               </p>
             </div>
           </div>

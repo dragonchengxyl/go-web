@@ -112,7 +112,11 @@ export function GameCard({
               className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
             >
               <Link href={`/games/${game.slug}/play`}>
-                {game.status === 'playable' ? '直接试玩' : '进入实验页'}
+                {game.slug === 'dou-dizhu'
+                  ? '进入大厅'
+                  : game.status === 'playable'
+                    ? '直接开玩'
+                    : '抢先看看'}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>

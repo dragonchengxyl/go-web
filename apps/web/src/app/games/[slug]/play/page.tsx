@@ -7,17 +7,16 @@ import { getGameBySlug } from '@/lib/games';
 
 const playPageConfig = {
   'hex-blitz': {
-    eyebrow: 'Playable Prototype',
-    description:
-      '当前版本先验证休闲手感和分数循环。下一阶段会把这块接成多人房间模式，补 WebSocket 同步、结算落库和排行榜。',
-    badgeLabel: 'Stage 2',
-    badgeText: '房间实验室已接入',
+    eyebrow: 'Arcade Rush',
+    description: '',
+    badgeLabel: 'Now Playing',
+    badgeText: '直接开玩',
   },
   'dou-dizhu': {
-    eyebrow: 'Professional Table',
+    eyebrow: 'Oil Table',
     description: '',
-    badgeLabel: 'Table Upgrade',
-    badgeText: '涂油大厅已开放',
+    badgeLabel: 'Now Playing',
+    badgeText: '直接上桌',
   },
 } as const;
 
