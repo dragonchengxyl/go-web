@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -62,7 +61,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -841,6 +839,54 @@ export function DouDizhuPlayStage({
     () => evaluateSelectedCombo(selectedHandCards),
     [selectedHandCards],
   );
+  const latestSeatActions = useMemo(() => {
+    const bySeat = new Map<
+      number,
+      { cards: DoudizhuCard[]; label: string }
+    >();
+    const actions = (activeRoom?.recent_actions ?? []).slice().reverse();
+
+    for (const action of actions) {
+      if (bySeat.has(action.seat)) {
+        continue;
+      }
+      if (
+        action.action_type === "play_cards" ||
+        action.action_type === "auto_play_cards" ||
+        action.action_type === "timeout_auto_play"
+      ) {
+        bySeat.set(action.seat, {
+          cards: action.cards ?? [],
+          label: action.message ?? actionTypeLabel(action.action_type),
+        });
+        continue;
+      }
+      if (
+        action.action_type === "pass_turn" ||
+        action.action_type === "auto_pass_turn"
+      ) {
+        bySeat.set(action.seat, {
+          cards: [],
+          label: action.message ?? actionTypeLabel(action.action_type),
+        });
+      }
+    }
+
+    return bySeat;
+  }, [activeRoom]);
+  const latestPlaySeatAction =
+    activeRoom?.last_play_seat !== undefined
+      ? latestSeatActions.get(activeRoom.last_play_seat)
+      : null;
+  const leftSeatRecent = boardSeats.left
+    ? latestSeatActions.get(boardSeats.left.seat)
+    : undefined;
+  const rightSeatRecent = boardSeats.right
+    ? latestSeatActions.get(boardSeats.right.seat)
+    : undefined;
+  const bottomSeatRecent = boardSeats.bottom
+    ? latestSeatActions.get(boardSeats.bottom.seat)
+    : undefined;
 
   useEffect(() => {
     if (!activeRoom || activeRoom.status !== "settlement") {
@@ -1043,30 +1089,27 @@ export function DouDizhuPlayStage({
                       </Button>
                     </div>
                   </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { label: "最高叫分", value: String(activeRoom.highest_bid) },
-                      { label: "当前倍率", value: `x${activeRoom.multiplier}` },
-                      { label: "我的角色", value: roleLabel(privateState?.role) },
-                      { label: "剩余手牌", value: String(currentHand.length) },
-                      {
-                        label: "当前连线",
-                        value: connectionStatusLabel(wsStatus),
-                      },
-                    ].map((item) => (
-                      <div
-                        key={item.label}
-                        className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white"
-                      >
-                        <span className="mr-2 text-white/45">{item.label}</span>
-                        <span className="font-semibold">{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: "最高叫分", value: String(activeRoom.highest_bid) },
+                        { label: "当前倍率", value: `x${activeRoom.multiplier}` },
+                        { label: "我的角色", value: roleLabel(privateState?.role) },
+                        { label: "剩余手牌", value: String(currentHand.length) },
+                        {
+                          label: "当前连线",
+                          value: connectionStatusLabel(wsStatus),
+                        },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white"
+                        >
+                          <span className="mr-2 text-white/45">{item.label}</span>
+                          <span className="font-semibold">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
                   <Dialog open={infoDialogOpen} onOpenChange={setInfoDialogOpen}>
                     <DialogTrigger asChild>
                       <Button
@@ -1081,9 +1124,6 @@ export function DouDizhuPlayStage({
                         <DialogTitle className="text-2xl font-black tracking-tight text-white">
                           牌局信息
                         </DialogTitle>
-                        <DialogDescription className="text-sm leading-6 text-slate-400">
-                          倍率细节和最近操作默认收起，避免长期占用桌面空间。
-                        </DialogDescription>
                       </DialogHeader>
 
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1200,6 +1240,7 @@ export function DouDizhuPlayStage({
                       </div>
                     </DialogContent>
                   </Dialog>
+                  </div>
                 </div>
 
                 <div className="relative overflow-hidden rounded-[38px] border border-white/10 bg-[linear-gradient(180deg,#0a3528_0%,#082119_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_30px_90px_-40px_rgba(0,0,0,0.85)]">
@@ -1224,6 +1265,8 @@ export function DouDizhuPlayStage({
                         isMe={
                           !!boardSeats.left && me?.seat === boardSeats.left.seat
                         }
+                        recentCards={leftSeatRecent?.cards}
+                        recentLabel={leftSeatRecent?.label}
                       />
                       <DoudizhuSeat
                         player={boardSeats.right}
@@ -1244,6 +1287,8 @@ export function DouDizhuPlayStage({
                           !!boardSeats.right &&
                           me?.seat === boardSeats.right.seat
                         }
+                        recentCards={rightSeatRecent?.cards}
+                        recentLabel={rightSeatRecent?.label}
                       />
                     </div>
 
@@ -1269,6 +1314,8 @@ export function DouDizhuPlayStage({
                               !!boardSeats.left &&
                               me?.seat === boardSeats.left.seat
                             }
+                            recentCards={leftSeatRecent?.cards}
+                            recentLabel={leftSeatRecent?.label}
                           />
                         </div>
                         <div className="absolute right-0 top-4 w-[285px]">
@@ -1292,13 +1339,15 @@ export function DouDizhuPlayStage({
                               !!boardSeats.right &&
                               me?.seat === boardSeats.right.seat
                             }
+                            recentCards={rightSeatRecent?.cards}
+                            recentLabel={rightSeatRecent?.label}
                           />
                         </div>
                       </div>
 
                       <div
                         className={cn(
-                          "mx-auto flex max-w-[500px] flex-col items-center gap-5 rounded-[34px] border border-white/10 bg-[linear-gradient(180deg,rgba(0,0,0,0.26),rgba(255,255,255,0.05))] px-5 py-6 text-center shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)] transition-all duration-300",
+                          "mx-auto flex max-w-[440px] flex-col items-center gap-4 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(0,0,0,0.22),rgba(255,255,255,0.04))] px-4 py-4 text-center shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)] transition-all duration-300",
                           tableEffect === "play"
                             ? "scale-[1.01] border-emerald-300/30 shadow-[0_24px_90px_-34px_rgba(16,185,129,0.45)]"
                             : "",
@@ -1313,52 +1362,54 @@ export function DouDizhuPlayStage({
                             : "",
                         )}
                       >
-                        <div className="grid w-full gap-3 sm:grid-cols-3">
-                          <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                            <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
-                              当前阶段
-                            </div>
-                            <div className="mt-2 text-xl font-black tracking-tight text-white">
-                              {roomStatusLabel(activeRoom.status)}
-                            </div>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                            <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
-                              当前目标
-                            </div>
-                            <div className="mt-2 text-xl font-black tracking-tight text-white">
-                              {activeRoom.status === "bidding"
-                                ? seatLabel(activeRoom.current_bidder)
-                                : seatLabel(activeRoom.current_turn)}
-                            </div>
-                          </div>
-                          <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                            <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
-                              当前计时
-                            </div>
-                            <div className="mt-2 text-xl font-black tracking-tight text-white">
-                              {formatRemaining(
+                        <div className="flex w-full flex-wrap justify-center gap-2">
+                          {[
+                            {
+                              label: roomStatusLabel(activeRoom.status),
+                              value: "当前阶段",
+                            },
+                            {
+                              label:
+                                activeRoom.status === "bidding"
+                                  ? seatLabel(activeRoom.current_bidder)
+                                  : seatLabel(activeRoom.current_turn),
+                              value: "当前目标",
+                            },
+                            {
+                              label: formatRemaining(
                                 privateState?.turn_expires_at ??
                                   activeRoom.turn_expires_at,
                                 timeTick,
-                              )}
+                              ),
+                              value: "当前计时",
+                            },
+                          ].map((item) => (
+                            <div
+                              key={item.value}
+                              className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-white"
+                            >
+                              <span className="mr-2 text-white/45">{item.value}</span>
+                              <span className="font-semibold">{item.label}</span>
                             </div>
-                          </div>
+                          ))}
                         </div>
 
-                        <div className="w-full rounded-[28px] border border-white/10 bg-black/20 px-4 py-5">
-                          <div className="text-xs uppercase tracking-[0.28em] text-emerald-100/45">
-                            中心牌桌
+                        {!activeRoom.last_play && !activeRoom.last_play_cards?.length ? (
+                          <div className="text-sm text-emerald-50/75">
+                            等待首家出牌
                           </div>
+                        ) : null}
+
+                        <div className="w-full space-y-4">
                           {notice ? (
-                            <div className="mt-3 text-sm leading-7 text-emerald-50/75">
+                            <div className="text-sm leading-6 text-emerald-50/75">
                               {notice}
                             </div>
                           ) : null}
 
                           {(privateState?.bottom_cards?.length ||
                             activeRoom.bottom_cards?.length) && (
-                            <div className="mt-4">
+                            <div>
                               <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
                                 地主底牌
                               </div>
@@ -1377,46 +1428,50 @@ export function DouDizhuPlayStage({
                             </div>
                           )}
 
-                          <div className="mt-5 rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4">
-                            <div className="text-xs uppercase tracking-[0.24em] text-emerald-100/45">
-                              上一手
-                            </div>
-                            <div className="mt-2 text-lg font-semibold text-white">
-                              {comboLabel(
-                                privateState?.last_play ?? activeRoom.last_play,
-                              )}
-                            </div>
-                            <div className="mt-2 text-sm text-emerald-50/65">
-                              {privateState?.last_play_seat !== undefined ||
-                              activeRoom.last_play_seat !== undefined
-                                ? `上一手来自 ${seatLabel(
-                                    privateState?.last_play_seat ??
-                                      activeRoom.last_play_seat,
-                                  )}`
-                                : "等待首家出牌"}
-                            </div>
-                            {activeRoom.last_play_cards?.length ? (
-                              <div className="mt-4 flex flex-wrap justify-center gap-3">
-                                {activeRoom.last_play_cards.map(
-                                  (card, index) => (
-                                    <div
-                                      key={`${cardKey(card)}-${index}`}
-                                      className={cn(
-                                        "transition-all",
-                                        tableEffect === "play" ||
-                                          tableEffect === "bomb"
-                                          ? "translate-y-0 scale-100"
-                                          : "",
-                                      )}
-                                    >
-                                      <DoudizhuDisplayCard card={card} />
-                                    </div>
-                                  ),
-                                )}
+                          {(activeRoom.last_play ||
+                            activeRoom.last_play_cards?.length ||
+                            latestPlaySeatAction?.label) && (
+                            <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-4">
+                              <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-emerald-50/75">
+                                <span>上一手</span>
+                                {activeRoom.last_play_seat !== undefined ? (
+                                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-white">
+                                    {seatLabel(activeRoom.last_play_seat)}
+                                  </span>
+                                ) : null}
+                                {activeRoom.last_play ? (
+                                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-white">
+                                    {comboLabel(activeRoom.last_play)}
+                                  </span>
+                                ) : null}
                               </div>
-                            ) : null}
+                              {activeRoom.last_play_cards?.length ? (
+                                <div className="mt-3 flex flex-wrap justify-center gap-3">
+                                  {activeRoom.last_play_cards.map(
+                                    (card, index) => (
+                                      <div
+                                        key={`${cardKey(card)}-${index}`}
+                                        className={cn(
+                                          "transition-all",
+                                          tableEffect === "play" ||
+                                            tableEffect === "bomb"
+                                            ? "translate-y-0 scale-100"
+                                            : "",
+                                        )}
+                                      >
+                                        <DoudizhuDisplayCard card={card} />
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              ) : latestPlaySeatAction?.label ? (
+                                <div className="mt-3 text-sm text-emerald-50/75">
+                                  {latestPlaySeatAction.label}
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
                           </div>
-                        </div>
 
                         {latestAction && (
                           <div className="w-full rounded-2xl border border-sky-300/15 bg-sky-300/10 px-4 py-3 text-sm text-sky-50">
@@ -1477,6 +1532,8 @@ export function DouDizhuPlayStage({
                             !!boardSeats.bottom &&
                             me?.seat === boardSeats.bottom.seat
                           }
+                          recentCards={bottomSeatRecent?.cards}
+                          recentLabel={bottomSeatRecent?.label}
                         />
                       </div>
                     </div>
@@ -1530,10 +1587,10 @@ export function DouDizhuPlayStage({
 
                   {privateState && (
                     <>
-                      <div className="overflow-x-auto pb-4">
+                      <div className="overflow-x-auto overflow-y-visible px-2 pb-5 pt-4">
                         <div
                           className={cn(
-                            "flex min-w-max items-end pr-6",
+                            "flex min-w-max items-end pr-8",
                             useStackedHand ? "gap-0" : "gap-3",
                           )}
                         >
@@ -1551,6 +1608,7 @@ export function DouDizhuPlayStage({
                                       ? ""
                                       : handOverlapClass
                                     : "",
+                                  selected && useStackedHand ? "mx-2" : "",
                                   selected
                                     ? "z-30"
                                     : "z-10 hover:z-20",

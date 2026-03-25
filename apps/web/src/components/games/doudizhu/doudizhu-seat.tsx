@@ -1,7 +1,8 @@
 "use client";
 
 import { Crown } from "lucide-react";
-import type { DoudizhuRoomPlayer } from "@/lib/api-client";
+import type { DoudizhuCard, DoudizhuRoomPlayer } from "@/lib/api-client";
+import { DoudizhuDisplayCard } from "@/components/games/doudizhu/doudizhu-play-card";
 import { cn } from "@/lib/utils";
 import { seatLabel } from "@/lib/games/doudizhu/presenter";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,8 @@ interface DoudizhuSeatProps {
   isCurrentBidder: boolean;
   isLandlord: boolean;
   isMe: boolean;
+  recentCards?: DoudizhuCard[];
+  recentLabel?: string;
 }
 
 export function DoudizhuSeat({
@@ -22,6 +25,8 @@ export function DoudizhuSeat({
   isCurrentBidder,
   isLandlord,
   isMe,
+  recentCards = [],
+  recentLabel,
 }: DoudizhuSeatProps) {
   if (!player) {
     return null;
@@ -30,7 +35,7 @@ export function DoudizhuSeat({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-[30px] border px-4 py-4 backdrop-blur-md",
+        "relative overflow-hidden rounded-[26px] border px-3 py-3 backdrop-blur-md",
         isMe
           ? "border-amber-300/35 bg-[linear-gradient(180deg,rgba(255,203,120,0.16),rgba(255,203,120,0.06))]"
           : "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.03))]",
@@ -43,7 +48,7 @@ export function DoudizhuSeat({
       <div className="relative flex items-start gap-3">
         <div
           className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-lg font-black",
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-base font-black",
             isLandlord
               ? "border-red-300/30 bg-red-400/15 text-red-50"
               : "border-white/10 bg-black/25 text-white",
@@ -54,7 +59,7 @@ export function DoudizhuSeat({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-lg font-semibold text-white">
+            <span className="truncate text-base font-semibold text-white">
               {player.name}
             </span>
             <Badge className="border-white/15 bg-black/25 text-white">
@@ -88,13 +93,31 @@ export function DoudizhuSeat({
             )}
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
-            <div>剩余 {player.card_count} 张</div>
-            <div>{player.connected ? "在线" : "离线"}</div>
-            <div>{player.auto_play ? "托管中" : "手动操作"}</div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-300">
+            <span>剩余 {player.card_count} 张</span>
+            <span>{player.connected ? "在线" : "离线"}</span>
+            <span>{player.auto_play ? "托管中" : "手动操作"}</span>
           </div>
         </div>
       </div>
+
+      {(recentCards.length > 0 || recentLabel) && (
+        <div className="relative mt-3 rounded-2xl border border-white/10 bg-black/20 px-2 py-2">
+          {recentCards.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {recentCards.map((card, index) => (
+                <DoudizhuDisplayCard
+                  key={`${player.session_id}-${card.rank}-${card.suit}-${index}`}
+                  card={card}
+                  size="mini"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-slate-300">{recentLabel}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
