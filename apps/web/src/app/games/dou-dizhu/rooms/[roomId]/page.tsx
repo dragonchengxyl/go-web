@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft, Maximize2 } from "lucide-react";
+import { DouDizhuPlayStage } from "@/components/games/doudizhu-play-stage";
 import {
-  DouDizhuPlayStage,
+  DOUDIZHU_LOBBY_NAME,
   roomPagePath,
-} from "@/components/games/doudizhu-play-stage";
-import { DOUDIZHU_LOBBY_NAME } from "@/lib/games/doudizhu/presenter";
+} from "@/lib/games/doudizhu/presenter";
 
 export default function DoudizhuRoomPage({
   params,

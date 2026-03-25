@@ -9,6 +9,10 @@ export const DOUDIZHU_PRODUCT_NAME = "涂油斗地主";
 export const DOUDIZHU_LOBBY_NAME = "涂油大厅";
 export const DOUDIZHU_REPLAY_NAME = "涂油斗地主战报";
 
+export function roomPagePath(roomId: string): string {
+  return `/games/dou-dizhu/rooms/${roomId}`;
+}
+
 export function roomStatusLabel(status?: DoudizhuRoomStatus): string {
   switch (status) {
     case "bidding":

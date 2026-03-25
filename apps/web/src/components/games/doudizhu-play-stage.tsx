@@ -49,6 +49,7 @@ import {
   DOUDIZHU_PRODUCT_NAME,
   formatRemaining,
   roleLabel,
+  roomPagePath,
   roomModeLabel,
   roomStatusLabel,
   seatLabel,
@@ -134,10 +135,6 @@ function buildBoardSeats(
     left: seatMap.get((bottom.seat + 1) % 3) ?? null,
     right: seatMap.get((bottom.seat + 2) % 3) ?? null,
   };
-}
-
-export function roomPagePath(roomId: string) {
-  return `/games/dou-dizhu/rooms/${roomId}`;
 }
 
 interface DouDizhuPlayStageProps {
