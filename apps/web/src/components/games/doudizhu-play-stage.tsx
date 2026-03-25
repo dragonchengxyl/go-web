@@ -57,6 +57,14 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -173,6 +181,7 @@ export function DouDizhuPlayStage({
   const [notice, setNotice] = useState("直接开始一局人机热身，或者拉起一桌三人牌局。");
   const [errorMessage, setErrorMessage] = useState("");
   const [timeTick, setTimeTick] = useState(Date.now());
+  const [infoDialogOpen, setInfoDialogOpen] = useState(false);
   const [leaderboard, setLeaderboard] = useState<DoudizhuLeaderboardEntry[]>(
     [],
   );
@@ -815,6 +824,17 @@ export function DouDizhuPlayStage({
   const currentHand = Array.isArray(privateState?.hand)
     ? privateState.hand
     : [];
+  const useStackedHand = currentHand.length >= 11;
+  const handOverlapClass =
+    currentHand.length >= 20
+      ? "-ml-12"
+      : currentHand.length >= 17
+        ? "-ml-10"
+        : currentHand.length >= 14
+          ? "-ml-8"
+          : currentHand.length >= 11
+            ? "-ml-6"
+            : "";
   const selectedComboPreview = useMemo(
     () => evaluateSelectedCombo(selectedHandCards),
     [selectedHandCards],
@@ -874,7 +894,7 @@ export function DouDizhuPlayStage({
                     {activeRoom?.title ?? "正在进入牌桌"}
                   </h2>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
-                    这是独立的涂油牌桌页。大厅、战报和排行榜都退到旁路，当前页面只服务这一局本身。
+                    这是独立的涂油牌桌页。
                   </p>
                 </>
               ) : (
@@ -945,8 +965,7 @@ export function DouDizhuPlayStage({
           )}
 
           {activeRoom && (
-            <div className="mt-8 grid gap-6 xl:grid-cols-[1.14fr_0.86fr]">
-              <div className="space-y-5">
+            <div className="mt-8 space-y-5">
                 <div className="rounded-[30px] border border-amber-300/15 bg-[linear-gradient(135deg,rgba(244,182,63,0.16),rgba(219,90,63,0.08))] p-4 shadow-[0_18px_60px_-40px_rgba(0,0,0,0.7)]">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -1033,6 +1052,163 @@ export function DouDizhuPlayStage({
                       </Button>
                     </div>
                   </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/10 bg-black/20 px-4 py-4">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { label: "最高叫分", value: String(activeRoom.highest_bid) },
+                      { label: "当前倍率", value: `x${activeRoom.multiplier}` },
+                      { label: "我的角色", value: roleLabel(privateState?.role) },
+                      { label: "剩余手牌", value: String(currentHand.length) },
+                      {
+                        label: "当前连线",
+                        value: connectionStatusLabel(wsStatus),
+                      },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-white"
+                      >
+                        <span className="mr-2 text-white/45">{item.label}</span>
+                        <span className="font-semibold">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Dialog open={infoDialogOpen} onOpenChange={setInfoDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="border-white/15 bg-transparent text-white hover:bg-white/8 hover:text-white"
+                      >
+                        查看牌局信息
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl border-white/10 bg-[#081013] text-white">
+                      <DialogHeader>
+                        <DialogTitle className="text-2xl font-black tracking-tight text-white">
+                          牌局信息
+                        </DialogTitle>
+                        <DialogDescription className="text-sm leading-6 text-slate-400">
+                          倍率细节和最近操作默认收起，避免长期占用桌面空间。
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <div className="rounded-[22px] border border-white/10 bg-black/25 p-4">
+                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                            最高叫分
+                          </div>
+                          <div className="mt-2 text-3xl font-black text-white">
+                            {activeRoom.highest_bid}
+                          </div>
+                        </div>
+                        <div className="rounded-[22px] border border-white/10 bg-black/25 p-4">
+                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                            当前倍率
+                          </div>
+                          <div className="mt-2 text-3xl font-black text-white">
+                            x{activeRoom.multiplier}
+                          </div>
+                        </div>
+                        <div className="rounded-[22px] border border-white/10 bg-black/25 p-4">
+                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                            我的角色
+                          </div>
+                          <div className="mt-2 text-3xl font-black text-white">
+                            {roleLabel(privateState?.role)}
+                          </div>
+                        </div>
+                        <div className="rounded-[22px] border border-white/10 bg-black/25 p-4">
+                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                            剩余手牌
+                          </div>
+                          <div className="mt-2 text-3xl font-black text-white">
+                            {currentHand.length}
+                          </div>
+                        </div>
+                        <div className="rounded-[22px] border border-white/10 bg-black/25 p-4">
+                          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                            当前连线
+                          </div>
+                          <div className="mt-2 text-3xl font-black text-white">
+                            {connectionStatusLabel(wsStatus)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                        <div className="mb-3 text-lg font-semibold text-white">
+                          倍率细节
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge className="border-white/15 bg-white/8 text-white">
+                            炸弹 {activeRoom.bomb_count}
+                          </Badge>
+                          {activeRoom.spring && (
+                            <Badge className="border-white/15 bg-white/8 text-white">
+                              春天
+                            </Badge>
+                          )}
+                          {activeRoom.anti_spring && (
+                            <Badge className="border-white/15 bg-white/8 text-white">
+                              反春
+                            </Badge>
+                          )}
+                          {!activeRoom.spring && !activeRoom.anti_spring && (
+                            <Badge className="border-white/15 bg-white/8 text-white">
+                              常规倍率
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                        <div className="mb-3 text-lg font-semibold text-white">
+                          最近操作
+                        </div>
+                        <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                          {(activeRoom.recent_actions ?? []).length === 0 && (
+                            <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-4 py-5 text-sm text-slate-400">
+                              还没有操作记录。
+                            </div>
+                          )}
+                          {(activeRoom.recent_actions ?? [])
+                            .slice()
+                            .reverse()
+                            .map((action, index) => (
+                              <div
+                                key={`${action.at}-${index}`}
+                                className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-300"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div className="font-medium text-white">
+                                    {action.actor_name ?? seatLabel(action.seat)}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {new Date(action.at).toLocaleTimeString("zh-CN")}
+                                  </div>
+                                </div>
+                                <div className="mt-1">
+                                  {action.message ??
+                                    actionTypeLabel(action.action_type)}
+                                </div>
+                                {action.cards?.length ? (
+                                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
+                                    {action.cards.map((card, index) => (
+                                      <span key={`${cardKey(card)}-${index}`}>
+                                        {cardLabel(card)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
                 <div className="relative overflow-hidden rounded-[38px] border border-white/10 bg-[linear-gradient(180deg,#0a3528_0%,#082119_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_30px_90px_-40px_rgba(0,0,0,0.85)]">
@@ -1364,29 +1540,51 @@ export function DouDizhuPlayStage({
                   {privateState && (
                     <>
                       <div className="overflow-x-auto pb-4">
-                        <div className="flex min-w-max items-end gap-3 pr-2">
-                          {currentHand.map((card) => {
+                        <div
+                          className={cn(
+                            "flex min-w-max items-end pr-6",
+                            useStackedHand ? "gap-0" : "gap-3",
+                          )}
+                        >
+                          {currentHand.map((card, index) => {
                             const selected = selectedCards.includes(
                               cardKey(card),
                             );
                             return (
-                              <DoudizhuPlayCard
+                              <div
                                 key={cardKey(card)}
-                                card={card}
-                                selected={selected}
-                                invalid={selected && !!selectionError}
-                                pulse={selected && tableEffect === "error"}
-                                onClick={() => {
-                                  setSelectionError("");
-                                  setSelectedCards((current) =>
-                                    current.includes(cardKey(card))
-                                      ? current.filter(
-                                          (item) => item !== cardKey(card),
-                                        )
-                                      : [...current, cardKey(card)],
-                                  );
-                                }}
-                              />
+                                className={cn(
+                                  "shrink-0 transition-all duration-200",
+                                  useStackedHand && currentHand.length > 1
+                                    ? index === 0
+                                      ? ""
+                                      : handOverlapClass
+                                    : "",
+                                  selected
+                                    ? "z-30"
+                                    : "z-10 hover:z-20",
+                                  useStackedHand && currentHand.length >= 17
+                                    ? "scale-[0.96] origin-bottom"
+                                    : "",
+                                )}
+                              >
+                                <DoudizhuPlayCard
+                                  card={card}
+                                  selected={selected}
+                                  invalid={selected && !!selectionError}
+                                  pulse={selected && tableEffect === "error"}
+                                  onClick={() => {
+                                    setSelectionError("");
+                                    setSelectedCards((current) =>
+                                      current.includes(cardKey(card))
+                                        ? current.filter(
+                                            (item) => item !== cardKey(card),
+                                          )
+                                        : [...current, cardKey(card)],
+                                    );
+                                  }}
+                                />
+                              </div>
                             );
                           })}
                         </div>
@@ -1485,122 +1683,6 @@ export function DouDizhuPlayStage({
                     </>
                   )}
                 </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-                  <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
-                    <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                      最高叫分
-                    </div>
-                    <div className="mt-2 text-3xl font-black tracking-tight text-white">
-                      {activeRoom.highest_bid}
-                    </div>
-                  </div>
-                  <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
-                    <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                      当前倍率
-                    </div>
-                    <div className="mt-2 text-3xl font-black tracking-tight text-white">
-                      x{activeRoom.multiplier}
-                    </div>
-                  </div>
-                  <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
-                    <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                      我的角色
-                    </div>
-                    <div className="mt-2 text-3xl font-black tracking-tight text-white">
-                      {roleLabel(privateState?.role)}
-                    </div>
-                  </div>
-                  <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
-                    <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                      剩余手牌
-                    </div>
-                    <div className="mt-2 text-3xl font-black tracking-tight text-white">
-                      {currentHand.length}
-                    </div>
-                  </div>
-                  <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
-                    <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                      当前连线
-                    </div>
-                    <div className="mt-2 text-3xl font-black tracking-tight text-white">
-                      {connectionStatusLabel(wsStatus)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[30px] border border-white/10 bg-black/20 p-5">
-                  <div className="mb-3 text-lg font-semibold text-white">
-                    倍率细节
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className="border-white/15 bg-white/8 text-white">
-                      炸弹 {activeRoom.bomb_count}
-                    </Badge>
-                    {activeRoom.spring && (
-                      <Badge className="border-white/15 bg-white/8 text-white">
-                        春天
-                      </Badge>
-                    )}
-                    {activeRoom.anti_spring && (
-                      <Badge className="border-white/15 bg-white/8 text-white">
-                        反春
-                      </Badge>
-                    )}
-                    {!activeRoom.spring && !activeRoom.anti_spring && (
-                      <Badge className="border-white/15 bg-white/8 text-white">
-                        常规倍率
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-[30px] border border-white/10 bg-black/20 p-5">
-                  <div className="mb-3 text-lg font-semibold text-white">
-                    最近操作
-                  </div>
-                  <div className="space-y-2">
-                    {(activeRoom.recent_actions ?? []).length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-4 py-5 text-sm text-slate-400">
-                        还没有操作记录。
-                      </div>
-                    )}
-                    {(activeRoom.recent_actions ?? [])
-                      .slice()
-                      .reverse()
-                      .map((action, index) => (
-                        <div
-                          key={`${action.at}-${index}`}
-                          className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-300"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="font-medium text-white">
-                              {action.actor_name ?? seatLabel(action.seat)}
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              {new Date(action.at).toLocaleTimeString("zh-CN")}
-                            </div>
-                          </div>
-                          <div className="mt-1">
-                            {action.message ??
-                              actionTypeLabel(action.action_type)}
-                          </div>
-                          {action.cards?.length ? (
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
-                              {action.cards.map((card, index) => (
-                                <span key={`${cardKey(card)}-${index}`}>
-                                  {cardLabel(card)}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
