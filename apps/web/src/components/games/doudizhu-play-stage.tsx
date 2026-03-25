@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft,
   Bot,
   Crown,
   DoorOpen,
@@ -33,7 +32,10 @@ import {
   DoudizhuMatchLinkCard,
 } from "@/components/games/doudizhu/doudizhu-history-panel";
 import { DoudizhuLobbyPanel } from "@/components/games/doudizhu/doudizhu-lobby-panel";
-import { DoudizhuPlayCard } from "@/components/games/doudizhu/doudizhu-play-card";
+import {
+  DoudizhuDisplayCard,
+  DoudizhuPlayCard,
+} from "@/components/games/doudizhu/doudizhu-play-card";
 import { DoudizhuSeat } from "@/components/games/doudizhu/doudizhu-seat";
 import { cn } from "@/lib/utils";
 import { cardKey, cardLabel } from "@/lib/games/doudizhu/cards";
@@ -883,19 +885,9 @@ export function DouDizhuPlayStage({
             <div>
               {immersive ? (
                 <>
-                  <Link
-                    href="/games/dou-dizhu/play"
-                    className="inline-flex items-center gap-2 text-sm text-emerald-50/70 transition-colors hover:text-white"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    返回{DOUDIZHU_LOBBY_NAME}
-                  </Link>
-                  <h2 className="mt-4 text-3xl font-black tracking-tight text-white md:text-4xl">
+                  <h2 className="text-3xl font-black tracking-tight text-white md:text-4xl">
                     {activeRoom?.title ?? "正在进入牌桌"}
                   </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
-                    这是独立的涂油牌桌页。
-                  </p>
                 </>
               ) : (
                 <>
@@ -905,9 +897,6 @@ export function DouDizhuPlayStage({
                   <h2 className="mt-3 text-3xl font-black tracking-tight text-white md:text-5xl">
                     {DOUDIZHU_PRODUCT_NAME}
                   </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/75 md:text-base">
-                    这里先把牌桌体验立住。你可以直接开一把人机热身，也可以创建三人牌局，把叫分、出牌和结算完整走一遍。
-                  </p>
                 </>
               )}
             </div>
@@ -989,9 +978,11 @@ export function DouDizhuPlayStage({
                       <div className="mt-3 text-2xl font-black tracking-tight text-white">
                         {activeRoom.title}
                       </div>
-                      <div className="mt-2 text-sm leading-7 text-amber-50/80">
-                        {notice}
-                      </div>
+                      {notice ? (
+                        <div className="mt-2 text-sm leading-7 text-amber-50/80">
+                          {notice}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -1359,9 +1350,11 @@ export function DouDizhuPlayStage({
                           <div className="text-xs uppercase tracking-[0.28em] text-emerald-100/45">
                             中心牌桌
                           </div>
-                          <div className="mt-3 text-sm leading-7 text-emerald-50/75">
-                            {notice}
-                          </div>
+                          {notice ? (
+                            <div className="mt-3 text-sm leading-7 text-emerald-50/75">
+                              {notice}
+                            </div>
+                          ) : null}
 
                           {(privateState?.bottom_cards?.length ||
                             activeRoom.bottom_cards?.length) && (
@@ -1369,18 +1362,16 @@ export function DouDizhuPlayStage({
                               <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
                                 地主底牌
                               </div>
-                              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                              <div className="mt-3 flex flex-wrap justify-center gap-3">
                                 {(
                                   privateState?.bottom_cards ??
                                   activeRoom.bottom_cards ??
                                   []
                                 ).map((card, index) => (
-                                  <div
+                                  <DoudizhuDisplayCard
                                     key={`${cardKey(card)}-${index}`}
-                                    className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white"
-                                  >
-                                    {cardLabel(card)}
-                                  </div>
+                                    card={card}
+                                  />
                                 ))}
                               </div>
                             </div>
@@ -1405,20 +1396,20 @@ export function DouDizhuPlayStage({
                                 : "等待首家出牌"}
                             </div>
                             {activeRoom.last_play_cards?.length ? (
-                              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                              <div className="mt-4 flex flex-wrap justify-center gap-3">
                                 {activeRoom.last_play_cards.map(
                                   (card, index) => (
                                     <div
                                       key={`${cardKey(card)}-${index}`}
                                       className={cn(
-                                        "rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-white transition-all",
+                                        "transition-all",
                                         tableEffect === "play" ||
                                           tableEffect === "bomb"
                                           ? "translate-y-0 scale-100"
                                           : "",
                                       )}
                                     >
-                                      {cardLabel(card)}
+                                      <DoudizhuDisplayCard card={card} />
                                     </div>
                                   ),
                                 )}
@@ -1767,18 +1758,15 @@ export function DouDizhuPlayStage({
 
               <Card className="border-white/10 bg-white/[0.04] text-white">
                 <CardContent className="p-6">
-                  <div className="mb-5 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <Users2 className="h-5 w-5 text-sky-300" />
-                      <div>
-                        <h3 className="text-2xl font-black tracking-tight text-white">
-                          牌桌列表
-                        </h3>
-                        <p className="mt-1 text-sm text-slate-400">
-                          想直接加入正在开放中的牌局，这里就是入口。
-                        </p>
-                      </div>
-                    </div>
+                      <div className="mb-5 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <Users2 className="h-5 w-5 text-sky-300" />
+                          <div>
+                            <h3 className="text-2xl font-black tracking-tight text-white">
+                              牌桌列表
+                            </h3>
+                          </div>
+                        </div>
                     <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-2 text-sm text-slate-300">
                       {roomsLoading ? (
                         <Loader2 className="h-4 w-4 animate-spin text-sky-300" />

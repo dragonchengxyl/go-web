@@ -95,25 +95,6 @@ export function DoudizhuSeat({
           </div>
         </div>
       </div>
-
-      <div className="relative mt-4 flex flex-wrap gap-2">
-        {/* 涂油斗地主牌背暗纹素材位置 */}
-        {Array.from({
-          length: Math.min(player.card_count, position === "bottom" ? 10 : 8),
-        }).map((_, index) => (
-          <div
-            key={`${player.session_id}-${index}`}
-            className={cn(
-              "rounded-xl border px-2 py-1 text-xs font-medium shadow-[0_14px_28px_-20px_rgba(0,0,0,0.8)]",
-              position === "bottom"
-                ? "border-white/10 bg-[linear-gradient(180deg,rgba(18,48,32,0.92),rgba(8,24,16,0.95))] text-amber-100"
-                : "border-white/10 bg-[linear-gradient(180deg,rgba(22,44,34,0.88),rgba(6,18,14,0.95))] text-amber-100/85",
-            )}
-          >
-            油背
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

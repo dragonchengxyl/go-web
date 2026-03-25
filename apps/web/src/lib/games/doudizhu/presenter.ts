@@ -119,8 +119,6 @@ export function buildRoomNotice(room: DoudizhuRoom): string {
     case "redeal":
       return "这一轮没人抢下地主，马上重新发牌。";
     default:
-      return room.match_mode === "demo_ai"
-        ? "这是人机热身房，准备之后就能直接开局。"
-        : "这是三人联机牌桌，凑齐三位牌手并全部准备后即可开局。";
+      return "";
   }
 }

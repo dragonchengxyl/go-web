@@ -15,8 +15,7 @@ const playPageConfig = {
   },
   'dou-dizhu': {
     eyebrow: 'Professional Table',
-    description:
-      '这里是涂油斗地主的正式大厅。你可以直接开始一局人机热身，也可以创建三人牌局，最近战报和排行榜会直接跟着这条产品线走。',
+    description: '',
     badgeLabel: 'Table Upgrade',
     badgeText: '涂油大厅已开放',
   },
@@ -60,9 +59,11 @@ export default function GamePlayPage({
                 {game.subtitle}
               </span>
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
-              {pageConfig.description}
-            </p>
+            {pageConfig.description ? (
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+                {pageConfig.description}
+              </p>
+            ) : null}
           </div>
           <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
             <span className="mr-2 inline-flex items-center gap-1 text-amber-300">
