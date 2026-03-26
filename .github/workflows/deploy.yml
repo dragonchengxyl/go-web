@@ -1,6 +1,9 @@
 name: Deploy to Server
 
 on:
+  workflow_run:
+    workflows: ["Docker Build"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -8,12 +11,30 @@ on:
         required: true
         default: main
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
 jobs:
   deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
+      - name: Resolve image tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "image_tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=sha-$(printf '%s' '${{ github.event.workflow_run.head_sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -28,8 +49,11 @@ jobs:
             echo "📦 拉取最新代码..."
             git pull origin main
 
-            export BACKEND_IMAGE="ghcr.io/${{ github.repository }}/backend:${{ github.event.inputs.image_tag }}"
-            export FRONTEND_IMAGE="ghcr.io/${{ github.repository }}/frontend:${{ github.event.inputs.image_tag }}"
+            export IMAGE_TAG="${{ steps.vars.outputs.image_tag }}"
+            export BACKEND_IMAGE="ghcr.io/${{ github.repository }}/backend:${IMAGE_TAG}"
+            export FRONTEND_IMAGE="ghcr.io/${{ github.repository }}/frontend:${IMAGE_TAG}"
+
+            echo "🏷️ 使用镜像标签: ${IMAGE_TAG}"
 
             echo "🐳 拉取容器镜像..."
             sudo docker compose --env-file .env.prod -f docker-compose.prod.yml pull backend frontend
@@ -38,7 +62,7 @@ jobs:
             sudo docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
 
             echo "🚀 启动应用容器..."
-            sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d backend frontend
+            sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate backend frontend
 
             echo "🩺 检查容器健康..."
             curl -sf http://127.0.0.1:18080/health > /dev/null && echo "✓ 后端运行正常"

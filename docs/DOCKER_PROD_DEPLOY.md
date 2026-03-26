@@ -62,9 +62,11 @@ When migrating from host-installed PostgreSQL and Redis:
 
 Recommended pipeline:
 
-1. Build backend and frontend images in CI
-2. Push images to a registry such as GHCR
-3. SSH to the server and run:
+1. Push to `main`
+2. CI builds backend and frontend images and pushes them to GHCR
+3. After the image workflow succeeds, deploy runs automatically and updates the server
+
+Manual fallback:
 
 ```bash
 docker compose --env-file .env.prod -f docker-compose.prod.yml pull
