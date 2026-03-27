@@ -176,15 +176,15 @@
 }
 
 .admin-console .bg-slate-950 {
-  background-color: #21584e;
+  background-color: #2f7a67;
 }
 
 .admin-console .bg-slate-900 {
-  background-color: #2b6b5f;
+  background-color: #3d8e78;
 }
 
 .admin-console .bg-slate-500 {
-  background-color: #6e9a8e;
+  background-color: #86b7a9;
 }
 
 .admin-console :is(.border-slate-200, .border-slate-200\/80) {
@@ -235,6 +235,10 @@
   color: #f0faf5;
 }
 
+.admin-console .text-white {
+  color: #f7fffb;
+}
+
 .admin-console .hover\:bg-slate-50:hover {
   background-color: #edf8f2;
 }
@@ -244,15 +248,15 @@
 }
 
 .admin-console .hover\:bg-slate-800:hover {
-  background-color: #2c6a5d;
+  background-color: #3c8a74;
 }
 
 .admin-console .hover\:bg-slate-500:hover {
-  background-color: #7ea99e;
+  background-color: #94c0b3;
 }
 
 .admin-console .hover\:bg-slate-400:hover {
-  background-color: #84ac9f;
+  background-color: #a3cabe;
 }
 
 .admin-console .hover\:text-slate-900:hover,
@@ -294,4 +298,12 @@
 
 .admin-console .accent-slate-950 {
   accent-color: #2f7a67;
+}
+
+.admin-console .shadow-\[0_20px_60px_rgba\(15\,23\,42\,0\.18\)\] {
+  box-shadow: 0 20px 60px rgba(34, 94, 80, 0.16);
+}
+
+.admin-console .shadow-\[0_24px_70px_rgba\(14\,46\,38\,0\.26\)\] {
+  box-shadow: 0 24px 70px rgba(34, 94, 80, 0.18);
 }

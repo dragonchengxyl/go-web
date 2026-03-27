@@ -127,7 +127,7 @@ export default function AdminCommercePage() {
             <Button asChild variant="outline">
               <Link href="/admin/system">查看赞助配置</Link>
             </Button>
-            <Button asChild className="bg-slate-950 text-white hover:bg-slate-800">
+            <Button asChild className="bg-[#2f7a67] text-[#f7fffb] hover:bg-[#3c8a74]">
               <Link href="/admin/orders">进入订单工作台</Link>
             </Button>
           </>
@@ -251,8 +251,8 @@ export default function AdminCommercePage() {
           }
         >
           <div className="space-y-4">
-            <div className="rounded-2xl bg-slate-950 px-5 py-5 text-white">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-sky-300/80">
+            <div className="rounded-2xl border border-[#c8e3d7] bg-[linear-gradient(135deg,#f7fffb_0%,#ebf8f2_56%,#def3ea_100%)] px-5 py-5 text-[#17342d]">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-[#64897e]">
                 Sponsor Snapshot
               </p>
               <h3 className="mt-2 text-xl font-semibold">
@@ -261,7 +261,7 @@ export default function AdminCommercePage() {
                   systemData?.sponsor.monthly_goal,
                 )}
               </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
+              <p className="mt-2 text-sm leading-6 text-[#5d8378]">
                 {systemData?.sponsor.message || '当前尚未配置对外赞助文案。'}
               </p>
             </div>

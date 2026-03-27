@@ -236,7 +236,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="relative flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200/80 bg-slate-950 text-slate-100 lg:flex">
+        <aside className="hidden w-72 shrink-0 flex-col border-r border-[#c5dfd3] bg-[linear-gradient(180deg,#2f7a67_0%,#428f78_56%,#e6f5ee_100%)] text-slate-100 lg:flex">
           <div className="border-b border-white/10 px-6 py-6">
             <p className="text-xs uppercase tracking-[0.28em] text-sky-300/75">
               Operations
@@ -313,14 +313,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="border-t border-white/10 px-6 py-5">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm font-medium text-white">当前模式</p>
-              <p className="mt-1 text-xs leading-5 text-slate-400">
+            <div className="rounded-2xl border border-[#bfe0d3] bg-[rgba(251,255,252,0.78)] p-4 text-[#17342d] backdrop-blur">
+              <p className="text-sm font-medium">当前模式</p>
+              <p className="mt-1 text-xs leading-5 text-[#5d8378]">
                 先看仪表盘，再进入具体工作台处理明细。
               </p>
               <Link
                 href="/"
-                className="mt-4 inline-flex text-xs font-medium text-sky-300 hover:text-sky-200"
+                className="mt-4 inline-flex text-xs font-medium text-[#1f7a73] hover:text-[#21584e]"
               >
                 返回前台
               </Link>

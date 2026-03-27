@@ -297,7 +297,7 @@ export default function AdminDashboardPage() {
             <Button asChild variant="outline">
               <Link href="/admin/governance">进入治理盘</Link>
             </Button>
-            <Button asChild className="bg-slate-950 text-white hover:bg-slate-800">
+            <Button asChild className="bg-[#2f7a67] text-[#f7fffb] hover:bg-[#3c8a74]">
               <Link href="/admin/moderation">进入审核台</Link>
             </Button>
           </>
@@ -464,39 +464,39 @@ export default function AdminDashboardPage() {
             tone={activeGameRooms > 0 ? 'brand' : 'default'}
           />
 
-          <div className="rounded-3xl bg-slate-950 p-5 text-white shadow-[0_20px_60px_rgba(15,23,42,0.18)]">
-            <p className="text-[11px] uppercase tracking-[0.24em] text-sky-300/80">
+          <div className="rounded-3xl border border-[#c8e3d7] bg-[linear-gradient(135deg,#f8fffb_0%,#ecf8f2_56%,#dff4eb_100%)] p-5 text-[#17342d] shadow-[0_20px_60px_rgba(34,94,80,0.12)]">
+            <p className="text-[11px] uppercase tracking-[0.24em] text-[#5f8d81]">
               Quick Actions
             </p>
             <h3 className="mt-2 text-xl font-semibold">今天先处理什么</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
+            <p className="mt-2 text-sm leading-6 text-[#5d8378]">
               先看治理和支付，再看系统配置和游戏运行态，减少在多个页面之间来回切换。
             </p>
             <div className="mt-5 grid gap-2">
               <Link
                 href="/admin/governance"
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                className="rounded-2xl border border-[#c5dfd3] bg-white px-4 py-3 text-sm font-medium text-[#21584e] transition-colors hover:bg-[#f0faf5]"
               >
                 去内容治理盘
               </Link>
               <Link
                 href="/admin/commerce"
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                className="rounded-2xl border border-[#c5dfd3] bg-white px-4 py-3 text-sm font-medium text-[#21584e] transition-colors hover:bg-[#f0faf5]"
               >
                 去商业创作者盘
               </Link>
               <Link
                 href="/admin/platform"
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                className="rounded-2xl border border-[#c5dfd3] bg-white px-4 py-3 text-sm font-medium text-[#21584e] transition-colors hover:bg-[#f0faf5]"
               >
                 去平台配置盘
               </Link>
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
+              <Badge className="rounded-full border border-[#c5dfd3] bg-white text-[#52776d] hover:bg-white">
                 赞助目标 {systemData?.sponsor.monthly_goal ? '已设置' : '未设置'}
               </Badge>
-              <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
+              <Badge className="rounded-full border border-[#f1d4c7] bg-[#fff5ef] text-[#bc5c3e] hover:bg-[#fff5ef]">
                 支付失败 {(failedOrdersData?.total ?? 0).toLocaleString()} 笔
               </Badge>
             </div>

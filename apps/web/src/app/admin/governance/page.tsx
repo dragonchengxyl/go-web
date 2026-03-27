@@ -107,7 +107,7 @@ export default function AdminGovernancePage() {
             <Button asChild variant="outline">
               <Link href="/admin/audit-logs">查看审计日志</Link>
             </Button>
-            <Button asChild className="bg-slate-950 text-white hover:bg-slate-800">
+            <Button asChild className="bg-[#2f7a67] text-[#f7fffb] hover:bg-[#3c8a74]">
               <Link href="/admin/moderation">进入审核台</Link>
             </Button>
           </>
