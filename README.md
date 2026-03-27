@@ -2,7 +2,7 @@
 
 一个以 Furry 社区为核心的全栈 monorepo。当前仓库已经落地社区内容、圈子、活动、私信通知、创作者赞助、音频作品、AI 助手、管理后台，以及一个持续扩展中的 `Hex Blitz` 游戏实验室。
 
-默认开发形态是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，并可按需接入通知、审核、统计和音频 worker 等扩展进程。
+默认开发形态是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，生产部署当前统一使用 `docker-compose.prod.yml`。
 
 ## 项目一句话
 
@@ -71,7 +71,7 @@
 - 成就系统与排行榜
 - `studio-cli` 健康检查、管理辅助、性能诊断、播种和 smoke 测试
 - `/health`、`/ready`、`/metrics`、`/debug/pprof/*`
-- Docker Compose、Kubernetes、数据库迁移、运维脚本
+- Docker Compose、数据库迁移、运维脚本
 
 ## 运行形态
 
@@ -80,7 +80,7 @@
 | 默认本地开发 | `apps/web` + `cmd/server` + PostgreSQL + Redis + MailHog | `./dev.sh` 一键拉起，主 API 已可独立承载大部分业务 |
 | 事件驱动扩展 | 再加 `cmd/notification-svc` / `cmd/moderation-svc` / `cmd/stats-svc` | 用于验证异步通知、审核和 gRPC 拆分 |
 | 音频处理扩展 | 再加 `cmd/audio-worker` | 消费音频任务、执行本地处理与重试 |
-| 部署 | Docker Compose / Kubernetes | 仓库内提供 `docker-compose.full.yml`、`docker-compose.ha.yml`、`k8s/` |
+| 部署 | Docker Compose | 当前生产部署统一使用 `docker-compose.prod.yml` |
 
 默认情况下，主 API 可以独立工作；统计服务支持本地 fallback，而通知、审核和音频处理在独立进程模式下更接近生产拓扑。
 
@@ -131,7 +131,7 @@
 | `internal/transport` | HTTP、gRPC、WebSocket 传输层 |
 | `migrations` | 数据库迁移 |
 | `docs` | 架构、接口与工程说明 |
-| `k8s` | Kubernetes 部署清单 |
+| `docs` | 架构、接口与部署说明 |
 
 ## 快速启动
 
@@ -247,13 +247,12 @@ make build-studio-cli
 - 架构说明：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - API 摘要：[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
 - Go 工程说明：[`docs/GO_ENGINEERING_NOTES.md`](docs/GO_ENGINEERING_NOTES.md)
-- Kubernetes 部署：[`k8s/README.md`](k8s/README.md)
+- Docker 生产部署：[`docs/DOCKER_PROD_DEPLOY.md`](docs/DOCKER_PROD_DEPLOY.md)
 
 部署相关文件：
 
-- `docker-compose.yml`：本地基础设施
-- `docker-compose.full.yml`：完整前后端容器编排
-- `docker-compose.ha.yml`：偏高可用部署样例
+- `docker-compose.yml`：本地开发基础设施（PostgreSQL / Redis / MailHog）
+- `docker-compose.prod.yml`：当前实际使用的生产部署编排
 
 ## 许可证
 

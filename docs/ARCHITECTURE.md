@@ -301,26 +301,17 @@ sequenceDiagram
 
 ### 9.2 Docker Compose
 
-仓库已有三套 Compose 方向：
+当前仓库保留两套实际在用的 Compose 形态：
 
 - `docker-compose.yml`
-  - 最基础的本地运行
-- `docker-compose.full.yml`
-  - 前后端 + PG + Redis 的完整打包运行
-- `docker-compose.ha.yml`
-  - 多副本 API + Nginx + 备份任务，偏高可用演示
+  - 本地开发基础设施，仅拉起 PostgreSQL、Redis、MailHog
+- `docker-compose.prod.yml`
+  - 当前实际生产部署编排，供 CI/CD 与服务器部署使用
 
-### 9.3 Kubernetes
+说明：
 
-`k8s/base` 与 `k8s/overlays/*` 已经具备：
-
-- backend / frontend deployment
-- service / ingress
-- postgres / redis
-- configmap / secret 模板
-- HPA
-
-说明这个项目的部署目标已经不局限于本地开发机。
+- 研发阶段仍然是“本地进程 + Docker 基础设施”优先
+- 生产阶段统一收敛到单服务器 `docker-compose.prod.yml`
 
 ## 10. 当前架构边界与真实现状
 
@@ -378,4 +369,3 @@ sequenceDiagram
 3. 统一前端 API client，决定保留 `apps/web/src/lib/api-client.ts` 还是迁移到 `packages/api-client`
 4. 统一 OSS / R2 上传抽象，补齐 R2 直传策略
 5. 清理历史遗留领域目录和未使用配置，降低认知成本
-
