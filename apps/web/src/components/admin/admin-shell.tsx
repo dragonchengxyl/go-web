@@ -25,17 +25,13 @@ import {
   parseAccessTokenClaims,
   shouldForceAdminPasswordReset,
 } from "@/lib/access-control";
+import {
+  AdminWorkspaceSwitcher,
+  type AdminWorkspaceSwitcherItem,
+} from "@/components/admin/admin-workspace-switcher";
 import { cn } from "@/lib/utils";
 
-type NavItem = {
-  href: string;
-  label: string;
-  description: string;
-  section: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
-
-const navItems: NavItem[] = [
+const navItems: AdminWorkspaceSwitcherItem[] = [
   {
     href: "/admin",
     label: "运营总览",
@@ -251,6 +247,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <p className="mt-2 text-sm leading-6 text-slate-400">
               面向内容治理、用户运营和配置管理的统一工作台。
             </p>
+            <AdminWorkspaceSwitcher
+              pathname={pathname}
+              items={navItems}
+              variant="sidebar"
+              className="mt-5"
+            />
           </div>
 
           <nav className="flex-1 space-y-6 overflow-y-auto px-4 py-6">
@@ -349,6 +351,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <AdminWorkspaceSwitcher
+                      pathname={pathname}
+                      items={navItems}
+                    />
                     <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                       管理权限已生效
                     </span>
@@ -359,28 +365,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       返回前台
                     </Link>
                   </div>
-                </div>
-
-                <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
-                  {navItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = isActive(pathname, item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={cn(
-                          "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-colors",
-                          active
-                            ? "border-sky-200 bg-sky-50 text-sky-700"
-                            : "border-slate-200 bg-white text-slate-500",
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {item.label}
-                      </Link>
-                    );
-                  })}
                 </div>
               </div>
             </div>
