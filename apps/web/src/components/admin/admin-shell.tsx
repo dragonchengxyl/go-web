@@ -224,7 +224,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f4f7fb]">
+      <div className="admin-console flex min-h-screen items-center justify-center bg-[#edf8f2]">
         <div className="rounded-3xl border border-slate-200 bg-white px-6 py-5 text-sm text-slate-500 shadow-sm">
           正在进入运营后台...
         </div>
@@ -233,10 +233,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f7fb] text-slate-950">
+    <div className="admin-console min-h-screen bg-[#edf8f2] text-slate-950">
       <div className="pointer-events-none fixed inset-0 opacity-60">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.07),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.08),_transparent_28%),linear-gradient(to_bottom,_rgba(255,255,255,0.96),_rgba(244,247,251,0.92))]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.04)_1px,transparent_1px)] bg-[size:24px_24px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.10),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.12),_transparent_32%),linear-gradient(to_bottom,_rgba(254,255,252,0.97),_rgba(237,248,242,0.92))]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(34,94,80,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(34,94,80,0.04)_1px,transparent_1px)] bg-[size:24px_24px]" />
       </div>
 
       <div className="relative flex min-h-screen">

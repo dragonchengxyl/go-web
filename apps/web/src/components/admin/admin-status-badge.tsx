@@ -7,7 +7,7 @@ const presetMap = {
   approved: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   blocked: "bg-rose-50 text-rose-700 ring-rose-200",
   reviewed: "bg-sky-50 text-sky-700 ring-sky-200",
-  dismissed: "bg-slate-100 text-slate-600 ring-slate-200",
+  dismissed: "bg-[#eaf4ee] text-[#52776d] ring-[#d3e7dc]",
   active: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   banned: "bg-rose-50 text-rose-700 ring-rose-200",
   admin: "bg-rose-50 text-rose-700 ring-rose-200",
@@ -15,8 +15,8 @@ const presetMap = {
   moderator: "bg-sky-50 text-sky-700 ring-sky-200",
   creator: "bg-violet-50 text-violet-700 ring-violet-200",
   supporter: "bg-orange-50 text-orange-700 ring-orange-200",
-  member: "bg-slate-100 text-slate-700 ring-slate-200",
-  guest: "bg-slate-100 text-slate-600 ring-slate-200",
+  member: "bg-[#eaf4ee] text-[#476b61] ring-[#d3e7dc]",
+  guest: "bg-[#eef7f2] text-[#64897e] ring-[#dbeadf]",
 } as const;
 
 export function AdminStatusBadge({
@@ -30,7 +30,7 @@ export function AdminStatusBadge({
 }) {
   const preset =
     presetMap[value as keyof typeof presetMap] ??
-    "bg-slate-100 text-slate-700 ring-slate-200";
+    "bg-[#eaf4ee] text-[#476b61] ring-[#d3e7dc]";
 
   return (
     <span

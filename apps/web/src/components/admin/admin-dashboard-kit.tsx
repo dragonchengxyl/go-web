@@ -9,11 +9,11 @@ import { cn, formatPrice } from "@/lib/utils";
 type DashboardTone = "default" | "brand" | "success" | "warning" | "danger";
 
 const toneClassMap: Record<DashboardTone, string> = {
-  default: "border-slate-200 bg-slate-100 text-slate-700",
-  brand: "border-sky-200 bg-sky-100 text-sky-700",
-  success: "border-emerald-200 bg-emerald-100 text-emerald-700",
-  warning: "border-amber-200 bg-amber-100 text-amber-700",
-  danger: "border-rose-200 bg-rose-100 text-rose-700",
+  default: "border-[#d3e7dc] bg-[#eaf4ee] text-[#476b61]",
+  brand: "border-[#bde7de] bg-[#daf4ee] text-[#1f7a73]",
+  success: "border-[#ccead9] bg-[#e5f6ea] text-[#2d8a62]",
+  warning: "border-[#f4dfb0] bg-[#fff2dc] text-[#a66a17]",
+  danger: "border-[#f1cbbb] bg-[#ffede6] text-[#bc5c3e]",
 };
 
 export function AdminWorkspaceCard({

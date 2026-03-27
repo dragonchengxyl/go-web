@@ -5,9 +5,9 @@ export function showAdminToast(
   if (typeof document === "undefined") return;
 
   const colorMap = {
-    default: "bg-slate-950 text-white",
-    success: "bg-emerald-600 text-white",
-    error: "bg-rose-600 text-white",
+    default: "bg-[#21584e] text-[#f4fffb]",
+    success: "bg-[#2d8a62] text-[#f4fffb]",
+    error: "bg-[#c96a4b] text-[#fff8f4]",
   } as const;
 
   const el = document.createElement("div");
