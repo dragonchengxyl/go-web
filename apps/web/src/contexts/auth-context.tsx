@@ -2,12 +2,14 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { apiClient } from '@/lib/api-client';
+import { parseAccessTokenClaims } from '@/lib/access-control';
 
 interface AuthUser {
   id: string;
   username: string;
   email: string;
   role: string;
+  permissions: string[];
   force_password_reset?: boolean;
   email_verified_at?: string | null;
 }
@@ -32,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const normalizeUser = useCallback((data?: Partial<AuthUser> | null): AuthUser | null => {
+  const normalizeUser = useCallback((data?: Partial<AuthUser> | null, permissions: string[] = []): AuthUser | null => {
     if (!data?.id || !data.username || !data.email || !data.role) {
       return null;
     }
@@ -41,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       username: data.username,
       email: data.email,
       role: data.role,
+      permissions,
       force_password_reset: data.force_password_reset ?? false,
       email_verified_at: data.email_verified_at ?? null,
     };
@@ -48,9 +51,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchMe = useCallback(async (token: string) => {
     apiClient.setToken(token);
+    const claims = parseAccessTokenClaims(token);
     try {
       const data = await apiClient.getMe();
-      setUser(normalizeUser(data));
+      setUser(normalizeUser(data, claims?.permissions ?? []));
     } catch {
       apiClient.setToken(null);
       setUser(null);
@@ -69,7 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (token: string, refreshToken?: string, nextUser?: Partial<AuthUser> | null) => {
     apiClient.setToken(token);
     if (refreshToken) apiClient.setRefreshToken(refreshToken);
-    const normalizedUser = normalizeUser(nextUser);
+    const claims = parseAccessTokenClaims(token);
+    const normalizedUser = normalizeUser(nextUser, claims?.permissions ?? []);
     if (normalizedUser) {
       setUser(normalizedUser);
       return;

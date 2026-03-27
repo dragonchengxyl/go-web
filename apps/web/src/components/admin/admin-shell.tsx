@@ -20,6 +20,11 @@ import {
   Shapes,
   Users,
 } from "lucide-react";
+import {
+  canAccessAdminConsole,
+  parseAccessTokenClaims,
+  shouldForceAdminPasswordReset,
+} from "@/lib/access-control";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -138,8 +143,6 @@ const navItems: NavItem[] = [
   },
 ];
 
-const allowedRoles = new Set(["admin", "moderator", "super_admin"]);
-
 function isActive(pathname: string, href: string) {
   return href === "/admin" ? pathname === href : pathname.startsWith(href);
 }
@@ -174,12 +177,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         router.replace("/login?from=/admin");
         return;
       }
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      if (!allowedRoles.has(payload.role)) {
+      const claims = parseAccessTokenClaims(token);
+      if (!claims || !canAccessAdminConsole(claims)) {
         router.replace("/");
         return;
       }
-      if (payload.role === "admin" && payload.force_password_reset) {
+      if (shouldForceAdminPasswordReset(claims)) {
         router.replace(buildForcedResetHref(pathname));
         return;
       }
@@ -283,7 +286,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-sm font-medium text-white">当前模式</p>
               <p className="mt-1 text-xs leading-5 text-slate-400">
-                仅管理员与版主角色可进入此工作台。
+                仅具备后台访问权限的角色可进入此工作台。
               </p>
               <Link
                 href="/"

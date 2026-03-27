@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Flag,
   Bookmark,
+  LayoutDashboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ import { useWS } from "@/contexts/ws-context";
 import { useAuth } from "@/contexts/auth-context";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { canAccessAdminConsole } from "@/lib/access-control";
 
 const NAV_LINKS = [
   { href: "/feed", label: "动态" },
@@ -59,6 +61,10 @@ function UserAvatar() {
   if (!user) return null;
 
   const initial = (user.username || "U")[0].toUpperCase();
+  const canOpenAdmin = canAccessAdminConsole({
+    role: user.role,
+    permissions: user.permissions,
+  });
 
   function handleLogout() {
     logout();
@@ -120,6 +126,16 @@ function UserAvatar() {
                 </div>
               </Link>
               <div className="py-1">
+                {canOpenAdmin && (
+                  <Link
+                    href="/admin"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                  >
+                    <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
+                    管理后台
+                  </Link>
+                )}
                 <Link
                   href="/creator"
                   onClick={() => setOpen(false)}
@@ -184,6 +200,10 @@ export function Header() {
   const { isLoggedIn, user, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const canOpenAdmin = canAccessAdminConsole({
+    role: user?.role,
+    permissions: user?.permissions,
+  });
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -383,6 +403,15 @@ export function Header() {
                       >
                         通知{unreadCount > 0 && ` (${unreadCount})`}
                       </Link>
+                      {canOpenAdmin && (
+                        <Link
+                          href="/admin"
+                          className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                          onClick={() => setIsMobileMenuOpen(false)}
+                        >
+                          管理后台
+                        </Link>
+                      )}
                       <Link
                         href="/groups/manage"
                         className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
