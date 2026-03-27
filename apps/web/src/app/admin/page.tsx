@@ -297,7 +297,7 @@ export default function AdminDashboardPage() {
             <Button asChild variant="outline">
               <Link href="/admin/governance">进入治理盘</Link>
             </Button>
-            <Button asChild className="bg-[#2f7a67] text-[#f7fffb] hover:bg-[#3c8a74]">
+            <Button asChild className="border border-[#c5dfd3] bg-[#edf8f2] text-[#21584e] hover:bg-[#e3f3eb]">
               <Link href="/admin/moderation">进入审核台</Link>
             </Button>
           </>

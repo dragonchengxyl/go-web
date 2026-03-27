@@ -115,7 +115,7 @@ export default function AdminCommunityPage() {
             <Button asChild variant="outline">
               <Link href="/admin/events">查看活动工作台</Link>
             </Button>
-            <Button asChild className="bg-slate-950 text-white hover:bg-slate-800">
+            <Button asChild className="border border-[#c5dfd3] bg-[#edf8f2] text-[#21584e] hover:bg-[#e3f3eb]">
               <Link href="/admin/users">进入用户管理</Link>
             </Button>
           </>

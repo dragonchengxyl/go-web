@@ -149,6 +149,23 @@
 /* ── Admin Console Theme ─────────────────────────────────────────────── */
 .admin-console {
   color: #183831;
+  --background: 146 36% 95%;
+  --foreground: 156 34% 16%;
+  --card: 150 42% 98%;
+  --card-foreground: 156 34% 16%;
+  --popover: 150 42% 98%;
+  --popover-foreground: 156 34% 16%;
+  --primary: 156 42% 36%;
+  --primary-foreground: 150 42% 98%;
+  --secondary: 150 28% 92%;
+  --secondary-foreground: 156 28% 26%;
+  --muted: 150 30% 93%;
+  --muted-foreground: 156 18% 45%;
+  --accent: 44 86% 72%;
+  --accent-foreground: 156 34% 16%;
+  --border: 146 28% 86%;
+  --input: 146 28% 86%;
+  --ring: 156 42% 36%;
 }
 
 .admin-console .bg-white {
@@ -176,15 +193,15 @@
 }
 
 .admin-console .bg-slate-950 {
-  background-color: #2f7a67;
+  background-color: #e6f5ee;
 }
 
 .admin-console .bg-slate-900 {
-  background-color: #3d8e78;
+  background-color: #def2e9;
 }
 
 .admin-console .bg-slate-500 {
-  background-color: #86b7a9;
+  background-color: #d7ebe3;
 }
 
 .admin-console :is(.border-slate-200, .border-slate-200\/80) {
@@ -236,7 +253,7 @@
 }
 
 .admin-console .text-white {
-  color: #f7fffb;
+  color: #17342d;
 }
 
 .admin-console .hover\:bg-slate-50:hover {
@@ -248,15 +265,15 @@
 }
 
 .admin-console .hover\:bg-slate-800:hover {
-  background-color: #3c8a74;
+  background-color: #dbefe6;
 }
 
 .admin-console .hover\:bg-slate-500:hover {
-  background-color: #94c0b3;
+  background-color: #d2e9df;
 }
 
 .admin-console .hover\:bg-slate-400:hover {
-  background-color: #a3cabe;
+  background-color: #cbe4d9;
 }
 
 .admin-console .hover\:text-slate-900:hover,

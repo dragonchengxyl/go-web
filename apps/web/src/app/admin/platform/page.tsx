@@ -52,7 +52,7 @@ export default function AdminPlatformPage() {
             <Button asChild variant="outline">
               <Link href="/admin/audit-logs">查看审计流</Link>
             </Button>
-            <Button asChild className="bg-slate-950 text-white hover:bg-slate-800">
+            <Button asChild className="border border-[#c5dfd3] bg-[#edf8f2] text-[#21584e] hover:bg-[#e3f3eb]">
               <Link href="/admin/system">进入系统配置</Link>
             </Button>
           </>

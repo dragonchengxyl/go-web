@@ -127,7 +127,7 @@ export default function AdminCommercePage() {
             <Button asChild variant="outline">
               <Link href="/admin/system">查看赞助配置</Link>
             </Button>
-            <Button asChild className="bg-[#2f7a67] text-[#f7fffb] hover:bg-[#3c8a74]">
+            <Button asChild className="border border-[#c5dfd3] bg-[#edf8f2] text-[#21584e] hover:bg-[#e3f3eb]">
               <Link href="/admin/orders">进入订单工作台</Link>
             </Button>
           </>
