@@ -1082,10 +1082,14 @@ func buildBulkAudioJobs(namespace string, plan bulkPlan, users []bulkUser, rng *
 	jobs := make([]bulkAudioJob, 0, plan.AudioJobs)
 	taskTypes := []string{"ai_music", "voice_convert", "voice_enhance", "audio_master"}
 	statuses := []string{"queued", "running", "succeeded", "failed", "dead_lettered"}
+	requiredSucceeded := min(plan.AudioJobs, plan.AudioWorks)
 
 	for i := 0; i < plan.AudioJobs; i++ {
 		user := users[(i*7+3)%len(users)]
 		status := statuses[i%len(statuses)]
+		if i < requiredSucceeded {
+			status = "succeeded"
+		}
 		taskType := taskTypes[i%len(taskTypes)]
 		createdAt := randomPastTime(rng, now, 90)
 		var startedAt *time.Time
@@ -1155,8 +1159,9 @@ func buildBulkAudioWorks(namespace string, plan bulkPlan, users []bulkUser, jobs
 	if len(successJobs) == 0 {
 		return works
 	}
-	for i := 0; i < plan.AudioWorks; i++ {
-		job := successJobs[i%len(successJobs)]
+	workCount := min(plan.AudioWorks, len(successJobs))
+	for i := 0; i < workCount; i++ {
+		job := successJobs[i]
 		user := users[(i*11+9)%len(users)]
 		coverURL := fmt.Sprintf("/uploads/images/%s/audio-cover-%03d.webp", namespace, i)
 		moderationStatus := "approved"
