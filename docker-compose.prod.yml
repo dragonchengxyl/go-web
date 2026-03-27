@@ -66,6 +66,37 @@ services:
     networks:
       - studio
 
+  seed:
+    image: ${BACKEND_IMAGE}
+    restart: "no"
+    env_file:
+      - .env.prod
+    command:
+      [
+        "./seed-dev",
+        "-config",
+        "configs/config.yaml",
+        "-mode",
+        "${SEED_MODE:-bulk}",
+        "-profile",
+        "${SEED_PROFILE:-medium}",
+        "-namespace",
+        "${SEED_NAMESPACE:-bulk}",
+        "-seed",
+        "${SEED_RANDOM_SEED:-0}"
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - studio
+
   backend:
     image: ${BACKEND_IMAGE}
     restart: unless-stopped

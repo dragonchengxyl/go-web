@@ -276,6 +276,14 @@ go run ./cmd/seed-dev -config configs/config.local.yaml -mode bulk -profile medi
 ./bin/studio-cli seed bulk --profile medium --namespace bulk
 ```
 
+生产容器环境：
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm seed
+SEED_PROFILE=small docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm seed
+SEED_PROFILE=medium SEED_NAMESPACE=bulk docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm seed
+```
+
 可选 profile：
 
 - `small`

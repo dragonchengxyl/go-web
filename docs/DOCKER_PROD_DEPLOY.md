@@ -46,6 +46,36 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml up -d backend fro
 The `backend` container runs with `-run-migrations=false` so multiple replicas
 do not compete on startup.
 
+## Virtual data seeding
+
+The production compose stack also exposes a one-shot `seed` task that uses the
+same backend image and config as the running service.
+
+Default usage:
+
+```bash
+docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm seed
+```
+
+Recommended first run on a fresh environment:
+
+```bash
+SEED_PROFILE=small docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm seed
+```
+
+Then move to a denser dataset:
+
+```bash
+SEED_PROFILE=medium SEED_NAMESPACE=bulk docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm seed
+```
+
+Notes:
+
+- `SEED_MODE` defaults to `bulk`
+- `SEED_PROFILE` supports `small`, `medium`, `large`
+- `SEED_NAMESPACE` keeps generated UUID-based records deterministic across reruns
+- The command prints database size before and after seeding
+
 ## Data migration recommendation
 
 When migrating from host-installed PostgreSQL and Redis:

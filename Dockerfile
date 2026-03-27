@@ -13,8 +13,10 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the application binaries used in production operations.
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/seed-dev ./cmd/seed-dev
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/studio-cli ./cmd/studio-cli
 
 # Runtime stage
 FROM alpine:3.19
@@ -30,6 +32,8 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /app/server .
+COPY --from=builder /app/seed-dev .
+COPY --from=builder /app/studio-cli .
 COPY --from=builder /app/configs/config.yaml ./configs/config.yaml
 COPY --from=builder /app/migrations ./migrations
 
