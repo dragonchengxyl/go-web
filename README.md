@@ -204,6 +204,7 @@ go run ./cmd/audio-worker -config configs/config.local.yaml
 
 ```bash
 go run ./cmd/seed-dev -config configs/config.local.yaml
+go run ./cmd/seed-dev -config configs/config.local.yaml -mode bulk -profile medium -namespace bulk
 ```
 
 ## 配置说明
@@ -238,9 +239,57 @@ make build-studio-cli
 ./bin/studio-cli health
 ./bin/studio-cli smoke
 ./bin/studio-cli seed demo
+./bin/studio-cli seed bulk --profile medium --namespace bulk
 ./bin/studio-cli perf db
 ./bin/studio-cli pprof cpu --seconds 30
 ```
+
+## 虚拟数据播种
+
+当前仓库提供两种播种方式：
+
+- `demo`
+  - 小规模稳定样本，适合本地 smoke test 和面试演示
+- `bulk`
+  - 面向联调、截图、后台列表、搜索、分页和压测的多模块虚拟数据
+
+`bulk` 当前覆盖：
+
+- 用户、关注、圈子、圈子公告、活动、活动报名
+- 帖子、点赞、评论、评论点赞、收藏
+- 私信会话、消息、通知、举报
+- 打赏订单、赞助配置、审计日志、行为事件
+- 音频任务、音频作品、音频点赞
+- AI 助手会话、消息、反馈、知识文档
+- 专辑、曲目、成就、积分流水
+- `Hex Blitz` / 斗地主对局与事件数据
+
+推荐命令：
+
+```bash
+go run ./cmd/seed-dev -config configs/config.local.yaml -mode bulk -profile medium -namespace bulk
+```
+
+或：
+
+```bash
+./bin/studio-cli seed bulk --profile medium --namespace bulk
+```
+
+可选 profile：
+
+- `small`
+  - 适合本地开发快速填充
+- `medium`
+  - 默认推荐，适合测试环境和后台联调
+- `large`
+  - 更高密度的数据样本，仍以控制在常见单库测试环境可接受体量为目标
+
+说明：
+
+- 所有 bulk 数据都带命名空间，默认密码仍为 `Passw0rd123`
+- 使用相同 `namespace` 重跑时，UUID 主键类数据会保持稳定
+- 命令结束后会输出当前数据库体量，便于你确认没有逼近容量上限
 
 ## 文档与部署
 
