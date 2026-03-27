@@ -15,15 +15,20 @@ import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
+  Disc3,
   Flag,
   FileText,
+  Gamepad2,
+  Receipt,
   ShieldCheck,
+  SlidersHorizontal,
   TrendingUp,
   Users,
   XCircle,
 } from 'lucide-react'
-import { apiClient } from '@/lib/api-client'
+import { AdminGameOverview, AuditLog, AdminSystemConfig, apiClient } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AdminDataTable, type AdminColumn } from '@/components/admin/admin-data-table'
 import { AdminEmptyState } from '@/components/admin/admin-empty-state'
@@ -31,6 +36,11 @@ import { AdminMetricCard } from '@/components/admin/admin-metric-card'
 import { AdminPageHeader } from '@/components/admin/admin-page-header'
 import { AdminStatusBadge } from '@/components/admin/admin-status-badge'
 import { showAdminToast } from '@/components/admin/admin-toast'
+import {
+  AdminSectionCard,
+  AdminWorkspaceCard,
+  formatDateTime,
+} from '@/components/admin/admin-dashboard-kit'
 
 interface DashboardStats {
   total_users: number
@@ -62,6 +72,32 @@ interface ReportRow {
   status: string
 }
 
+function SignalCard({
+  title,
+  description,
+  tone = 'default',
+}: {
+  title: string
+  description: string
+  tone?: 'default' | 'warning' | 'danger' | 'success'
+}) {
+  const className =
+    tone === 'danger'
+      ? 'border-rose-200 bg-rose-50'
+      : tone === 'warning'
+        ? 'border-amber-200 bg-amber-50'
+        : tone === 'success'
+          ? 'border-emerald-200 bg-emerald-50'
+          : 'border-slate-200 bg-slate-50/70'
+
+  return (
+    <div className={`rounded-2xl border p-4 ${className}`}>
+      <p className="font-medium text-slate-950">{title}</p>
+      <p className="mt-3 text-sm leading-6 text-slate-500">{description}</p>
+    </div>
+  )
+}
+
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient()
 
@@ -83,6 +119,53 @@ export default function AdminDashboardPage() {
   const { data: reportsData, isLoading: reportsLoading } = useQuery<{ reports: ReportRow[]; total: number }>({
     queryKey: ['admin-reports-pending'],
     queryFn: () => apiClient.get('/admin/reports?status=pending&page_size=5'),
+  })
+
+  const { data: pendingAudioData } = useQuery<{ total: number }>({
+    queryKey: ['admin-dashboard-audio-pending-total'],
+    queryFn: () => apiClient.getAdminAudioWorks({ status: 'pending', page_size: 1 }),
+  })
+
+  const { data: privateGroupsData } = useQuery<{ total: number }>({
+    queryKey: ['admin-dashboard-private-groups-total'],
+    queryFn: () => apiClient.getAdminGroups({ privacy: 'private', page_size: 1 }),
+  })
+
+  const { data: publishedEventsData } = useQuery<{ total: number }>({
+    queryKey: ['admin-dashboard-published-events-total'],
+    queryFn: () => apiClient.getAdminEvents({ status: 'published', page_size: 1 }),
+  })
+
+  const { data: ordersData } = useQuery<{ total: number }>({
+    queryKey: ['admin-dashboard-orders-total'],
+    queryFn: () => apiClient.getAdminOrders({ page_size: 1, type: 'tip' }),
+  })
+
+  const { data: pendingOrdersData } = useQuery<{ total: number }>({
+    queryKey: ['admin-dashboard-orders-pending-total'],
+    queryFn: () =>
+      apiClient.getAdminOrders({ page_size: 1, type: 'tip', status: 'pending_payment' }),
+  })
+
+  const { data: failedOrdersData } = useQuery<{ total: number }>({
+    queryKey: ['admin-dashboard-orders-failed-total'],
+    queryFn: () =>
+      apiClient.getAdminOrders({ page_size: 1, type: 'tip', status: 'failed' }),
+  })
+
+  const { data: gamesOverview } = useQuery<AdminGameOverview>({
+    queryKey: ['admin-dashboard-games-overview'],
+    queryFn: () => apiClient.getAdminGamesOverview(),
+  })
+
+  const { data: systemData } = useQuery<AdminSystemConfig>({
+    queryKey: ['admin-dashboard-system-config'],
+    queryFn: () => apiClient.getAdminSystemConfig(),
+  })
+
+  const { data: auditData } = useQuery<{ logs: AuditLog[]; total: number }>({
+    queryKey: ['admin-dashboard-audit'],
+    queryFn: () => apiClient.getAdminAuditLogs({ page: 1, page_size: 5 }),
   })
 
   const moderateMutation = useMutation({
@@ -194,16 +277,25 @@ export default function AdminDashboardPage() {
     },
   ]
 
+  const queuePressure =
+    (postsData?.total ?? 0) + (reportsData?.total ?? 0) + (pendingAudioData?.total ?? 0)
+  const activeGameRooms =
+    (gamesOverview?.hex_blitz.metrics.active_rooms ?? 0) +
+    (gamesOverview?.doudizhu.metrics.active_rooms ?? 0)
+  const activeGamePlayers =
+    (gamesOverview?.hex_blitz.metrics.active_players ?? 0) +
+    (gamesOverview?.doudizhu.metrics.active_players ?? 0)
+
   return (
     <div className="space-y-6">
       <AdminPageHeader
         eyebrow="Operations Overview"
         title="运营总览"
-        description="把核心指标、待办队列和治理入口集中在一个工作面里，适合日常巡检、审核和异常处理。"
+        description="把核心指标、待办队列、仪表盘目录和跨域异常流集中在同一页，适合作为每天进入后台后的第一屏。"
         actions={
           <>
             <Button asChild variant="outline">
-              <Link href="/admin/reports">查看举报队列</Link>
+              <Link href="/admin/governance">进入治理盘</Link>
             </Button>
             <Button asChild className="bg-slate-950 text-white hover:bg-slate-800">
               <Link href="/admin/moderation">进入审核台</Link>
@@ -243,6 +335,85 @@ export default function AdminDashboardPage() {
         />
       </div>
 
+      <AdminSectionCard
+        title="仪表盘目录"
+        description="后台不缺工作台，缺的是先去哪一块。先选领域仪表盘，再进入具体明细页处理。"
+      >
+        <div className="grid gap-4 xl:grid-cols-3">
+          <AdminWorkspaceCard
+            href="/admin/governance"
+            title="内容治理盘"
+            description="聚合帖子审核、举报、音频治理、评论巡检和审计流。"
+            icon={ShieldCheck}
+            tone="warning"
+            metrics={[
+              { label: '帖子', value: (postsData?.total ?? 0).toLocaleString() },
+              { label: '举报', value: (reportsData?.total ?? 0).toLocaleString() },
+              { label: '音频', value: (pendingAudioData?.total ?? 0).toLocaleString() },
+            ]}
+          />
+          <AdminWorkspaceCard
+            href="/admin/community"
+            title="社区运营盘"
+            description="统一看用户、圈子和活动，判断社区秩序与供给是否健康。"
+            icon={Users}
+            tone="brand"
+            metrics={[
+              { label: '用户', value: (stats?.total_users ?? 0).toLocaleString() },
+              { label: '私密圈子', value: (privateGroupsData?.total ?? 0).toLocaleString() },
+              { label: '已发布活动', value: (publishedEventsData?.total ?? 0).toLocaleString() },
+            ]}
+          />
+          <AdminWorkspaceCard
+            href="/admin/commerce"
+            title="商业创作者盘"
+            description="把订单、赞助和音频分发压力收在一个商业视角里。"
+            icon={Receipt}
+            tone="success"
+            metrics={[
+              { label: '订单', value: (ordersData?.total ?? 0).toLocaleString() },
+              { label: '待支付', value: (pendingOrdersData?.total ?? 0).toLocaleString() },
+              { label: '待审音频', value: (pendingAudioData?.total ?? 0).toLocaleString() },
+            ]}
+          />
+          <AdminWorkspaceCard
+            href="/admin/games"
+            title="游戏运行态"
+            description="同步观察 Hex Blitz 和斗地主的房间、对局与活跃状态。"
+            icon={Gamepad2}
+            tone="brand"
+            metrics={[
+              { label: '活跃房间', value: activeGameRooms.toLocaleString() },
+              { label: '在线玩家', value: activeGamePlayers.toLocaleString() },
+            ]}
+          />
+          <AdminWorkspaceCard
+            href="/admin/platform"
+            title="平台配置盘"
+            description="集中看 AI 助手、系统配置、权限矩阵和后台审计动作。"
+            icon={SlidersHorizontal}
+            tone="default"
+            metrics={[
+              { label: '助手', value: systemData?.assistant.configured ? '已配置' : '未配置' },
+              { label: '审计', value: (auditData?.total ?? 0).toLocaleString() },
+              { label: '来源数', value: (systemData?.server.allow_origins.length ?? 0).toLocaleString() },
+            ]}
+          />
+          <AdminWorkspaceCard
+            href="/admin/analytics"
+            title="数据分析"
+            description="观察增长、内容规模和治理压力，适合做周报截图与趋势跟踪。"
+            icon={BarChart3}
+            tone="success"
+            metrics={[
+              { label: '今日新增', value: (stats?.new_users_today ?? 0).toLocaleString() },
+              { label: '帖子', value: (stats?.total_posts ?? 0).toLocaleString() },
+              { label: '举报', value: (stats?.total_reports ?? 0).toLocaleString() },
+            ]}
+          />
+        </div>
+      </AdminSectionCard>
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
         <Card className="rounded-3xl border-slate-200 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
           <CardHeader className="pb-3">
@@ -279,47 +450,55 @@ export default function AdminDashboardPage() {
 
         <div className="space-y-4">
           <AdminMetricCard
-            label="待审帖子"
-            value={(postsData?.total ?? 0).toLocaleString()}
-            hint="建议优先处理，避免内容积压"
+            label="当前治理压力"
+            value={queuePressure.toLocaleString()}
+            hint="待审帖子 + 待处理举报 + 待审音频"
             icon={ShieldCheck}
-            tone={(postsData?.total ?? 0) > 0 ? 'warning' : 'success'}
+            tone={queuePressure > 0 ? 'warning' : 'success'}
           />
           <AdminMetricCard
-            label="待处理举报"
-            value={(reportsData?.total ?? 0).toLocaleString()}
-            hint="涉及违规反馈与封禁动作"
-            icon={Flag}
-            tone={(reportsData?.total ?? 0) > 0 ? 'danger' : 'success'}
+            label="游戏运行态"
+            value={activeGameRooms.toLocaleString()}
+            hint={`活跃玩家 ${activeGamePlayers.toLocaleString()} 人`}
+            icon={Gamepad2}
+            tone={activeGameRooms > 0 ? 'brand' : 'default'}
           />
 
           <div className="rounded-3xl bg-slate-950 p-5 text-white shadow-[0_20px_60px_rgba(15,23,42,0.18)]">
             <p className="text-[11px] uppercase tracking-[0.24em] text-sky-300/80">
               Quick Actions
             </p>
-            <h3 className="mt-2 text-xl font-semibold">今日运营动作</h3>
+            <h3 className="mt-2 text-xl font-semibold">今天先处理什么</h3>
             <p className="mt-2 text-sm leading-6 text-slate-300">
-              从这里快速进入高频工作面，减少在多个页面之间来回切换。
+              先看治理和支付，再看系统配置和游戏运行态，减少在多个页面之间来回切换。
             </p>
             <div className="mt-5 grid gap-2">
               <Link
-                href="/admin/moderation"
+                href="/admin/governance"
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
               >
-                去处理内容审核
+                去内容治理盘
               </Link>
               <Link
-                href="/admin/reports"
+                href="/admin/commerce"
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
               >
-                去处理举报闭环
+                去商业创作者盘
               </Link>
               <Link
-                href="/admin/users"
+                href="/admin/platform"
                 className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
               >
-                去管理用户角色
+                去平台配置盘
               </Link>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
+                赞助目标 {systemData?.sponsor.monthly_goal ? '已设置' : '未设置'}
+              </Badge>
+              <Badge className="rounded-full bg-white/10 text-white hover:bg-white/10">
+                支付失败 {(failedOrdersData?.total ?? 0).toLocaleString()} 笔
+              </Badge>
             </div>
           </div>
         </div>
@@ -374,6 +553,67 @@ export default function AdminDashboardPage() {
           />
         </section>
       </div>
+
+      <AdminSectionCard
+        title="跨域异常流"
+        description="把治理、商业、平台和游戏四个域的风险信号收在一起，适合作为日常巡检和交班摘要。"
+      >
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="grid gap-4 md:grid-cols-2">
+            <SignalCard
+              title="治理信号"
+              tone={queuePressure > 0 ? 'warning' : 'success'}
+              description={`当前累计治理压力 ${queuePressure.toLocaleString()}。如果还在抬升，优先去内容治理盘。`}
+            />
+            <SignalCard
+              title="支付信号"
+              tone={(failedOrdersData?.total ?? 0) > 0 ? 'danger' : 'default'}
+              description={`支付失败 ${(failedOrdersData?.total ?? 0).toLocaleString()} 笔，待支付 ${(pendingOrdersData?.total ?? 0).toLocaleString()} 笔。`}
+            />
+            <SignalCard
+              title="平台信号"
+              tone={systemData?.assistant.configured ? 'default' : 'warning'}
+              description={`AI 助手${systemData?.assistant.configured ? '已' : '未'}配置，允许来源 ${(systemData?.server.allow_origins.length ?? 0).toLocaleString()} 个。`}
+            />
+            <SignalCard
+              title="游戏信号"
+              tone={activeGameRooms > 0 ? 'default' : 'success'}
+              description={`当前活跃房间 ${activeGameRooms.toLocaleString()} 个，活跃玩家 ${activeGamePlayers.toLocaleString()} 人。`}
+            />
+          </div>
+
+          <div className="space-y-3">
+            {(auditData?.logs ?? []).map((log) => (
+              <div
+                key={log.id}
+                className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-medium text-slate-950">
+                    {log.action} · {log.resource}
+                  </p>
+                  <span className="text-xs text-slate-400">
+                    {formatDateTime(log.created_at)}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-slate-500">
+                  {log.username || '未知操作者'} · {log.resource_id || '无资源 ID'}
+                </p>
+                {log.error_message ? (
+                  <p className="mt-2 text-sm text-rose-600">
+                    错误：{log.error_message}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+            {(auditData?.logs?.length ?? 0) === 0 ? (
+              <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                当前没有最近后台动作记录。
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </AdminSectionCard>
     </div>
   )
 }

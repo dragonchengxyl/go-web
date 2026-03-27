@@ -4,7 +4,7 @@ export interface AccessTokenClaims {
   force_password_reset?: boolean;
 }
 
-const ADMIN_CONSOLE_ROLES = new Set(["admin", "moderator", "super_admin"]);
+const ADMIN_CONSOLE_ROLES = new Set(["admin", "super_admin"]);
 const ADMIN_CONSOLE_PERMISSIONS = new Set(["dashboard:view"]);
 
 function decodeBase64URL(value: string) {

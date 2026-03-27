@@ -39,106 +39,134 @@ const navItems: NavItem[] = [
   {
     href: "/admin",
     label: "运营总览",
-    description: "查看核心指标与待办队列",
-    section: "总览",
+    description: "值班总览与仪表盘目录入口",
+    section: "仪表盘",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/admin/governance",
+    label: "内容治理盘",
+    description: "聚合待审、举报、评论和审计流",
+    section: "仪表盘",
+    icon: ShieldCheck,
+  },
+  {
+    href: "/admin/community",
+    label: "社区运营盘",
+    description: "统一看用户、圈子和活动状态",
+    section: "仪表盘",
+    icon: Users,
+  },
+  {
+    href: "/admin/commerce",
+    label: "商业创作者盘",
+    description: "聚合订单、赞助和音频分发压力",
+    section: "仪表盘",
+    icon: Receipt,
   },
   {
     href: "/admin/games",
     label: "游戏观测",
     description: "查看房间、异常上报和战报概况",
-    section: "监控",
+    section: "仪表盘",
     icon: Gamepad2,
+  },
+  {
+    href: "/admin/platform",
+    label: "平台配置盘",
+    description: "集中看 AI、系统配置、权限和审计",
+    section: "仪表盘",
+    icon: SlidersHorizontal,
   },
   {
     href: "/admin/analytics",
     label: "数据分析",
     description: "观察增长与业务趋势",
-    section: "监控",
+    section: "仪表盘",
     icon: BarChart3,
   },
   {
     href: "/admin/moderation",
     label: "内容审核",
     description: "处理待审帖子与内容状态",
-    section: "治理",
+    section: "治理工作台",
     icon: ShieldCheck,
   },
   {
     href: "/admin/reports",
     label: "举报处理",
     description: "处置用户举报与动作闭环",
-    section: "治理",
+    section: "治理工作台",
     icon: Flag,
   },
   {
     href: "/admin/audio-works",
     label: "音频治理",
     description: "处理音频作品审核与下架状态",
-    section: "治理",
+    section: "治理工作台",
     icon: Disc3,
   },
   {
     href: "/admin/users",
     label: "用户管理",
     description: "角色、状态与账号治理",
-    section: "治理",
+    section: "社区工作台",
     icon: Users,
   },
   {
     href: "/admin/orders",
     label: "订单运营",
     description: "打赏订单与支付状态管理",
-    section: "运营",
+    section: "商业工作台",
     icon: Receipt,
   },
   {
     href: "/admin/groups",
     label: "圈子运营",
     description: "调整圈子可见性与运营状态",
-    section: "运营",
+    section: "社区工作台",
     icon: Shapes,
   },
   {
     href: "/admin/events",
     label: "活动运营",
     description: "活动状态流转与报名巡检",
-    section: "运营",
+    section: "社区工作台",
     icon: CalendarRange,
   },
   {
     href: "/admin/comments",
     label: "评论管理",
     description: "巡检评论区和异常内容",
-    section: "治理",
+    section: "治理工作台",
     icon: MessageSquare,
   },
   {
     href: "/admin/audit-logs",
     label: "审计日志",
     description: "追踪关键后台操作记录",
-    section: "治理",
+    section: "治理工作台",
     icon: ClipboardList,
   },
   {
     href: "/admin/assistant",
     label: "AI 助手",
     description: "管理人设、提示词和来源",
-    section: "配置",
+    section: "配置工作台",
     icon: Bot,
   },
   {
     href: "/admin/permissions",
     label: "权限矩阵",
     description: "查看角色与权限映射关系",
-    section: "配置",
+    section: "配置工作台",
     icon: Shield,
   },
   {
     href: "/admin/system",
     label: "系统配置",
     description: "查看运行态配置并维护赞助展示",
-    section: "配置",
+    section: "配置工作台",
     icon: SlidersHorizontal,
   },
 ];
@@ -226,7 +254,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex-1 space-y-6 overflow-y-auto px-4 py-6">
-            {["总览", "监控", "治理", "运营", "配置"].map((section) => {
+            {["仪表盘", "治理工作台", "社区工作台", "商业工作台", "配置工作台"].map((section) => {
               const items = navItems.filter((item) => item.section === section);
               if (items.length === 0) return null;
 
@@ -286,7 +314,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-sm font-medium text-white">当前模式</p>
               <p className="mt-1 text-xs leading-5 text-slate-400">
-                仅具备后台访问权限的角色可进入此工作台。
+                先看仪表盘，再进入具体工作台处理明细。
               </p>
               <Link
                 href="/"
