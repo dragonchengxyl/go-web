@@ -55,9 +55,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await apiClient.getMe();
       setUser(normalizeUser(data, claims?.permissions ?? []));
-    } catch {
-      apiClient.setToken(null);
-      setUser(null);
+    } catch (err: any) {
+      if (err?.status === 401 || err?.code === 40101 || err?.code === 40102) {
+        apiClient.setToken(null);
+        setUser(null);
+      }
+      // Keep the current session for transient errors such as rate limiting or timeouts.
+      // This avoids logging users out just because one bootstrap request failed.
+      return;
     }
   }, [normalizeUser]);
 

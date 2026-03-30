@@ -920,7 +920,13 @@ class ApiClient {
     const data: ApiResponse<T> = await response.json();
 
     if (data.code !== 0) {
-      throw new Error(data.message || "Request failed");
+      const error = new Error(data.message || "Request failed") as Error & {
+        status?: number;
+        code?: number;
+      };
+      error.status = response.status;
+      error.code = data.code;
+      throw error;
     }
 
     return data.data;

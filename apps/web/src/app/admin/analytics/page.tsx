@@ -57,47 +57,56 @@ export default function AdminAnalyticsPage() {
   const { data: growthData = [] } = useQuery<ChartPoint[]>({
     queryKey: ['admin-user-growth', days],
     queryFn: () => apiClient.get(`/admin/stats/user-growth?days=${days}`),
+    staleTime: 60_000,
   })
 
   const { data: stats } = useQuery<DashboardStats>({
     queryKey: ['admin-stats'],
     queryFn: () => apiClient.get('/admin/stats/dashboard'),
+    staleTime: 60_000,
   })
 
   const { data: pendingReportsData } = useQuery<{ total: number }>({
     queryKey: ['admin-analytics-pending-reports'],
     queryFn: () => apiClient.getAdminReports({ status: 'pending', page_size: 1 }),
+    staleTime: 30_000,
   })
 
   const { data: pendingAudioData } = useQuery<{ total: number }>({
     queryKey: ['admin-analytics-pending-audio'],
     queryFn: () => apiClient.getAdminAudioWorks({ status: 'pending', page_size: 1 }),
+    staleTime: 30_000,
   })
 
   const { data: ordersData } = useQuery<{ total: number }>({
     queryKey: ['admin-analytics-orders'],
     queryFn: () => apiClient.getAdminOrders({ page_size: 1, type: 'tip' }),
+    staleTime: 30_000,
   })
 
   const { data: pendingOrdersData } = useQuery<{ total: number }>({
     queryKey: ['admin-analytics-pending-orders'],
     queryFn: () =>
       apiClient.getAdminOrders({ page_size: 1, type: 'tip', status: 'pending_payment' }),
+    staleTime: 30_000,
   })
 
   const { data: privateGroupsData } = useQuery<{ total: number }>({
     queryKey: ['admin-analytics-private-groups'],
     queryFn: () => apiClient.getAdminGroups({ page_size: 1, privacy: 'private' }),
+    staleTime: 60_000,
   })
 
   const { data: publishedEventsData } = useQuery<{ total: number }>({
     queryKey: ['admin-analytics-published-events'],
     queryFn: () => apiClient.getAdminEvents({ page_size: 1, status: 'published' }),
+    staleTime: 60_000,
   })
 
   const { data: gamesOverview } = useQuery<AdminGameOverview>({
     queryKey: ['admin-analytics-games-overview'],
     queryFn: () => apiClient.getAdminGamesOverview(),
+    staleTime: 30_000,
   })
 
   const cumulativeData = useMemo(() => {

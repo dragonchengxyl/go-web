@@ -76,7 +76,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	rateLimiter := middleware.NewRateLimiter(cfg.RedisClient, cfg.Config.RateLimit)
+	rateLimiter := middleware.NewRateLimiter(cfg.RedisClient, cfg.Config.RateLimit, cfg.Config.JWT)
 	r.Use(rateLimiter.Limit())
 
 	authMiddleware := middleware.NewAuth(cfg.Config.JWT, cfg.TokenStore)

@@ -104,68 +104,81 @@ export default function AdminDashboardPage() {
   const { data: stats } = useQuery<DashboardStats>({
     queryKey: ['admin-stats'],
     queryFn: () => apiClient.get('/admin/stats/dashboard'),
+    staleTime: 60_000,
   })
 
   const { data: growthData = [] } = useQuery<ChartPoint[]>({
     queryKey: ['admin-user-growth', 30],
     queryFn: () => apiClient.get('/admin/stats/user-growth?days=30'),
+    staleTime: 60_000,
   })
 
   const { data: postsData, isLoading: pendingPostsLoading } = useQuery<{ posts: PostRow[]; total: number }>({
     queryKey: ['admin-posts-pending'],
     queryFn: () => apiClient.get('/admin/posts?status=pending&page_size=5'),
+    staleTime: 30_000,
   })
 
   const { data: reportsData, isLoading: reportsLoading } = useQuery<{ reports: ReportRow[]; total: number }>({
     queryKey: ['admin-reports-pending'],
     queryFn: () => apiClient.get('/admin/reports?status=pending&page_size=5'),
+    staleTime: 30_000,
   })
 
   const { data: pendingAudioData } = useQuery<{ total: number }>({
     queryKey: ['admin-dashboard-audio-pending-total'],
     queryFn: () => apiClient.getAdminAudioWorks({ status: 'pending', page_size: 1 }),
+    staleTime: 30_000,
   })
 
   const { data: privateGroupsData } = useQuery<{ total: number }>({
     queryKey: ['admin-dashboard-private-groups-total'],
     queryFn: () => apiClient.getAdminGroups({ privacy: 'private', page_size: 1 }),
+    staleTime: 60_000,
   })
 
   const { data: publishedEventsData } = useQuery<{ total: number }>({
     queryKey: ['admin-dashboard-published-events-total'],
     queryFn: () => apiClient.getAdminEvents({ status: 'published', page_size: 1 }),
+    staleTime: 60_000,
   })
 
   const { data: ordersData } = useQuery<{ total: number }>({
     queryKey: ['admin-dashboard-orders-total'],
     queryFn: () => apiClient.getAdminOrders({ page_size: 1, type: 'tip' }),
+    staleTime: 30_000,
   })
 
   const { data: pendingOrdersData } = useQuery<{ total: number }>({
     queryKey: ['admin-dashboard-orders-pending-total'],
     queryFn: () =>
       apiClient.getAdminOrders({ page_size: 1, type: 'tip', status: 'pending_payment' }),
+    staleTime: 30_000,
   })
 
   const { data: failedOrdersData } = useQuery<{ total: number }>({
     queryKey: ['admin-dashboard-orders-failed-total'],
     queryFn: () =>
       apiClient.getAdminOrders({ page_size: 1, type: 'tip', status: 'failed' }),
+    staleTime: 30_000,
   })
 
   const { data: gamesOverview } = useQuery<AdminGameOverview>({
     queryKey: ['admin-dashboard-games-overview'],
     queryFn: () => apiClient.getAdminGamesOverview(),
+    staleTime: 30_000,
   })
 
   const { data: systemData } = useQuery<AdminSystemConfig>({
     queryKey: ['admin-dashboard-system-config'],
     queryFn: () => apiClient.getAdminSystemConfig(),
+    staleTime: 60_000,
   })
 
   const { data: auditData } = useQuery<{ logs: AuditLog[]; total: number }>({
     queryKey: ['admin-dashboard-audit'],
     queryFn: () => apiClient.getAdminAuditLogs({ page: 1, page_size: 5 }),
+    staleTime: 30_000,
   })
 
   const moderateMutation = useMutation({

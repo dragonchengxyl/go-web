@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/pkg/apperr"
+	"github.com/studio/platform/internal/pkg/crypto"
 	"github.com/studio/platform/internal/pkg/response"
 )
 
@@ -17,13 +19,15 @@ import (
 type RateLimiter struct {
 	client *redis.Client
 	config configs.RateLimitConfig
+	jwt    configs.JWTConfig
 }
 
 // NewRateLimiter creates a new rate limiter
-func NewRateLimiter(client *redis.Client, config configs.RateLimitConfig) *RateLimiter {
+func NewRateLimiter(client *redis.Client, config configs.RateLimitConfig, jwt configs.JWTConfig) *RateLimiter {
 	return &RateLimiter{
 		client: client,
 		config: config,
+		jwt:    jwt,
 	}
 }
 
@@ -34,12 +38,18 @@ func (rl *RateLimiter) Limit() gin.HandlerFunc {
 		identifier := c.ClientIP()
 		limit := rl.config.Unauthenticated
 
-		if userID, exists := c.Get("user_id"); exists {
+		if userID, role, ok := rl.resolveIdentity(c); ok {
+			identifier = fmt.Sprintf("user:%s", userID)
+			limit = rl.config.Authenticated
+			if role == "admin" || role == "super_admin" {
+				limit = rl.config.Admin
+			}
+		} else if userID, exists := c.Get("user_id"); exists {
 			identifier = fmt.Sprintf("user:%s", userID)
 			limit = rl.config.Authenticated
 
 			// Check if admin
-			if role, exists := c.Get("role"); exists && role == "admin" {
+			if role, exists := c.Get("role"); exists && (role == "admin" || role == "super_admin") {
 				limit = rl.config.Admin
 			}
 		}
@@ -64,6 +74,29 @@ func (rl *RateLimiter) Limit() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func (rl *RateLimiter) resolveIdentity(c *gin.Context) (string, string, bool) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		return "", "", false
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" || parts[1] == "" {
+		return "", "", false
+	}
+
+	claims, err := crypto.VerifyToken(parts[1], rl.jwt.Secret)
+	if err != nil {
+		return "", "", false
+	}
+
+	if claims.UserID == "" {
+		return "", "", false
+	}
+
+	return claims.UserID, claims.Role, true
 }
 
 // checkLimit checks if request is within rate limit
