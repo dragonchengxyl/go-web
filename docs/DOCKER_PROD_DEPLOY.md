@@ -83,7 +83,8 @@ When `STUDIO_KAFKA_ENABLED=true`, the production stack can also start:
 - `kafka` via `--profile kafka`
 - `outbox-relay`, `notification-svc`, `moderation-svc`, `audio-worker` via `--profile async`
 
-The bundled Kafka service currently uses `bitnami/kafka:latest`.
+The bundled Kafka service is mirrored to GHCR and referenced via `KAFKA_IMAGE`,
+so production hosts do not need to pull Kafka directly from Docker Hub.
 
 Detailed enablement and verification steps:
 

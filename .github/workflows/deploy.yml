@@ -52,6 +52,7 @@ jobs:
             export IMAGE_TAG="${{ steps.vars.outputs.image_tag }}"
             export BACKEND_IMAGE="ghcr.io/${{ github.repository }}/backend:${IMAGE_TAG}"
             export FRONTEND_IMAGE="ghcr.io/${{ github.repository }}/frontend:${IMAGE_TAG}"
+            export KAFKA_IMAGE="ghcr.io/${{ github.repository }}/kafka:${IMAGE_TAG}"
 
             echo "🏷️ 使用镜像标签: ${IMAGE_TAG}"
 
@@ -68,6 +69,7 @@ jobs:
               echo "🧵 Kafka 事件总线已启用，启动异步事件服务..."
 
               if grep -q '^STUDIO_KAFKA_BROKERS=$' .env.prod || ! grep -q '^STUDIO_KAFKA_BROKERS=' .env.prod; then
+                sudo docker compose --env-file .env.prod -f docker-compose.prod.yml pull kafka
                 sudo docker compose --env-file .env.prod -f docker-compose.prod.yml --profile kafka up -d kafka
               fi
 

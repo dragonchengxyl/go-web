@@ -1,6 +1,6 @@
 services:
   kafka:
-    image: bitnami/kafka:latest
+    image: ${KAFKA_IMAGE:-bitnami/kafka:latest}
     profiles: ["kafka"]
     restart: unless-stopped
     environment:

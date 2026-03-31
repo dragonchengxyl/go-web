@@ -33,6 +33,14 @@ DC=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 BASE_TOPIC="${STUDIO_KAFKA_TOPIC:-furry-events}"
 KAFKA_BROKERS="${STUDIO_KAFKA_BROKERS:-}"
+BACKEND_IMAGE_REF="${BACKEND_IMAGE:-}"
+
+if [[ -z "${KAFKA_IMAGE:-}" && -n "$BACKEND_IMAGE_REF" ]]; then
+  BACKEND_IMAGE_REPO="${BACKEND_IMAGE_REF%:*}"
+  BACKEND_IMAGE_TAG="${BACKEND_IMAGE_REF##*:}"
+  KAFKA_IMAGE="${BACKEND_IMAGE_REPO%/backend}/kafka:${BACKEND_IMAGE_TAG}"
+  export KAFKA_IMAGE
+fi
 
 echo "==> Running database migrations"
 "${DC[@]}" run --rm migrate
@@ -42,6 +50,7 @@ echo "==> Starting core services"
 
 if [[ "$KAFKA_BROKERS" == *"kafka:"* ]]; then
   echo "==> Starting internal Kafka broker"
+  "${DC[@]}" pull kafka
   "${DC[@]}" --profile kafka up -d kafka
 
   echo "==> Waiting for Kafka to become ready"

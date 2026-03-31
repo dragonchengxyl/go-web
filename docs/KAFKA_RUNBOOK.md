@@ -62,8 +62,9 @@ docker compose --profile kafka up -d postgres redis mailhog kafka
 
 说明：
 
-- 当前 compose 内置 Kafka 使用 `bitnami/kafka:latest`
-- 如果你后续想做更严格的生产固定版本，建议在第一次验证通过后再锁定成明确 tag 或 digest
+- 当前生产 compose 里的 Kafka 镜像通过 `KAFKA_IMAGE` 指向 GHCR
+- 本地开发默认仍可回退到 `bitnami/kafka:latest`
+- 如果你后续想做更严格的生产固定版本，可以继续把 GHCR 镜像锁到 digest
 
 ### 3.2 创建 topic
 
@@ -210,6 +211,7 @@ STUDIO_KAFKA_ENABLED=true
 STUDIO_KAFKA_BROKERS=kafka:9092
 STUDIO_KAFKA_TOPIC=furry-events
 STUDIO_KAFKA_CLIENT_ID=studio-platform-prod
+KAFKA_IMAGE=ghcr.io/<owner>/<repo>/kafka:<tag>
 STUDIO_OBSERVABILITY_NOTIFICATION_HTTP_PORT=18052
 STUDIO_OBSERVABILITY_MODERATION_HTTP_PORT=18053
 STUDIO_OBSERVABILITY_AUDIO_WORKER_HTTP_PORT=18054
