@@ -2,7 +2,7 @@
 
 一个以 Furry 社区为核心的全栈 monorepo。当前仓库已经落地社区内容、圈子、活动、私信通知、创作者赞助、音频作品、AI 助手、管理后台，以及一个持续扩展中的 `Hex Blitz` 游戏实验室。
 
-默认开发形态是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，生产部署当前统一使用 `docker-compose.prod.yml`。
+默认开发形态是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，业务事件总线当前支持 `Redis Streams`，并已补上可切换的 `Kafka` 接线位。
 
 ## 项目一句话
 
@@ -109,6 +109,7 @@
 
 - Cloudflare R2 / 阿里云 OSS / 本地存储
 - Redis Streams 事件总线
+- 可切换的 Kafka 业务事件总线（适用于通知、审核、音频任务链路）
 - Redis Pub/Sub + WebSocket 实时推送
 - OpenAI-compatible / DeepSeek 风格 LLM 接口
 - Embedding / Vision 能力接入
@@ -212,6 +213,7 @@ go run ./cmd/seed-dev -config configs/config.local.yaml -mode bulk -profile medi
 - 主 API 默认读取 `configs/config.local.yaml`
 - 前端使用 `apps/web/.env.local` 或 `apps/web/.env`
 - `./dev.sh` 会自动补齐根目录 `.env` 和 `apps/web/.env`
+- 业务事件总线默认走 Redis Streams；当 `kafka.enabled=true` 时，通知 / 审核 / 音频任务链路切到 Kafka
 - OSS 直传需要配置 `oss.*`
 - AI 助手需要配置 `assistant.*`
 - 支付接入需要配置 `payment.*`
@@ -305,6 +307,8 @@ SEED_PROFILE=medium SEED_NAMESPACE=bulk docker compose --env-file .env.prod -f d
 - API 摘要：[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
 - Go 工程说明：[`docs/GO_ENGINEERING_NOTES.md`](docs/GO_ENGINEERING_NOTES.md)
 - Docker 生产部署：[`docs/DOCKER_PROD_DEPLOY.md`](docs/DOCKER_PROD_DEPLOY.md)
+- Kafka 启用手册：[`docs/KAFKA_RUNBOOK.md`](docs/KAFKA_RUNBOOK.md)
+- Kafka 服务器启用脚本：[`scripts/enable-kafka-prod.sh`](scripts/enable-kafka-prod.sh)
 
 部署相关文件：
 

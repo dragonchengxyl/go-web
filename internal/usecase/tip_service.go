@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/order"
-	"github.com/studio/platform/internal/infra/streams"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
@@ -24,8 +24,9 @@ func NewTipService(orderRepo order.Repository, opts ...func(*TipService)) *TipSe
 	return s
 }
 
-// WithTipPublisher injects an event publisher into TipService.
-func WithTipPublisher(p *streams.Publisher) func(*TipService) {
+// WithTipPublisher keeps the tip service signature aligned with the shared event bus,
+// even though tip events are emitted by PaymentService after payment completion.
+func WithTipPublisher(p eventbus.Publisher) func(*TipService) {
 	return func(_ *TipService) {
 		_ = p
 	}

@@ -7,19 +7,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/streams"
 	"go.uber.org/zap"
 )
 
 type AudioWorker struct {
-	consumer       *streams.Consumer
+	consumer       eventbus.Consumer
 	service        *AudioJobService
 	logger         *zap.Logger
 	pollInterval   time.Duration
 	retryBatchSize int
 }
 
-func NewAudioWorker(consumer *streams.Consumer, service *AudioJobService, logger *zap.Logger, pollInterval time.Duration, retryBatchSize int) *AudioWorker {
+func NewAudioWorker(consumer eventbus.Consumer, service *AudioJobService, logger *zap.Logger, pollInterval time.Duration, retryBatchSize int) *AudioWorker {
 	if pollInterval <= 0 {
 		pollInterval = 5 * time.Second
 	}

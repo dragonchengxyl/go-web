@@ -64,6 +64,20 @@ jobs:
             echo "🚀 启动应用容器..."
             sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate backend frontend
 
+            if grep -q '^STUDIO_KAFKA_ENABLED=true' .env.prod; then
+              echo "🧵 Kafka 事件总线已启用，启动异步事件服务..."
+
+              if grep -q '^STUDIO_KAFKA_BROKERS=$' .env.prod || ! grep -q '^STUDIO_KAFKA_BROKERS=' .env.prod; then
+                sudo docker compose --env-file .env.prod -f docker-compose.prod.yml --profile kafka up -d kafka
+              fi
+
+              sudo docker compose --env-file .env.prod -f docker-compose.prod.yml --profile async up -d outbox-relay notification-svc audio-worker
+
+              if grep -q '^STUDIO_MODERATION_ACCESS_KEY_ID=' .env.prod && ! grep -q '^STUDIO_MODERATION_ACCESS_KEY_ID=$' .env.prod; then
+                sudo docker compose --env-file .env.prod -f docker-compose.prod.yml --profile async up -d moderation-svc
+              fi
+            fi
+
             echo "🩺 检查容器健康..."
             curl -sf http://127.0.0.1:18080/health > /dev/null && echo "✓ 后端运行正常"
             curl -sf http://127.0.0.1:13000/ > /dev/null && echo "✓ 前端运行正常"

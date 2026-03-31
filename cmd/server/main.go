@@ -14,6 +14,7 @@ import (
 
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/infra/embedding"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/grpcclient"
 	"github.com/studio/platform/internal/infra/llm"
 	"github.com/studio/platform/internal/infra/moderation"
@@ -24,7 +25,6 @@ import (
 	paymentwechat "github.com/studio/platform/internal/infra/payment/wechat"
 	"github.com/studio/platform/internal/infra/postgres"
 	"github.com/studio/platform/internal/infra/redis"
-	"github.com/studio/platform/internal/infra/streams"
 	pkgemail "github.com/studio/platform/internal/pkg/email"
 	transporthttp "github.com/studio/platform/internal/transport/http"
 	"github.com/studio/platform/internal/transport/ws"
@@ -178,8 +178,14 @@ func main() {
 	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT, userOpts...)
 	musicService := usecase.NewMusicService(albumRepo, trackRepo, storageService)
 
-	// Redis Streams publisher (event bus)
-	publisher := streams.NewPublisher(redisClient)
+	// Business event bus: Kafka when enabled, otherwise Redis Streams.
+	publisher, err := eventbus.NewPublisher(cfg, redisClient, logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize event publisher", zap.Error(err))
+	}
+	defer func() {
+		_ = publisher.Close()
+	}()
 
 	paymentService := usecase.NewPaymentServiceWithOptions(orderRepo, alipayGW, wechatGW, usecase.WithPaymentPublisher(publisher))
 	searchService := usecase.NewSearchService(pool)

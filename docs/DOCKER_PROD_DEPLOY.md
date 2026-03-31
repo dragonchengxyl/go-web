@@ -76,6 +76,17 @@ Notes:
 - `SEED_NAMESPACE` keeps generated UUID-based records deterministic across reruns
 - The command prints database size before and after seeding
 
+## Kafka and async workers
+
+When `STUDIO_KAFKA_ENABLED=true`, the production stack can also start:
+
+- `kafka` via `--profile kafka`
+- `outbox-relay`, `notification-svc`, `moderation-svc`, `audio-worker` via `--profile async`
+
+Detailed enablement and verification steps:
+
+- [`docs/KAFKA_RUNBOOK.md`](KAFKA_RUNBOOK.md)
+
 ## Data migration recommendation
 
 When migrating from host-installed PostgreSQL and Redis:

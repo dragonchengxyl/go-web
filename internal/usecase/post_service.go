@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/group"
 	"github.com/studio/platform/internal/domain/post"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/moderation"
 	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
@@ -23,7 +24,7 @@ type PostService struct {
 	moderator    moderation.Moderator // may be nil (moderation disabled)
 	logger       *zap.Logger
 	allowedHosts []string           // OSS media URL whitelist; empty = skip validation
-	publisher    *streams.Publisher // may be nil (events disabled)
+	publisher    eventbus.Publisher // may be nil (events disabled)
 }
 
 func NewPostService(postRepo post.Repository, opts ...PostServiceOption) *PostService {
@@ -53,7 +54,7 @@ func WithAllowedHosts(hosts []string) PostServiceOption {
 }
 
 // WithPublisher enables event publishing via Redis Streams.
-func WithPublisher(p *streams.Publisher) PostServiceOption {
+func WithPublisher(p eventbus.Publisher) PostServiceOption {
 	return func(s *PostService) {
 		s.publisher = p
 	}

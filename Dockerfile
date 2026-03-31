@@ -17,6 +17,10 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/server ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/seed-dev ./cmd/seed-dev
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/studio-cli ./cmd/studio-cli
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/outbox-relay ./cmd/outbox-relay
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/notification-svc ./cmd/notification-svc
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/moderation-svc ./cmd/moderation-svc
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/audio-worker ./cmd/audio-worker
 
 # Runtime stage
 FROM alpine:3.19
@@ -34,6 +38,10 @@ WORKDIR /app
 COPY --from=builder /app/server .
 COPY --from=builder /app/seed-dev .
 COPY --from=builder /app/studio-cli .
+COPY --from=builder /app/outbox-relay .
+COPY --from=builder /app/notification-svc .
+COPY --from=builder /app/moderation-svc .
+COPY --from=builder /app/audio-worker .
 COPY --from=builder /app/configs/config.yaml ./configs/config.yaml
 COPY --from=builder /app/migrations ./migrations
 

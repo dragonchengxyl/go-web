@@ -15,9 +15,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/notification"
+	"github.com/studio/platform/internal/infra/eventbus"
+	"github.com/studio/platform/internal/infra/kafkaevent"
 	postgresinfra "github.com/studio/platform/internal/infra/postgres"
 	redisinfra "github.com/studio/platform/internal/infra/redis"
 	"github.com/studio/platform/internal/infra/streams"
+	"github.com/studio/platform/internal/observability/httpserver"
 	transportgrpc "github.com/studio/platform/internal/transport/grpc"
 	"github.com/studio/platform/internal/transport/ws"
 	"github.com/studio/platform/internal/usecase"
@@ -85,8 +88,32 @@ func main() {
 		}
 	}()
 
-	// Consume notification-triggering events from the Redis stream.
-	consumer := streams.NewConsumer(redisClient, logger, "notification-svc-1")
+	httpPort := cfg.Observability.NotificationHTTPPort
+	if httpPort == 0 {
+		httpPort = 18052
+	}
+	obsServer := httpserver.New("notification-svc", httpPort, logger, map[string]httpserver.CheckFunc{
+		"database": pool.Ping,
+		"redis": func(ctx context.Context) error {
+			return redisClient.Ping(ctx).Err()
+		},
+		"kafka": func(ctx context.Context) error {
+			return kafkaevent.CheckConnectivity(ctx, cfg.Kafka)
+		},
+	})
+	obsServer.Start()
+	defer func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = obsServer.Shutdown(shutCtx)
+	}()
+
+	// Consume notification-triggering events from the configured event bus.
+	consumer, err := eventbus.NewConsumer(cfg, redisClient, logger, "notification-svc-1")
+	if err != nil {
+		logger.Fatal("Failed to initialize event consumer", zap.Error(err))
+	}
+	defer func() { _ = consumer.Close() }()
 
 	go func() {
 		logger.Info("Starting notification stream consumer")

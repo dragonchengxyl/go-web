@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/studio/platform/internal/infra/eventspec"
+	"github.com/studio/platform/internal/observability/eventbusmetrics"
 )
 
 // Publisher publishes events to the Redis stream.
@@ -23,6 +25,7 @@ func NewPublisher(client *redis.Client) *Publisher {
 func (p *Publisher) Publish(ctx context.Context, eventType string, payload interface{}) error {
 	b, err := json.Marshal(payload)
 	if err != nil {
+		eventbusmetrics.RecordPublish("redis", eventspec.TopicForEvent(eventType), eventType, "error")
 		return fmt.Errorf("streams: marshal payload: %w", err)
 	}
 
@@ -33,10 +36,11 @@ func (p *Publisher) Publish(ctx context.Context, eventType string, payload inter
 
 	evBytes, err := json.Marshal(ev)
 	if err != nil {
+		eventbusmetrics.RecordPublish("redis", eventspec.TopicForEvent(eventType), eventType, "error")
 		return fmt.Errorf("streams: marshal event: %w", err)
 	}
 
-	return p.client.XAdd(ctx, &redis.XAddArgs{
+	err = p.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: StreamKey,
 		MaxLen: 100_000,
 		Approx: true,
@@ -44,4 +48,14 @@ func (p *Publisher) Publish(ctx context.Context, eventType string, payload inter
 			"data": string(evBytes),
 		},
 	}).Err()
+	if err != nil {
+		eventbusmetrics.RecordPublish("redis", eventspec.TopicForEvent(eventType), eventType, "error")
+		return err
+	}
+	eventbusmetrics.RecordPublish("redis", eventspec.TopicForEvent(eventType), eventType, "ok")
+	return nil
+}
+
+func (p *Publisher) Close() error {
+	return nil
 }

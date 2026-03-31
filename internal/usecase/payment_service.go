@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/order"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/payment"
 	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
@@ -17,12 +18,12 @@ type PaymentService struct {
 	orderRepo     order.Repository
 	alipayGateway payment.PaymentGateway
 	wechatGateway payment.PaymentGateway
-	publisher     *streams.Publisher
+	publisher     eventbus.Publisher
 }
 
 type PaymentServiceOption func(*PaymentService)
 
-func WithPaymentPublisher(p *streams.Publisher) PaymentServiceOption {
+func WithPaymentPublisher(p eventbus.Publisher) PaymentServiceOption {
 	return func(s *PaymentService) { s.publisher = p }
 }
 

@@ -26,6 +26,16 @@ redis:
   password: ""
   db: 0
 
+kafka:
+  enabled: false
+  brokers: ""
+  topic: furry-events
+  client_id: studio-platform
+  read_min_bytes: 1024
+  read_max_bytes: 10485760
+  batch_timeout_ms: 1000
+  start_offset: latest
+
 jwt:
   secret: ""         # Required: set via STUDIO_JWT_SECRET or config.local.yaml
   access_expiry: 15m
@@ -44,6 +54,13 @@ ratelimit:
   unauthenticated: 60
   authenticated: 200
   admin: 1000
+
+observability:
+  stats_http_port: 18051
+  notification_http_port: 18052
+  moderation_http_port: 18053
+  audio_worker_http_port: 18054
+  outbox_http_port: 18055
 
 email:
   host: ""

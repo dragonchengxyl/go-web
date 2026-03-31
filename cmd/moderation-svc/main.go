@@ -10,13 +10,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/domain/post"
+	"github.com/studio/platform/internal/infra/eventbus"
+	"github.com/studio/platform/internal/infra/kafkaevent"
 	"github.com/studio/platform/internal/infra/moderation"
 	postgresinfra "github.com/studio/platform/internal/infra/postgres"
 	redisinfra "github.com/studio/platform/internal/infra/redis"
+	"github.com/studio/platform/internal/observability/httpserver"
 	"github.com/studio/platform/internal/infra/streams"
 	transportgrpc "github.com/studio/platform/internal/transport/grpc"
 	moderationv1 "github.com/studio/platform/proto/moderation/v1"
@@ -85,9 +89,38 @@ func main() {
 		}
 	}()
 
-	// Start Redis Streams consumer for post.created events.
-	consumer := streams.NewConsumer(redisClient, logger, "moderation-svc-1")
-	publisher := streams.NewPublisher(redisClient)
+	httpPort := cfg.Observability.ModerationHTTPPort
+	if httpPort == 0 {
+		httpPort = 18053
+	}
+	obsServer := httpserver.New("moderation-svc", httpPort, logger, map[string]httpserver.CheckFunc{
+		"database": pool.Ping,
+		"redis": func(ctx context.Context) error {
+			return redisClient.Ping(ctx).Err()
+		},
+		"kafka": func(ctx context.Context) error {
+			return kafkaevent.CheckConnectivity(ctx, cfg.Kafka)
+		},
+	})
+	obsServer.Start()
+	defer func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = obsServer.Shutdown(shutCtx)
+	}()
+
+	// Start configured event bus consumer/publisher for post.created / post.moderated events.
+	consumer, err := eventbus.NewConsumer(cfg, redisClient, logger, "moderation-svc-1")
+	if err != nil {
+		logger.Fatal("Failed to initialize event consumer", zap.Error(err))
+	}
+	defer func() { _ = consumer.Close() }()
+
+	publisher, err := eventbus.NewPublisher(cfg, redisClient, logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize event publisher", zap.Error(err))
+	}
+	defer func() { _ = publisher.Close() }()
 
 	go func() {
 		logger.Info("Starting moderation stream consumer")

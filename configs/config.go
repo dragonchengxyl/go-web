@@ -8,9 +8,11 @@ type Config struct {
 	Server     ServerConfig     `mapstructure:"server"`
 	Database   DatabaseConfig   `mapstructure:"database"`
 	Redis      RedisConfig      `mapstructure:"redis"`
+	Kafka      KafkaConfig      `mapstructure:"kafka"`
 	JWT        JWTConfig        `mapstructure:"jwt"`
 	OSS        OSSConfig        `mapstructure:"oss"`
 	RateLimit  RateLimitConfig  `mapstructure:"ratelimit"`
+	Observability ObservabilityConfig `mapstructure:"observability"`
 	Email      EmailConfig      `mapstructure:"email"`
 	Payment    PaymentConfig    `mapstructure:"payment"`
 	Moderation ModerationConfig `mapstructure:"moderation"`
@@ -39,6 +41,17 @@ type RedisConfig struct {
 	DB       int    `mapstructure:"db"`
 }
 
+type KafkaConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	Brokers        string `mapstructure:"brokers"` // comma-separated broker list
+	Topic          string `mapstructure:"topic"`
+	ClientID       string `mapstructure:"client_id"`
+	ReadMinBytes   int    `mapstructure:"read_min_bytes"`
+	ReadMaxBytes   int    `mapstructure:"read_max_bytes"`
+	BatchTimeoutMS int    `mapstructure:"batch_timeout_ms"`
+	StartOffset    string `mapstructure:"start_offset"` // latest or oldest
+}
+
 type JWTConfig struct {
 	Secret        string        `mapstructure:"secret"`
 	AccessExpiry  time.Duration `mapstructure:"access_expiry"`
@@ -59,6 +72,14 @@ type RateLimitConfig struct {
 	Unauthenticated int `mapstructure:"unauthenticated"`
 	Authenticated   int `mapstructure:"authenticated"`
 	Admin           int `mapstructure:"admin"`
+}
+
+type ObservabilityConfig struct {
+	StatsHTTPPort        int `mapstructure:"stats_http_port"`
+	NotificationHTTPPort int `mapstructure:"notification_http_port"`
+	ModerationHTTPPort   int `mapstructure:"moderation_http_port"`
+	AudioWorkerHTTPPort  int `mapstructure:"audio_worker_http_port"`
+	OutboxHTTPPort       int `mapstructure:"outbox_http_port"`
 }
 
 type EmailConfig struct {

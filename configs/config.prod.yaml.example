@@ -25,6 +25,16 @@ redis:
   password: CHANGE_ME
   db: 0
 
+kafka:
+  enabled: false
+  brokers: kafka-1.example.com:9092,kafka-2.example.com:9092,kafka-3.example.com:9092
+  topic: furry-events
+  client_id: studio-platform-prod
+  read_min_bytes: 1024
+  read_max_bytes: 10485760
+  batch_timeout_ms: 1000
+  start_offset: latest
+
 jwt:
   # 例如: openssl rand -base64 48
   secret: CHANGE_ME_LONG_RANDOM_SECRET
@@ -47,6 +57,13 @@ ratelimit:
   unauthenticated: 60
   authenticated: 200
   admin: 1000
+
+observability:
+  stats_http_port: 18051
+  notification_http_port: 18052
+  moderation_http_port: 18053
+  audio_worker_http_port: 18054
+  outbox_http_port: 18055
 
 email:
   host: smtp.example.com

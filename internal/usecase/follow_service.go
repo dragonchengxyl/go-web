@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/follow"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
@@ -14,7 +15,7 @@ import (
 // FollowService handles follow-related business logic
 type FollowService struct {
 	followRepo follow.Repository
-	publisher  *streams.Publisher // may be nil
+	publisher  eventbus.Publisher // may be nil
 }
 
 func NewFollowService(followRepo follow.Repository, opts ...func(*FollowService)) *FollowService {
@@ -26,7 +27,7 @@ func NewFollowService(followRepo follow.Repository, opts ...func(*FollowService)
 }
 
 // WithFollowPublisher injects an event publisher into FollowService.
-func WithFollowPublisher(p *streams.Publisher) func(*FollowService) {
+func WithFollowPublisher(p eventbus.Publisher) func(*FollowService) {
 	return func(s *FollowService) { s.publisher = p }
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/audiowork"
 	"github.com/studio/platform/internal/domain/comment"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
@@ -16,7 +17,7 @@ import (
 type CommentService struct {
 	commentRepo   comment.Repository
 	audioWorkRepo audiowork.Repository
-	publisher     *streams.Publisher // may be nil
+	publisher     eventbus.Publisher // may be nil
 }
 
 // NewCommentService creates a new CommentService
@@ -29,7 +30,7 @@ func NewCommentService(commentRepo comment.Repository, opts ...func(*CommentServ
 }
 
 // WithCommentPublisher injects an event publisher into CommentService.
-func WithCommentPublisher(p *streams.Publisher) func(*CommentService) {
+func WithCommentPublisher(p eventbus.Publisher) func(*CommentService) {
 	return func(s *CommentService) { s.publisher = p }
 }
 

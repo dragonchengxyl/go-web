@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/studio/platform/internal/infra/eventspec"
+	"github.com/studio/platform/internal/observability/eventbusmetrics"
 	"go.uber.org/zap"
 )
 
@@ -97,12 +99,23 @@ func (c *Consumer) processMessage(ctx context.Context, group string, msg redis.X
 	var ev StreamEvent
 	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
 		_ = c.client.XAck(ctx, StreamKey, group, msg.ID).Err()
+		eventbusmetrics.RecordConsume("redis", group, "furry:events", "invalid", "decode_error")
 		return fmt.Errorf("streams: unmarshal event: %w", err)
 	}
 
 	if err := handler(ctx, ev); err != nil {
+		eventbusmetrics.RecordConsume("redis", group, eventspec.TopicForEvent(ev.Type), ev.Type, "handler_error")
 		return err
 	}
 
-	return c.client.XAck(ctx, StreamKey, group, msg.ID).Err()
+	if err := c.client.XAck(ctx, StreamKey, group, msg.ID).Err(); err != nil {
+		eventbusmetrics.RecordConsume("redis", group, eventspec.TopicForEvent(ev.Type), ev.Type, "ack_error")
+		return err
+	}
+	eventbusmetrics.RecordConsume("redis", group, eventspec.TopicForEvent(ev.Type), ev.Type, "ok")
+	return nil
+}
+
+func (c *Consumer) Close() error {
+	return nil
 }

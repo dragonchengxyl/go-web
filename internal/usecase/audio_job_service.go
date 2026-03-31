@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/audiojob"
+	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"go.uber.org/zap"
@@ -18,7 +19,7 @@ import (
 
 type AudioJobService struct {
 	repo         audiojob.Repository
-	publisher    *streams.Publisher
+	publisher    eventbus.Publisher
 	logger       *zap.Logger
 	allowedHosts []string
 	processor    audioJobProcessor
@@ -44,7 +45,7 @@ func NewAudioJobService(repo audiojob.Repository, opts ...AudioJobServiceOption)
 	return svc
 }
 
-func WithAudioJobPublisher(p *streams.Publisher) AudioJobServiceOption {
+func WithAudioJobPublisher(p eventbus.Publisher) AudioJobServiceOption {
 	return func(s *AudioJobService) {
 		s.publisher = p
 	}

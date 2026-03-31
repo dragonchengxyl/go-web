@@ -11,9 +11,11 @@ import (
 
 	"github.com/studio/platform/configs"
 	audioinfra "github.com/studio/platform/internal/infra/audio"
+	"github.com/studio/platform/internal/infra/eventbus"
+	"github.com/studio/platform/internal/infra/kafkaevent"
 	postgresinfra "github.com/studio/platform/internal/infra/postgres"
 	redisinfra "github.com/studio/platform/internal/infra/redis"
-	"github.com/studio/platform/internal/infra/streams"
+	"github.com/studio/platform/internal/observability/httpserver"
 	"github.com/studio/platform/internal/usecase"
 	"go.uber.org/zap"
 )
@@ -64,7 +66,32 @@ func main() {
 		usecase.WithAudioJobRetryPolicy(maxAttempts, retryBackoff),
 	)
 
-	consumer := streams.NewConsumer(redisClient, logger, "audio-worker-1")
+	consumer, err := eventbus.NewConsumer(cfg, redisClient, logger, "audio-worker-1")
+	if err != nil {
+		logger.Fatal("Failed to initialize event consumer", zap.Error(err))
+	}
+	defer func() { _ = consumer.Close() }()
+
+	httpPort := cfg.Observability.AudioWorkerHTTPPort
+	if httpPort == 0 {
+		httpPort = 18054
+	}
+	obsServer := httpserver.New("audio-worker", httpPort, logger, map[string]httpserver.CheckFunc{
+		"database": pool.Ping,
+		"redis": func(ctx context.Context) error {
+			return redisClient.Ping(ctx).Err()
+		},
+		"kafka": func(ctx context.Context) error {
+			return kafkaevent.CheckConnectivity(ctx, cfg.Kafka)
+		},
+	})
+	obsServer.Start()
+	defer func() {
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = obsServer.Shutdown(shutCtx)
+	}()
+
 	worker := usecase.NewAudioWorker(consumer, audioJobService, logger, pollInterval, retryBatchSize)
 	worker.Start(ctx)
 	logger.Info("Audio worker started",
