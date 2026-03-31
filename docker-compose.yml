@@ -39,7 +39,7 @@ services:
       - "8025:8025"
 
   kafka:
-    image: bitnami/kafka:3.7
+    image: bitnami/kafka:latest
     container_name: studio_kafka
     profiles: ["kafka"]
     ports:

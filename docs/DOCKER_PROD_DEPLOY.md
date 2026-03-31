@@ -83,6 +83,8 @@ When `STUDIO_KAFKA_ENABLED=true`, the production stack can also start:
 - `kafka` via `--profile kafka`
 - `outbox-relay`, `notification-svc`, `moderation-svc`, `audio-worker` via `--profile async`
 
+The bundled Kafka service currently uses `bitnami/kafka:latest`.
+
 Detailed enablement and verification steps:
 
 - [`docs/KAFKA_RUNBOOK.md`](KAFKA_RUNBOOK.md)

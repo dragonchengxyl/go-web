@@ -60,6 +60,11 @@ Redis 仍负责：
 docker compose --profile kafka up -d postgres redis mailhog kafka
 ```
 
+说明：
+
+- 当前 compose 内置 Kafka 使用 `bitnami/kafka:latest`
+- 如果你后续想做更严格的生产固定版本，建议在第一次验证通过后再锁定成明确 tag 或 digest
+
 ### 3.2 创建 topic
 
 Kafka 首次启动后，手动创建 4 个 topic：
