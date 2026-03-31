@@ -55,7 +55,7 @@ if [[ "$KAFKA_BROKERS" == *"kafka:"* ]]; then
 
   echo "==> Waiting for Kafka to become ready"
   for _ in $(seq 1 30); do
-    if "${DC[@]}" exec -T kafka /opt/bitnami/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
+    if "${DC[@]}" exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1; then
       break
     fi
     sleep 2
@@ -63,7 +63,7 @@ if [[ "$KAFKA_BROKERS" == *"kafka:"* ]]; then
 
   echo "==> Ensuring Kafka topics exist"
   for topic in "${BASE_TOPIC}.content" "${BASE_TOPIC}.social" "${BASE_TOPIC}.audio" "${BASE_TOPIC}.dlq"; do
-    "${DC[@]}" exec -T kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+    "${DC[@]}" exec -T kafka /opt/kafka/bin/kafka-topics.sh \
       --bootstrap-server localhost:9092 \
       --create \
       --if-not-exists \

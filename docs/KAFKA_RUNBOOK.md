@@ -63,7 +63,7 @@ docker compose --profile kafka up -d postgres redis mailhog kafka
 说明：
 
 - 当前生产 compose 里的 Kafka 镜像通过 `KAFKA_IMAGE` 指向 GHCR
-- 本地开发默认仍可回退到 `bitnami/kafka:latest`
+- 本地开发默认仍可回退到 `apache/kafka:4.2.0`
 - 如果你后续想做更严格的生产固定版本，可以继续把 GHCR 镜像锁到 digest
 
 ### 3.2 创建 topic
@@ -71,19 +71,19 @@ docker compose --profile kafka up -d postgres redis mailhog kafka
 Kafka 首次启动后，手动创建 4 个 topic：
 
 ```bash
-docker exec studio_kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.content --partitions 3 --replication-factor 1
 
-docker exec studio_kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.social --partitions 3 --replication-factor 1
 
-docker exec studio_kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.audio --partitions 3 --replication-factor 1
 
-docker exec studio_kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.dlq --partitions 3 --replication-factor 1
 ```
@@ -91,7 +91,7 @@ docker exec studio_kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
 检查：
 
 ```bash
-docker exec studio_kafka /opt/bitnami/kafka/bin/kafka-topics.sh \
+docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --list
 ```
@@ -194,7 +194,7 @@ psql "$STUDIO_DATABASE_DSN" -c "select status, event_type, topic, count(*) from 
 消费查看：
 
 ```bash
-docker exec studio_kafka /opt/bitnami/kafka/bin/kafka-console-consumer.sh \
+docker exec studio_kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
   --topic furry-events.social \
   --from-beginning
@@ -239,19 +239,19 @@ bash scripts/enable-kafka-prod.sh
 创建 topic：
 
 ```bash
-sudo docker exec furry-app-kafka-1 /opt/bitnami/kafka/bin/kafka-topics.sh \
+sudo docker exec furry-app-kafka-1 /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.content --partitions 3 --replication-factor 1
 
-sudo docker exec furry-app-kafka-1 /opt/bitnami/kafka/bin/kafka-topics.sh \
+sudo docker exec furry-app-kafka-1 /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.social --partitions 3 --replication-factor 1
 
-sudo docker exec furry-app-kafka-1 /opt/bitnami/kafka/bin/kafka-topics.sh \
+sudo docker exec furry-app-kafka-1 /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.audio --partitions 3 --replication-factor 1
 
-sudo docker exec furry-app-kafka-1 /opt/bitnami/kafka/bin/kafka-topics.sh \
+sudo docker exec furry-app-kafka-1 /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092 \
   --create --if-not-exists --topic furry-events.dlq --partitions 3 --replication-factor 1
 ```
