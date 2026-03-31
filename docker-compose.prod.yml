@@ -144,6 +144,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    ports:
+      - "127.0.0.1:${STUDIO_OBSERVABILITY_OUTBOX_HTTP_PORT:-18055}:${STUDIO_OBSERVABILITY_OUTBOX_HTTP_PORT:-18055}"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${STUDIO_OBSERVABILITY_OUTBOX_HTTP_PORT:-18055}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - studio
 
@@ -161,6 +169,14 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${STUDIO_OBSERVABILITY_NOTIFICATION_HTTP_PORT:-18052}:${STUDIO_OBSERVABILITY_NOTIFICATION_HTTP_PORT:-18052}"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${STUDIO_OBSERVABILITY_NOTIFICATION_HTTP_PORT:-18052}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
       - "127.0.0.1:${STUDIO_OBSERVABILITY_NOTIFICATION_HTTP_PORT:-18052}:${STUDIO_OBSERVABILITY_NOTIFICATION_HTTP_PORT:-18052}"
     healthcheck:
@@ -194,6 +210,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    ports:
+      - "127.0.0.1:${STUDIO_OBSERVABILITY_MODERATION_HTTP_PORT:-18053}:${STUDIO_OBSERVABILITY_MODERATION_HTTP_PORT:-18053}"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${STUDIO_OBSERVABILITY_MODERATION_HTTP_PORT:-18053}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - studio
 
@@ -213,6 +237,14 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./uploads:/app/uploads
+    ports:
+      - "127.0.0.1:${STUDIO_OBSERVABILITY_AUDIO_WORKER_HTTP_PORT:-18054}:${STUDIO_OBSERVABILITY_AUDIO_WORKER_HTTP_PORT:-18054}"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${STUDIO_OBSERVABILITY_AUDIO_WORKER_HTTP_PORT:-18054}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
       - "127.0.0.1:${STUDIO_OBSERVABILITY_AUDIO_WORKER_HTTP_PORT:-18054}:${STUDIO_OBSERVABILITY_AUDIO_WORKER_HTTP_PORT:-18054}"
     healthcheck:
