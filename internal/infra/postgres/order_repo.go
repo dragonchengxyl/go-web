@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -267,12 +268,45 @@ func (r *orderRepo) Update(ctx context.Context, o *order.Order) error {
 
 const updateOrderStatusSQL = `UPDATE orders SET status = $2, updated_at = NOW() WHERE id = $1`
 
+const markPaidIfPendingSQL = `
+	UPDATE orders
+	SET status = 'paid',
+	    payment_method = $2,
+	    paid_at = $3,
+	    updated_at = $3
+	WHERE id = $1
+	  AND status = 'pending_payment'
+	RETURNING id, order_no, user_id, status, total_cents, currency, discount_cents, coupon_code, payment_method, paid_at, idempotency_key, metadata, created_at, expires_at, updated_at
+`
+
 func (r *orderRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status order.OrderStatus) error {
 	_, err := r.db.Exec(ctx, updateOrderStatusSQL, id, status)
 	if err != nil {
 		return fmt.Errorf("failed to update order status: %w", err)
 	}
 	return nil
+}
+
+func (r *orderRepo) MarkPaidIfPending(ctx context.Context, id uuid.UUID, method order.PaymentMethod, paidAt time.Time) (*order.Order, bool, error) {
+	var o order.Order
+	var metadataJSON []byte
+	err := r.db.QueryRow(ctx, markPaidIfPendingSQL, id, method, paidAt).Scan(
+		&o.ID, &o.OrderNo, &o.UserID, &o.Status, &o.TotalCents, &o.Currency,
+		&o.DiscountCents, &o.CouponCode, &o.PaymentMethod, &o.PaidAt,
+		&o.IdempotencyKey, &metadataJSON, &o.CreatedAt, &o.ExpiresAt, &o.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to mark order paid: %w", err)
+	}
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &o.Metadata); err != nil {
+			return nil, false, fmt.Errorf("failed to unmarshal order metadata: %w", err)
+		}
+	}
+	return &o, true, nil
 }
 
 const cancelExpiredOrdersSQL = `

@@ -172,6 +172,23 @@ func (r *fakeOrderRepo) UpdateStatus(_ context.Context, id uuid.UUID, status ord
 	return nil
 }
 
+func (r *fakeOrderRepo) MarkPaidIfPending(_ context.Context, id uuid.UUID, method order.PaymentMethod, paidAt time.Time) (*order.Order, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item, ok := r.byID[id]
+	if !ok {
+		return nil, false, apperr.NotFound("order", "id", id.String())
+	}
+	if item.Status != order.OrderStatusPendingPayment {
+		return nil, false, nil
+	}
+	item.Status = order.OrderStatusPaid
+	item.PaymentMethod = method
+	item.PaidAt = &paidAt
+	item.UpdatedAt = paidAt
+	return cloneOrder(item), true, nil
+}
+
 func (r *fakeOrderRepo) List(_ context.Context, _ order.ListFilter) ([]*order.Order, int64, error) {
 	return nil, 0, nil
 }

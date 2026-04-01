@@ -131,24 +131,23 @@ func (s *PaymentService) getPayableOrder(ctx context.Context, orderID uuid.UUID)
 }
 
 func (s *PaymentService) markPaid(ctx context.Context, orderID uuid.UUID, method order.PaymentMethod) error {
-	o, err := s.orderRepo.GetByID(ctx, orderID)
+	now := time.Now()
+	o, transitioned, err := s.orderRepo.MarkPaidIfPending(ctx, orderID, method, now)
 	if err != nil {
 		return err
 	}
-	if o.Status == order.OrderStatusPaid || o.Status == order.OrderStatusFulfilled {
-		return nil
-	}
-	if o.Status != order.OrderStatusPendingPayment {
-		return apperr.BadRequest("订单不在待支付状态")
-	}
-
-	now := time.Now()
-	o.Status = order.OrderStatusPaid
-	o.PaymentMethod = method
-	o.PaidAt = &now
-	o.UpdatedAt = now
-	if err := s.orderRepo.Update(ctx, o); err != nil {
-		return err
+	if !transitioned {
+		o, err = s.orderRepo.GetByID(ctx, orderID)
+		if err != nil {
+			return err
+		}
+		if o.Status == order.OrderStatusPaid || o.Status == order.OrderStatusFulfilled {
+			return nil
+		}
+		if o.Status != order.OrderStatusPendingPayment {
+			return apperr.BadRequest("订单不在待支付状态")
+		}
+		return apperr.Wrap(apperr.CodeInternalError, "订单支付状态迁移失败", nil)
 	}
 
 	if s.publisher != nil {

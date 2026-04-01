@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -31,6 +32,10 @@ type Repository interface {
 
 	// UpdateStatus 更新订单状态
 	UpdateStatus(ctx context.Context, id uuid.UUID, status OrderStatus) error
+
+	// MarkPaidIfPending 原子地将待支付订单更新为已支付。
+	// 返回 transitioned=false 表示订单当前不再是 pending_payment。
+	MarkPaidIfPending(ctx context.Context, id uuid.UUID, method PaymentMethod, paidAt time.Time) (*Order, bool, error)
 
 	// List 获取订单列表
 	List(ctx context.Context, filter ListFilter) ([]*Order, int64, error)
