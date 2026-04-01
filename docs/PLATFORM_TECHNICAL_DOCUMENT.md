@@ -56,7 +56,7 @@
 | 缓存 / 状态 | Redis |
 | 数据访问 | pgx |
 | 实时通信 | WebSocket |
-| 异步事件 | Redis Streams，Kafka 可选 |
+| 异步事件 | Kafka + Outbox |
 | RPC | gRPC + Protocol Buffers |
 | 认证 | JWT + Redis token store / blacklist |
 | 日志 | Zap |
@@ -122,7 +122,7 @@ graph TD
 - 实时能力通过 WebSocket Hub 统一抽象
 - 可异步解耦的链路通过事件总线下沉为旁路服务
 - 统计、通知、审核、音频处理可独立进程运行
-- 业务事件默认走 Redis Streams，Kafka 为可选增强模式
+- 业务事件默认走 Kafka + Outbox，Redis 不再承担业务事件总线职责
 
 ### 4.3 运行形态
 
@@ -543,7 +543,7 @@ graph TD
 | --- | --- | --- |
 | PostgreSQL + pgx pool | 平台统一持久化基础设施 | 仓储层、事务、迁移 |
 | Redis | token、限流、排行榜、Streams、Pub/Sub | 平台运行时状态中心 |
-| Redis Streams | 默认异步事件总线 | 通知、审核、音频任务消费 |
+| Kafka + Outbox | 默认异步事件总线 | 通知、审核、音频任务消费 |
 | Kafka + Outbox | 增强型事件总线 | 更可靠的事件投递和重试 |
 | gRPC + Proto | 拆分统计、通知、审核服务 | 独立服务通信协议 |
 | OSS 抽象 | 本地、阿里云、R2 统一访问 | 文件上传与媒体托管 |
@@ -708,9 +708,9 @@ sequenceDiagram
 
 ## 9. 事件总线设计
 
-### 9.1 默认模式：Redis Streams
+### 9.1 默认模式：Kafka + Outbox
 
-默认本地和基础模式下，业务事件通过 Redis Streams 发布与消费。
+默认本地和生产模式下，业务事件通过 PostgreSQL outbox 持久化，再由 outbox-relay 投递到 Kafka。
 
 适用场景：
 
@@ -724,9 +724,9 @@ sequenceDiagram
 - 与当前平台 Redis 依赖一致
 - 足够支撑本地开发和轻量部署
 
-### 9.2 可选模式：Kafka + Outbox
+### 9.2 默认模式：Kafka + Outbox
 
-平台已经具备 Kafka 改造能力，但它是可选增强模式，不是默认必开模式。
+平台当前的业务事件总线默认采用 Kafka + Outbox，Redis 不再承担业务事件总线职责。
 
 Kafka 模式下的关键变化：
 
@@ -799,7 +799,6 @@ Redis 在平台中的作用不只是缓存。
 - token blacklist
 - HTTP 速率限制
 - 排行榜
-- Redis Streams 事件总线
 - Redis Pub/Sub 分布式 WebSocket 广播
 
 ### 10.3 对象存储

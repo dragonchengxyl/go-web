@@ -6,37 +6,30 @@ import (
 	redisClient "github.com/redis/go-redis/v9"
 	"github.com/studio/platform/configs"
 	"github.com/studio/platform/internal/infra/kafkaevent"
-	"github.com/studio/platform/internal/infra/streams"
 	"go.uber.org/zap"
 )
 
 func NewPublisher(cfg *configs.Config, redis *redisClient.Client, logger *zap.Logger) (Publisher, error) {
-	if cfg != nil && cfg.Kafka.Enabled {
-		_ = logger
-		return &NoopPublisher{}, nil
+	_ = redis
+	if cfg == nil || !cfg.Kafka.Enabled {
+		return nil, fmt.Errorf("eventbus: kafka must be enabled for business event publishing")
 	}
-	if redis == nil {
-		return nil, fmt.Errorf("eventbus: redis client is required when kafka is disabled")
-	}
-	return streams.NewPublisher(redis), nil
+	_ = logger
+	return &NoopPublisher{}, nil
 }
 
 func NewTransportPublisher(cfg *configs.Config, redis *redisClient.Client, logger *zap.Logger) (Publisher, error) {
-	if cfg != nil && cfg.Kafka.Enabled {
-		return kafkaevent.NewPublisher(cfg.Kafka, logger)
+	_ = redis
+	if cfg == nil || !cfg.Kafka.Enabled {
+		return nil, fmt.Errorf("eventbus: kafka must be enabled for transport publishing")
 	}
-	if redis == nil {
-		return nil, fmt.Errorf("eventbus: redis client is required when kafka is disabled")
-	}
-	return streams.NewPublisher(redis), nil
+	return kafkaevent.NewPublisher(cfg.Kafka, logger)
 }
 
 func NewConsumer(cfg *configs.Config, redis *redisClient.Client, logger *zap.Logger, consumerID string) (Consumer, error) {
-	if cfg != nil && cfg.Kafka.Enabled {
-		return kafkaevent.NewConsumer(cfg.Kafka, logger, consumerID)
+	_ = redis
+	if cfg == nil || !cfg.Kafka.Enabled {
+		return nil, fmt.Errorf("eventbus: kafka must be enabled for event consumers")
 	}
-	if redis == nil {
-		return nil, fmt.Errorf("eventbus: redis client is required when kafka is disabled")
-	}
-	return streams.NewConsumer(redis, logger, consumerID), nil
+	return kafkaevent.NewConsumer(cfg.Kafka, logger, consumerID)
 }

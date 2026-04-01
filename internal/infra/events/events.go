@@ -1,8 +1,10 @@
-package streams
+package events
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
 
-// Event type constants for the furry:events Redis stream.
 const (
 	EventPostCreated     = "post.created"
 	EventPostModerated   = "post.moderated"
@@ -13,23 +15,19 @@ const (
 	EventAudioJobCreated = "audio.job.created"
 )
 
-// StreamKey is the Redis stream key used for all platform events.
-const StreamKey = "furry:events"
-
-// Consumer group names.
 const (
 	GroupModeration   = "moderation-group"
 	GroupNotification = "notification-group"
 	GroupAudioJobs    = "audio-job-group"
 )
 
-// StreamEvent is the envelope for all platform events.
-type StreamEvent struct {
+type Event struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
 }
 
-// PostCreatedPayload is published when a post is created.
+type HandlerFunc func(ctx context.Context, event Event) error
+
 type PostCreatedPayload struct {
 	PostID    string   `json:"post_id"`
 	AuthorID  string   `json:"author_id"`
@@ -37,27 +35,23 @@ type PostCreatedPayload struct {
 	MediaURLs []string `json:"media_urls"`
 }
 
-// PostModeratedPayload is published after moderation completes.
 type PostModeratedPayload struct {
 	PostID   string `json:"post_id"`
 	AuthorID string `json:"author_id"`
-	Status   string `json:"status"` // "approved" | "blocked"
+	Status   string `json:"status"`
 }
 
-// PostLikedPayload is published when a post is liked.
 type PostLikedPayload struct {
 	PostID   string `json:"post_id"`
 	ActorID  string `json:"actor_id"`
 	AuthorID string `json:"author_id"`
 }
 
-// UserFollowedPayload is published when a user follows another.
 type UserFollowedPayload struct {
 	FollowerID string `json:"follower_id"`
 	FolloweeID string `json:"followee_id"`
 }
 
-// TipSentPayload is published when a tip is sent.
 type TipSentPayload struct {
 	TipID       string `json:"tip_id"`
 	SenderID    string `json:"sender_id"`
@@ -65,7 +59,6 @@ type TipSentPayload struct {
 	AmountCents int    `json:"amount_cents"`
 }
 
-// CommentCreatedPayload is published when a comment is created.
 type CommentCreatedPayload struct {
 	CommentID     string `json:"comment_id"`
 	PostID        string `json:"post_id"`
@@ -74,7 +67,6 @@ type CommentCreatedPayload struct {
 	TargetUserID  string `json:"target_user_id"`
 }
 
-// AudioJobCreatedPayload is published when a new audio job is queued.
 type AudioJobCreatedPayload struct {
 	JobID string `json:"job_id"`
 }

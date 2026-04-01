@@ -9,7 +9,6 @@ import (
 	"github.com/studio/platform/internal/domain/audiowork"
 	"github.com/studio/platform/internal/domain/comment"
 	"github.com/studio/platform/internal/infra/eventbus"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
@@ -79,7 +78,7 @@ func (s *CommentService) CreateComment(ctx context.Context, userID uuid.UUID, in
 	// Publish comment.created event
 	if s.publisher != nil && input.TargetUserID != nil && input.PostID != nil && *input.TargetUserID != userID {
 		go func() {
-			_ = s.publisher.Publish(context.Background(), streams.EventCommentCreated, streams.CommentCreatedPayload{
+			_ = s.publisher.Publish(context.Background(), eventbus.EventCommentCreated, eventbus.CommentCreatedPayload{
 				CommentID:     c.ID.String(),
 				PostID:        input.PostID.String(),
 				CommentableID: c.CommentableID.String(),

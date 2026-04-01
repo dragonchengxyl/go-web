@@ -8,8 +8,8 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/infra/events"
 	"github.com/studio/platform/internal/infra/eventspec"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/observability/eventbusmetrics"
 	"go.uber.org/zap"
 )
@@ -35,7 +35,7 @@ func NewConsumer(cfg configs.KafkaConfig, logger *zap.Logger, consumerID string)
 	}, nil
 }
 
-func (c *Consumer) Start(ctx context.Context, group string, handler streams.HandlerFunc) error {
+func (c *Consumer) Start(ctx context.Context, group string, handler events.HandlerFunc) error {
 	if c.reader != nil {
 		_ = c.reader.Close()
 	}
@@ -59,7 +59,7 @@ func (c *Consumer) Start(ctx context.Context, group string, handler streams.Hand
 			return fmt.Errorf("kafka consumer: fetch message: %w", err)
 		}
 
-		var ev streams.StreamEvent
+		var ev events.Event
 		if err := json.Unmarshal(msg.Value, &ev); err != nil {
 			c.logger.Error("kafka consumer: invalid event payload", zap.Error(err))
 			eventbusmetrics.RecordConsume("kafka", group, msg.Topic, "invalid", "decode_error")

@@ -9,8 +9,8 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"github.com/studio/platform/configs"
+	"github.com/studio/platform/internal/infra/events"
 	"github.com/studio/platform/internal/infra/eventspec"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/observability/eventbusmetrics"
 	"go.uber.org/zap"
 )
@@ -61,7 +61,7 @@ func (p *Publisher) Publish(ctx context.Context, eventType string, payload inter
 		return fmt.Errorf("kafka publisher: marshal payload: %w", err)
 	}
 
-	envelope := streams.StreamEvent{
+	envelope := events.Event{
 		Type:    eventType,
 		Payload: payloadBytes,
 	}

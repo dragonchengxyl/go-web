@@ -9,7 +9,6 @@ import (
 	"github.com/studio/platform/internal/domain/order"
 	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/payment"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
@@ -154,7 +153,7 @@ func (s *PaymentService) markPaid(ctx context.Context, orderID uuid.UUID, method
 		if orderType, _ := o.Metadata["type"].(string); orderType == "tip" {
 			receiverID, _ := o.Metadata["to_user_id"].(string)
 			go func() {
-				_ = s.publisher.Publish(context.Background(), streams.EventTipSent, streams.TipSentPayload{
+				_ = s.publisher.Publish(context.Background(), eventbus.EventTipSent, eventbus.TipSentPayload{
 					TipID:       o.ID.String(),
 					SenderID:    o.UserID.String(),
 					ReceiverID:  receiverID,

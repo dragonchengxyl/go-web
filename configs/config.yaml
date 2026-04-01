@@ -27,8 +27,8 @@ redis:
   db: 0
 
 kafka:
-  enabled: false
-  brokers: ""
+  enabled: true
+  brokers: "localhost:9092"
   topic: furry-events
   client_id: studio-platform
   read_min_bytes: 1024

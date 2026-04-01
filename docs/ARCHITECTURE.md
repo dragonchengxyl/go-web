@@ -7,7 +7,7 @@
 这是一个面向 Furry 社区的全栈 monorepo，当前主线已经从传统内容站演进为：
 
 - 一个以社区内容、圈子、活动、私信、通知、创作者打赏为核心的 Go + Next.js 平台
-- 一个“单体 API 优先，事件驱动扩展”的后端架构，业务事件总线支持 Redis Streams / Kafka 切换
+- 一个“单体 API 优先，事件驱动扩展”的后端架构，业务事件总线默认使用 Kafka + Outbox
 - 一个已经具备管理后台、AI 助手、可观测性和多种部署清单的工程化项目
 
 ## 2. 目前已经做了什么
@@ -65,7 +65,7 @@
   - `/health`、`/ready`、`/metrics`、`/debug/pprof/*`
   - `studio-cli` 运维 / smoke / seed / pprof / perf 工具
   - Docker Compose、本地脚本、Kubernetes 清单
-  - 数据库迁移、Proto、gRPC、Redis Streams、Prometheus 指标
+- 数据库迁移、Proto、gRPC、Kafka + Outbox、Prometheus 指标
 
 ### 2.2 从代码规模看当前状态
 
@@ -94,9 +94,11 @@ graph TD
     API --> LLM[DeepSeek / OpenAI-compatible LLM]
 
     API -->|gRPC optional| STATS[stats-svc]
-    API -->|XADD| STREAMS[Redis Streams]
-    STREAMS --> NOTIFY[notification-svc]
-    STREAMS --> MOD[moderation-svc]
+    API -->|DB Trigger| OUTBOX[(PostgreSQL Outbox)]
+    OUTBOX --> RELAY[outbox-relay]
+    RELAY --> KAFKA[(Kafka)]
+    KAFKA --> NOTIFY[notification-svc]
+    KAFKA --> MOD[moderation-svc]
 
     API -->|Pub/Sub| R
     NOTIFY -->|Pub/Sub + WS Hub| R
@@ -147,8 +149,8 @@ graph TD
 |---|---|---|
 | `cmd/server` | 主 API 服务 | 当前核心入口，承载大部分 HTTP、WS、DB、缓存和业务逻辑 |
 | `cmd/stats-svc` | 统计 gRPC 服务 | 可独立运行，但主 API 已支持本地 fallback |
-| `cmd/notification-svc` | 通知事件消费与 gRPC 服务 | 消费 Redis Streams，生成通知并经 WS 推送 |
-| `cmd/moderation-svc` | 内容审核事件消费与 gRPC 服务 | 消费 `post.created`，调用阿里云审核，回写帖子状态 |
+| `cmd/notification-svc` | 通知事件消费与 gRPC 服务 | 消费 Kafka 事件，生成通知并经 WS 推送 |
+| `cmd/moderation-svc` | 内容审核事件消费与 gRPC 服务 | 消费 Kafka 中的 `post.created`，调用阿里云审核，回写帖子状态 |
 | `cmd/seed-dev` | 本地演示数据播种 | 用于开发环境 |
 | `cmd/studio-cli` | 运维 / 诊断工具 | 健康检查、pprof、perf、smoke、seed |
 
@@ -184,18 +186,21 @@ sequenceDiagram
     participant Web as Web
     participant API as Gin API
     participant PG as PostgreSQL
-    participant Stream as Redis Streams
+    participant Outbox as PostgreSQL Outbox
+    participant Kafka as Kafka
     participant Mod as moderation-svc
     participant Notify as notification-svc
     participant WS as WS Hub
 
     Web->>API: POST /api/v1/posts
     API->>PG: 插入帖子
-    API->>Stream: 发布 post.created
-    Mod->>Stream: 消费 post.created
+    API->>Outbox: 写入 post.created
+    Outbox->>Kafka: relay 投递
+    Mod->>Kafka: 消费 post.created
     Mod->>PG: 回写 moderation_status
-    Mod->>Stream: 发布 post.moderated
-    Notify->>Stream: 消费事件
+    Mod->>Outbox: 写入 post.moderated
+    Outbox->>Kafka: relay 投递
+    Notify->>Kafka: 消费事件
     Notify->>PG: 创建 notification
     Notify->>WS: 推送 notification
     WS-->>Web: 实时通知
@@ -277,7 +282,7 @@ sequenceDiagram
 - API 级限流
 - 排行榜
 - WebSocket 分布式消息路由
-- Redis Streams 事件总线
+- Kafka + Outbox 事件总线
 - 推荐用户兴趣向量缓存
 
 ### 8.3 外部依赖
@@ -332,7 +337,7 @@ sequenceDiagram
 ### 10.2 通知链路现状
 
 - 主 API 提供通知查询、已读、未读数、WS 推送能力
-- 自动生成“关注 / 点赞 / 评论 / 打赏 / 审核结果”通知，依赖 `notification-svc` 消费 Redis Streams
+- 自动生成“关注 / 点赞 / 评论 / 打赏 / 审核结果”通知，依赖 `notification-svc` 消费 Kafka
 - 如果只启动默认 `dev.sh`，这条异步生成链路并不完整
 
 ### 10.3 审核链路现状

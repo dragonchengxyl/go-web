@@ -78,7 +78,7 @@ Notes:
 
 ## Kafka and async workers
 
-When `STUDIO_KAFKA_ENABLED=true`, the production stack can also start:
+The production stack uses Kafka + Outbox for business events. Start:
 
 - `kafka` via `--profile kafka`
 - `outbox-relay`, `notification-svc`, `moderation-svc`, `audio-worker` via `--profile async`

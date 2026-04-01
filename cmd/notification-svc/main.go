@@ -19,7 +19,6 @@ import (
 	"github.com/studio/platform/internal/infra/kafkaevent"
 	postgresinfra "github.com/studio/platform/internal/infra/postgres"
 	redisinfra "github.com/studio/platform/internal/infra/redis"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/observability/httpserver"
 	transportgrpc "github.com/studio/platform/internal/transport/grpc"
 	"github.com/studio/platform/internal/transport/ws"
@@ -117,10 +116,10 @@ func main() {
 
 	go func() {
 		logger.Info("Starting notification stream consumer")
-		_ = consumer.Start(ctx, streams.GroupNotification, func(ctx context.Context, ev streams.StreamEvent) error {
+		_ = consumer.Start(ctx, eventbus.GroupNotification, func(ctx context.Context, ev eventbus.Event) error {
 			switch ev.Type {
-			case streams.EventUserFollowed:
-				var p streams.UserFollowedPayload
+			case eventbus.EventUserFollowed:
+				var p eventbus.UserFollowedPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return fmt.Errorf("notification-svc: unmarshal user.followed: %w", err)
 				}
@@ -141,8 +140,8 @@ func main() {
 					CreatedAt:  time.Now(),
 				})
 
-			case streams.EventPostLiked:
-				var p streams.PostLikedPayload
+			case eventbus.EventPostLiked:
+				var p eventbus.PostLikedPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return fmt.Errorf("notification-svc: unmarshal post.liked: %w", err)
 				}
@@ -167,8 +166,8 @@ func main() {
 					CreatedAt:  time.Now(),
 				})
 
-			case streams.EventCommentCreated:
-				var p streams.CommentCreatedPayload
+			case eventbus.EventCommentCreated:
+				var p eventbus.CommentCreatedPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return fmt.Errorf("notification-svc: unmarshal comment.created: %w", err)
 				}
@@ -193,8 +192,8 @@ func main() {
 					CreatedAt:  time.Now(),
 				})
 
-			case streams.EventTipSent:
-				var p streams.TipSentPayload
+			case eventbus.EventTipSent:
+				var p eventbus.TipSentPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return fmt.Errorf("notification-svc: unmarshal tip.sent: %w", err)
 				}
@@ -213,8 +212,8 @@ func main() {
 					CreatedAt: time.Now(),
 				})
 
-			case streams.EventPostModerated:
-				var p streams.PostModeratedPayload
+			case eventbus.EventPostModerated:
+				var p eventbus.PostModeratedPayload
 				if err := json.Unmarshal(ev.Payload, &p); err != nil {
 					return fmt.Errorf("notification-svc: unmarshal post.moderated: %w", err)
 				}

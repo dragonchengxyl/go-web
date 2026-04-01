@@ -128,23 +128,24 @@ set -o allexport
 source "$ROOT/.env"
 set +o allexport
 
-# ── 3. Docker 基础设施（PG + Redis + MailHog）───────
+# ── 3. Docker 基础设施（PG + Redis + MailHog + Kafka）──
 if [[ "$NO_DOCKER" == false && "$FRONTEND_ONLY" == false ]]; then
-  step "启动 Docker 基础设施（PostgreSQL + Redis + MailHog）"
+  step "启动 Docker 基础设施（PostgreSQL + Redis + MailHog + Kafka）"
   cd "$ROOT"
 
   # 检查端口是否已可连接（不管是容器还是本地服务）
-  PG_OK=false; RD_OK=false; MH_OK=false
+  PG_OK=false; RD_OK=false; MH_OK=false; KF_OK=false
   pg_isready -h localhost -p 5432 -U studio &>/dev/null && PG_OK=true
   redis-cli -h localhost ping &>/dev/null                && RD_OK=true
   (echo > /dev/tcp/127.0.0.1/1025) &>/dev/null           && MH_OK=true
+  (echo > /dev/tcp/127.0.0.1/9092) &>/dev/null           && KF_OK=true
 
-  if [[ "$PG_OK" == true && "$RD_OK" == true && "$MH_OK" == true ]]; then
-    info "PostgreSQL、Redis 和 MailHog 已可连接，跳过 Docker 启动"
+  if [[ "$PG_OK" == true && "$RD_OK" == true && "$MH_OK" == true && "$KF_OK" == true ]]; then
+    info "PostgreSQL、Redis、MailHog 和 Kafka 已可连接，跳过 Docker 启动"
   else
     # 先清理已停止的同名容器
-    $DC rm -f postgres redis mailhog 2>/dev/null || true
-    $DC up -d postgres redis mailhog 2>&1 || { error "Docker 启动失败"; exit 1; }
+    $DC rm -f postgres redis mailhog kafka 2>/dev/null || true
+    $DC --profile kafka up -d postgres redis mailhog kafka 2>&1 || { error "Docker 启动失败"; exit 1; }
 
     info "等待 PostgreSQL 就绪..."
     for i in $(seq 1 30); do
@@ -165,6 +166,27 @@ if [[ "$NO_DOCKER" == false && "$FRONTEND_ONLY" == false ]]; then
       (echo > /dev/tcp/127.0.0.1/1025) &>/dev/null && { success "MailHog 已就绪"; break; }
       [[ $i -eq 15 ]] && { error "MailHog 启动超时"; exit 1; }
       sleep 1
+    done
+
+    info "等待 Kafka 就绪..."
+    for i in $(seq 1 30); do
+      if docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list &>/dev/null; then
+        success "Kafka 已就绪"
+        break
+      fi
+      [[ $i -eq 30 ]] && { error "Kafka 启动超时"; exit 1; }
+      sleep 2
+    done
+
+    info "确保 Kafka topics 已创建..."
+    for topic in furry-events.content furry-events.social furry-events.audio furry-events.dlq; do
+      docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh \
+        --bootstrap-server localhost:9092 \
+        --create \
+        --if-not-exists \
+        --topic "$topic" \
+        --partitions 3 \
+        --replication-factor 1 >/dev/null
     done
   fi
 fi

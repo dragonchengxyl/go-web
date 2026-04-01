@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/follow"
 	"github.com/studio/platform/internal/infra/eventbus"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 )
 
@@ -57,7 +56,7 @@ func (s *FollowService) Follow(ctx context.Context, followerID, followeeID uuid.
 	}
 	if s.publisher != nil {
 		go func() {
-			_ = s.publisher.Publish(context.Background(), streams.EventUserFollowed, streams.UserFollowedPayload{
+			_ = s.publisher.Publish(context.Background(), eventbus.EventUserFollowed, eventbus.UserFollowedPayload{
 				FollowerID: followerID.String(),
 				FolloweeID: followeeID.String(),
 			})

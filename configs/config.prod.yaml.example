@@ -26,7 +26,7 @@ redis:
   db: 0
 
 kafka:
-  enabled: false
+  enabled: true
   brokers: kafka-1.example.com:9092,kafka-2.example.com:9092,kafka-3.example.com:9092
   topic: furry-events
   client_id: studio-platform-prod

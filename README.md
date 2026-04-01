@@ -2,7 +2,7 @@
 
 一个以 Furry 社区为核心的全栈 monorepo。当前仓库已经落地社区内容、圈子、活动、私信通知、创作者赞助、音频作品、AI 助手、管理后台，以及一个持续扩展中的 `Hex Blitz` 游戏实验室。
 
-默认开发形态是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog`，业务事件总线当前支持 `Redis Streams`，并已补上可切换的 `Kafka` 接线位。
+默认开发形态是 `Next.js Web + Gin API + PostgreSQL + Redis + MailHog + Kafka`，业务事件总线默认使用 `Kafka + Outbox`，Redis 仅保留会话、限流、排行榜与 WebSocket 广播职责。
 
 ## 项目一句话
 
@@ -11,7 +11,7 @@
 当前架构更接近：
 
 - 社区平台主站，承载内容、圈子、活动、私信、通知和创作者能力
-- 单体 API 优先，按需要用 Redis Streams / gRPC 拆出通知、审核、统计和音频处理
+- 单体 API 优先，按需要用 Kafka / gRPC 拆出通知、审核、统计和音频处理
 - 同仓库维护 Web 前端、Go 后端、独立 worker/service、部署文件和 QA 工具
 
 ## 当前代码已经做了什么
@@ -36,7 +36,7 @@
 - `WebSocket` 单连接实时推送
 - Redis Pub/Sub 分布式 WS Hub，支持多节点广播
 - 通知中心、未读数查询与实时提醒
-- Redis Streams 事件总线
+- Kafka + Outbox 业务事件总线
 - `notification-svc` 消费事件生成通知
 - `moderation-svc` 消费帖子事件执行内容审核
 
@@ -108,8 +108,8 @@
 ### 基础能力
 
 - Cloudflare R2 / 阿里云 OSS / 本地存储
-- Redis Streams 事件总线
-- 可切换的 Kafka 业务事件总线（适用于通知、审核、音频任务链路）
+- Kafka + Outbox 业务事件总线
+- Redis Pub/Sub + WebSocket 用于实时广播，不再承担业务事件总线职责
 - Redis Pub/Sub + WebSocket 实时推送
 - OpenAI-compatible / DeepSeek 风格 LLM 接口
 - Embedding / Vision 能力接入
@@ -120,7 +120,7 @@
 | --- | --- |
 | `cmd/server` | 主 API 入口，承载 HTTP、WebSocket、SSE、指标和大部分业务逻辑 |
 | `cmd/audio-worker` | 消费音频任务并执行本地处理、重试 |
-| `cmd/notification-svc` | 消费 Redis Streams 事件并生成通知 |
+| `cmd/notification-svc` | 消费 Kafka 事件并生成通知 |
 | `cmd/moderation-svc` | 消费帖子事件并执行内容审核 |
 | `cmd/stats-svc` | 统计 gRPC 服务 |
 | `cmd/seed-dev` | 本地开发数据播种 |
@@ -213,7 +213,7 @@ go run ./cmd/seed-dev -config configs/config.local.yaml -mode bulk -profile medi
 - 主 API 默认读取 `configs/config.local.yaml`
 - 前端使用 `apps/web/.env.local` 或 `apps/web/.env`
 - `./dev.sh` 会自动补齐根目录 `.env` 和 `apps/web/.env`
-- 业务事件总线默认走 Redis Streams；当 `kafka.enabled=true` 时，通知 / 审核 / 音频任务链路切到 Kafka
+- 业务事件总线默认走 Kafka + Outbox；Redis 继续承担 token、限流、排行榜与 WebSocket Pub/Sub
 - OSS 直传需要配置 `oss.*`
 - AI 助手需要配置 `assistant.*`
 - 支付接入需要配置 `payment.*`

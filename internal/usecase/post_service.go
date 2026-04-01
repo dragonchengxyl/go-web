@@ -12,7 +12,6 @@ import (
 	"github.com/studio/platform/internal/domain/post"
 	"github.com/studio/platform/internal/infra/eventbus"
 	"github.com/studio/platform/internal/infra/moderation"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"go.uber.org/zap"
 )
@@ -53,7 +52,7 @@ func WithAllowedHosts(hosts []string) PostServiceOption {
 	}
 }
 
-// WithPublisher enables event publishing via Redis Streams.
+// WithPublisher enables event publishing via the business event bus.
 func WithPublisher(p eventbus.Publisher) PostServiceOption {
 	return func(s *PostService) {
 		s.publisher = p
@@ -134,7 +133,7 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 	// through either the async stream pipeline or the in-process fallback.
 	if s.moderator != nil {
 		if s.publisher != nil {
-			err := s.publisher.Publish(ctx, streams.EventPostCreated, streams.PostCreatedPayload{
+			err := s.publisher.Publish(ctx, eventbus.EventPostCreated, eventbus.PostCreatedPayload{
 				PostID:    p.ID.String(),
 				AuthorID:  p.AuthorID.String(),
 				Content:   p.Content,
@@ -220,7 +219,7 @@ func (s *PostService) moderatePostAsync(p *post.Post) {
 		}
 
 		if publisher != nil {
-			if err := publisher.Publish(bgCtx, streams.EventPostModerated, streams.PostModeratedPayload{
+			if err := publisher.Publish(bgCtx, eventbus.EventPostModerated, eventbus.PostModeratedPayload{
 				PostID:   postID.String(),
 				AuthorID: authorID.String(),
 				Status:   pubStatus,
@@ -449,7 +448,7 @@ func (s *PostService) LikePost(ctx context.Context, userID, postID uuid.UUID) er
 
 	if s.publisher != nil && p.AuthorID != userID {
 		go func() {
-			_ = s.publisher.Publish(context.Background(), streams.EventPostLiked, streams.PostLikedPayload{
+			_ = s.publisher.Publish(context.Background(), eventbus.EventPostLiked, eventbus.PostLikedPayload{
 				PostID:   postID.String(),
 				ActorID:  userID.String(),
 				AuthorID: p.AuthorID.String(),

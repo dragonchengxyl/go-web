@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/infra/eventbus"
-	"github.com/studio/platform/internal/infra/streams"
 	"go.uber.org/zap"
 )
 
@@ -43,12 +42,12 @@ func (w *AudioWorker) Start(ctx context.Context) {
 
 func (w *AudioWorker) consumeStream(ctx context.Context) {
 	w.logger.Info("Starting audio job stream consumer")
-	_ = w.consumer.Start(ctx, streams.GroupAudioJobs, func(ctx context.Context, ev streams.StreamEvent) error {
-		if ev.Type != streams.EventAudioJobCreated {
+	_ = w.consumer.Start(ctx, eventbus.GroupAudioJobs, func(ctx context.Context, ev eventbus.Event) error {
+		if ev.Type != eventbus.EventAudioJobCreated {
 			return nil
 		}
 
-		var payload streams.AudioJobCreatedPayload
+		var payload eventbus.AudioJobCreatedPayload
 		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
 			return fmt.Errorf("audio worker: unmarshal payload: %w", err)
 		}

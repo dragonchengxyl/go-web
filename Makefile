@@ -138,14 +138,19 @@ dev-setup: ## First-time setup: copy config templates
 		echo "  apps/web/.env.local already exists, skipping"; \
 	fi
 
-infra-up: ## Start local Docker infra (Postgres + Redis)
-	docker-compose up -d
+infra-up: ## Start local Docker infra (Postgres + Redis + Kafka)
+	docker compose --profile kafka up -d
 	@echo "Waiting for Postgres..."
 	@until docker exec studio_postgres pg_isready -U studio -q 2>/dev/null; do sleep 1; done
-	@echo "✓ Postgres :5432  Redis :6379  ready"
+	@echo "Waiting for Kafka..."
+	@until docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1; do sleep 2; done
+	@for topic in furry-events.content furry-events.social furry-events.audio furry-events.dlq; do \
+		docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic $$topic --partitions 3 --replication-factor 1 >/dev/null; \
+	done
+	@echo "✓ Postgres :5432 Redis :6379 Kafka :9092 ready"
 
 infra-down: ## Stop local Docker infra
-	docker-compose down
+	docker compose down
 
 dev-backend: ## Run backend with LOCAL config
 	go run ./cmd/server/main.go -config configs/config.local.yaml

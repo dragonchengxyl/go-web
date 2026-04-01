@@ -1,7 +1,7 @@
 # Kafka Runbook
 
-> 面向当前仓库的 Redis + Kafka 共存架构。
-> 目标：让业务事件总线切到 Kafka，同时保留 Redis 用于限流、会话、排行榜和 WebSocket 广播。
+> 面向当前仓库的默认事件总线架构。
+> 目标：业务事件统一走 Kafka + Outbox，同时保留 Redis 用于限流、会话、排行榜和 WebSocket 广播。
 
 ## 1. 当前 Kafka 覆盖范围
 
@@ -96,12 +96,11 @@ docker exec studio_kafka /opt/kafka/bin/kafka-topics.sh \
   --list
 ```
 
-### 3.3 打开 Kafka 开关
+### 3.3 确认 Kafka 配置
 
 临时环境变量：
 
 ```bash
-export STUDIO_KAFKA_ENABLED=true
 export STUDIO_KAFKA_BROKERS=localhost:9092
 export STUDIO_KAFKA_TOPIC=furry-events
 ```

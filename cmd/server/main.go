@@ -179,7 +179,7 @@ func main() {
 	userService := usecase.NewUserService(userRepo, tokenStore, cfg.JWT, userOpts...)
 	musicService := usecase.NewMusicService(albumRepo, trackRepo, storageService)
 
-	// Business event bus: Kafka when enabled, otherwise Redis Streams.
+	// Business event bus: Kafka + Outbox.
 	publisher, err := eventbus.NewPublisher(cfg, redisClient, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize event publisher", zap.Error(err))

@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/studio/platform/internal/domain/audiojob"
 	"github.com/studio/platform/internal/infra/eventbus"
-	"github.com/studio/platform/internal/infra/streams"
 	"github.com/studio/platform/internal/pkg/apperr"
 	"go.uber.org/zap"
 )
@@ -256,7 +255,7 @@ func (s *AudioJobService) ListDueRetryIDs(ctx context.Context, limit int) ([]uui
 
 func (s *AudioJobService) enqueueJob(ctx context.Context, jobID uuid.UUID) {
 	if s.publisher != nil {
-		err := s.publisher.Publish(ctx, streams.EventAudioJobCreated, streams.AudioJobCreatedPayload{
+		err := s.publisher.Publish(ctx, eventbus.EventAudioJobCreated, eventbus.AudioJobCreatedPayload{
 			JobID: jobID.String(),
 		})
 		if err == nil {

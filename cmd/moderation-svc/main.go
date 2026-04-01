@@ -21,7 +21,6 @@ import (
 	postgresinfra "github.com/studio/platform/internal/infra/postgres"
 	redisinfra "github.com/studio/platform/internal/infra/redis"
 	"github.com/studio/platform/internal/observability/httpserver"
-	"github.com/studio/platform/internal/infra/streams"
 	transportgrpc "github.com/studio/platform/internal/transport/grpc"
 	moderationv1 "github.com/studio/platform/proto/moderation/v1"
 	"go.uber.org/zap"
@@ -124,12 +123,12 @@ func main() {
 
 	go func() {
 		logger.Info("Starting moderation stream consumer")
-		_ = consumer.Start(ctx, streams.GroupModeration, func(ctx context.Context, ev streams.StreamEvent) error {
-			if ev.Type != streams.EventPostCreated {
+		_ = consumer.Start(ctx, eventbus.GroupModeration, func(ctx context.Context, ev eventbus.Event) error {
+			if ev.Type != eventbus.EventPostCreated {
 				return nil
 			}
 
-			var payload streams.PostCreatedPayload
+			var payload eventbus.PostCreatedPayload
 			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
 				return fmt.Errorf("moderation-svc: unmarshal post.created: %w", err)
 			}
@@ -167,7 +166,7 @@ func main() {
 				logger.Error("failed to update moderation status", zap.Error(err), zap.String("post_id", payload.PostID))
 			}
 
-			return publisher.Publish(ctx, streams.EventPostModerated, streams.PostModeratedPayload{
+			return publisher.Publish(ctx, eventbus.EventPostModerated, eventbus.PostModeratedPayload{
 				PostID:   payload.PostID,
 				AuthorID: payload.AuthorID,
 				Status:   pubStatus,
