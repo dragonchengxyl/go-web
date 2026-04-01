@@ -31,8 +31,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "image_tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+            echo "deploy_ref=main" >> "$GITHUB_OUTPUT"
           else
             echo "image_tag=sha-$(printf '%s' '${{ github.event.workflow_run.head_sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
+            echo "deploy_ref=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy via SSH
@@ -47,8 +49,9 @@ jobs:
             set -euo pipefail
             cd /opt/furry-app
 
-            echo "📦 拉取最新代码..."
-            git pull origin main
+            echo "📦 同步部署代码..."
+            git fetch origin main --tags
+            git checkout "${{ steps.vars.outputs.deploy_ref }}"
 
             export IMAGE_TAG="${{ steps.vars.outputs.image_tag }}"
             export BACKEND_IMAGE="ghcr.io/${{ github.repository }}/backend:${IMAGE_TAG}"
@@ -58,26 +61,26 @@ jobs:
             echo "🏷️ 使用镜像标签: ${IMAGE_TAG}"
 
             echo "🐳 拉取容器镜像..."
-            sudo docker compose --env-file .env.prod -f docker-compose.prod.yml pull backend frontend
+            sudo --preserve-env=BACKEND_IMAGE,FRONTEND_IMAGE,KAFKA_IMAGE,IMAGE_TAG docker compose --env-file .env.prod -f docker-compose.prod.yml pull backend frontend
 
             echo "🗄️ 执行数据库迁移..."
-            sudo docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
+            sudo --preserve-env=BACKEND_IMAGE,FRONTEND_IMAGE,KAFKA_IMAGE,IMAGE_TAG docker compose --env-file .env.prod -f docker-compose.prod.yml run --rm migrate
 
             echo "🚀 启动应用容器..."
-            sudo docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate backend frontend
+            sudo --preserve-env=BACKEND_IMAGE,FRONTEND_IMAGE,KAFKA_IMAGE,IMAGE_TAG docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate backend frontend
 
             if grep -q '^STUDIO_KAFKA_ENABLED=true' .env.prod; then
               echo "🧵 Kafka 事件总线已启用，启动异步事件服务..."
 
               if grep -q '^STUDIO_KAFKA_BROKERS=$' .env.prod || ! grep -q '^STUDIO_KAFKA_BROKERS=' .env.prod; then
-                sudo docker compose --env-file .env.prod -f docker-compose.prod.yml pull kafka
-                sudo docker compose --env-file .env.prod -f docker-compose.prod.yml --profile kafka up -d kafka
+                sudo --preserve-env=BACKEND_IMAGE,FRONTEND_IMAGE,KAFKA_IMAGE,IMAGE_TAG docker compose --env-file .env.prod -f docker-compose.prod.yml pull kafka
+                sudo --preserve-env=BACKEND_IMAGE,FRONTEND_IMAGE,KAFKA_IMAGE,IMAGE_TAG docker compose --env-file .env.prod -f docker-compose.prod.yml --profile kafka up -d kafka
               fi
 
-              sudo docker compose --env-file .env.prod -f docker-compose.prod.yml --profile async up -d outbox-relay notification-svc audio-worker
+              sudo --preserve-env=BACKEND_IMAGE,FRONTEND_IMAGE,KAFKA_IMAGE,IMAGE_TAG docker compose --env-file .env.prod -f docker-compose.prod.yml --profile async up -d outbox-relay notification-svc audio-worker
 
               if grep -q '^STUDIO_MODERATION_ACCESS_KEY_ID=' .env.prod && ! grep -q '^STUDIO_MODERATION_ACCESS_KEY_ID=$' .env.prod; then
-                sudo docker compose --env-file .env.prod -f docker-compose.prod.yml --profile async up -d moderation-svc
+                sudo --preserve-env=BACKEND_IMAGE,FRONTEND_IMAGE,KAFKA_IMAGE,IMAGE_TAG docker compose --env-file .env.prod -f docker-compose.prod.yml --profile async up -d moderation-svc
               fi
             fi
 
