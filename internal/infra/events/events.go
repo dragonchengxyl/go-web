@@ -22,6 +22,7 @@ const (
 )
 
 type Event struct {
+	EventID string          `json:"event_id,omitempty"`
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
 }

@@ -117,6 +117,10 @@ func main() {
 	go func() {
 		logger.Info("Starting notification stream consumer")
 		_ = consumer.Start(ctx, eventbus.GroupNotification, func(ctx context.Context, ev eventbus.Event) error {
+			eventID, err := uuid.Parse(ev.EventID)
+			if err != nil {
+				return fmt.Errorf("notification-svc: invalid event_id %q: %w", ev.EventID, err)
+			}
 			switch ev.Type {
 			case eventbus.EventUserFollowed:
 				var p eventbus.UserFollowedPayload
@@ -131,13 +135,12 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("notification-svc: invalid follower_id: %w", err)
 				}
-				return notificationService.Notify(ctx, &notification.Notification{
+				return notificationService.NotifyFromEvent(ctx, eventbus.GroupNotification, eventID, &notification.Notification{
 					UserID:     followeeID,
 					Type:       notification.TypeFollow,
 					ActorID:    &followerID,
 					TargetID:   &followerID,
 					TargetType: "user",
-					CreatedAt:  time.Now(),
 				})
 
 			case eventbus.EventPostLiked:
@@ -157,13 +160,12 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("notification-svc: invalid post_id: %w", err)
 				}
-				return notificationService.Notify(ctx, &notification.Notification{
+				return notificationService.NotifyFromEvent(ctx, eventbus.GroupNotification, eventID, &notification.Notification{
 					UserID:     authorID,
 					Type:       notification.TypeLike,
 					ActorID:    &actorID,
 					TargetID:   &postID,
 					TargetType: "post",
-					CreatedAt:  time.Now(),
 				})
 
 			case eventbus.EventCommentCreated:
@@ -183,13 +185,12 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("notification-svc: invalid post_id: %w", err)
 				}
-				return notificationService.Notify(ctx, &notification.Notification{
+				return notificationService.NotifyFromEvent(ctx, eventbus.GroupNotification, eventID, &notification.Notification{
 					UserID:     targetUserID,
 					Type:       notification.TypeComment,
 					ActorID:    &authorID,
 					TargetID:   &postID,
 					TargetType: "post",
-					CreatedAt:  time.Now(),
 				})
 
 			case eventbus.EventTipSent:
@@ -205,11 +206,10 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("notification-svc: invalid sender_id: %w", err)
 				}
-				return notificationService.Notify(ctx, &notification.Notification{
-					UserID:    receiverID,
-					Type:      notification.TypeTip,
-					ActorID:   &senderID,
-					CreatedAt: time.Now(),
+				return notificationService.NotifyFromEvent(ctx, eventbus.GroupNotification, eventID, &notification.Notification{
+					UserID:  receiverID,
+					Type:    notification.TypeTip,
+					ActorID: &senderID,
 				})
 
 			case eventbus.EventPostModerated:
@@ -231,12 +231,11 @@ func main() {
 					targetType = "post_approved"
 				}
 
-				return notificationService.Notify(ctx, &notification.Notification{
+				return notificationService.NotifyFromEvent(ctx, eventbus.GroupNotification, eventID, &notification.Notification{
 					UserID:     authorID,
 					Type:       notification.TypeSystem,
 					TargetID:   &postID,
 					TargetType: targetType,
-					CreatedAt:  time.Now(),
 				})
 			}
 			return nil

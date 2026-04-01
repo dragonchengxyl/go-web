@@ -229,6 +229,40 @@ func TestNotificationServiceNotifyPersistsAndPushes(t *testing.T) {
 	assert.Equal(t, ws.MessageTypeNotification, hub.sent[0].msg.Type)
 }
 
+func TestNotificationServiceNotifyFromEventIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeNotificationRepo()
+	hub := &fakeHub{}
+	svc := usecase.NewNotificationService(repo, hub)
+
+	userID := uuid.New()
+	eventID := uuid.New()
+
+	err := svc.NotifyFromEvent(ctx, "notification-group", eventID, &notification.Notification{
+		UserID:     userID,
+		Type:       notification.TypeFollow,
+		TargetType: "user",
+	})
+	require.NoError(t, err)
+
+	err = svc.NotifyFromEvent(ctx, "notification-group", eventID, &notification.Notification{
+		UserID:     userID,
+		Type:       notification.TypeFollow,
+		TargetType: "user",
+	})
+	require.NoError(t, err)
+
+	items, total, err := svc.ListNotifications(ctx, usecase.ListNotificationsInput{
+		UserID:   userID,
+		Page:     1,
+		PageSize: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, hub.sent, 1)
+}
+
 func TestPostServiceLikePostHandlesConcurrentDuplicateGracefully(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakePostRepo()
@@ -829,12 +863,14 @@ func (r *fakeGroupRepo) DecrementPostCount(_ context.Context, groupID uuid.UUID)
 }
 
 type fakeNotificationRepo struct {
-	items map[uuid.UUID][]*notification.Notification
+	items           map[uuid.UUID][]*notification.Notification
+	processedEvents map[string]map[uuid.UUID]struct{}
 }
 
 func newFakeNotificationRepo() *fakeNotificationRepo {
 	return &fakeNotificationRepo{
-		items: make(map[uuid.UUID][]*notification.Notification),
+		items:           make(map[uuid.UUID][]*notification.Notification),
+		processedEvents: make(map[string]map[uuid.UUID]struct{}),
 	}
 }
 
@@ -842,6 +878,19 @@ func (r *fakeNotificationRepo) Create(_ context.Context, item *notification.Noti
 	cloned := *item
 	r.items[item.UserID] = append(r.items[item.UserID], &cloned)
 	return nil
+}
+
+func (r *fakeNotificationRepo) CreateIfEventNotProcessed(_ context.Context, consumerName string, eventID uuid.UUID, item *notification.Notification) (bool, error) {
+	if r.processedEvents[consumerName] == nil {
+		r.processedEvents[consumerName] = make(map[uuid.UUID]struct{})
+	}
+	if _, exists := r.processedEvents[consumerName][eventID]; exists {
+		return false, nil
+	}
+	r.processedEvents[consumerName][eventID] = struct{}{}
+	cloned := *item
+	r.items[item.UserID] = append(r.items[item.UserID], &cloned)
+	return true, nil
 }
 
 func (r *fakeNotificationRepo) List(_ context.Context, userID uuid.UUID, _, _ int) ([]*notification.Notification, int64, error) {

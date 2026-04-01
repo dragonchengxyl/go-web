@@ -38,6 +38,7 @@ type Notification struct {
 // Repository is the persistence interface for notifications
 type Repository interface {
 	Create(ctx context.Context, n *Notification) error
+	CreateIfEventNotProcessed(ctx context.Context, consumerName string, eventID uuid.UUID, n *Notification) (bool, error)
 	List(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*Notification, int64, error)
 	MarkRead(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) error
 	MarkAllRead(ctx context.Context, userID uuid.UUID) error

@@ -39,6 +39,28 @@ func (s *NotificationService) Notify(ctx context.Context, n *notification.Notifi
 	return nil
 }
 
+func (s *NotificationService) NotifyFromEvent(ctx context.Context, consumerName string, eventID uuid.UUID, n *notification.Notification) error {
+	n.ID = uuid.New()
+	n.IsRead = false
+	n.CreatedAt = time.Now()
+
+	created, err := s.repo.CreateIfEventNotProcessed(ctx, consumerName, eventID, n)
+	if err != nil {
+		return apperr.Wrap(apperr.CodeInternalError, "创建通知失败", err)
+	}
+	if !created {
+		return nil
+	}
+
+	if s.hub != nil {
+		s.hub.SendToUser(n.UserID, ws.WSMessage{
+			Type:    ws.MessageTypeNotification,
+			Payload: n,
+		})
+	}
+	return nil
+}
+
 // ListNotificationsInput represents input for listing notifications
 type ListNotificationsInput struct {
 	UserID   uuid.UUID

@@ -8,6 +8,10 @@ func (p *NoopPublisher) Publish(_ context.Context, _ string, _ interface{}) erro
 	return nil
 }
 
+func (p *NoopPublisher) PublishEvent(_ context.Context, _ Event) error {
+	return nil
+}
+
 func (p *NoopPublisher) Close() error {
 	return nil
 }

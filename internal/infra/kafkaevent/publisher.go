@@ -61,30 +61,33 @@ func (p *Publisher) Publish(ctx context.Context, eventType string, payload inter
 		return fmt.Errorf("kafka publisher: marshal payload: %w", err)
 	}
 
-	envelope := events.Event{
+	return p.PublishEvent(ctx, events.Event{
 		Type:    eventType,
 		Payload: payloadBytes,
-	}
-	value, err := json.Marshal(envelope)
+	})
+}
+
+func (p *Publisher) PublishEvent(ctx context.Context, event events.Event) error {
+	value, err := json.Marshal(event)
 	if err != nil {
-		eventbusmetrics.RecordPublish("kafka", eventspec.TopicForEvent(eventType), eventType, "error")
+		eventbusmetrics.RecordPublish("kafka", eventspec.TopicForEvent(event.Type), event.Type, "error")
 		return fmt.Errorf("kafka publisher: marshal envelope: %w", err)
 	}
 
-	topic := eventspec.KafkaTopicName(p.cfg, eventspec.TopicForEvent(eventType))
+	topic := eventspec.KafkaTopicName(p.cfg, eventspec.TopicForEvent(event.Type))
 	msg := kafka.Message{
 		Topic: topic,
-		Key:   []byte(deriveMessageKey(payload, eventType)),
+		Key:   []byte(deriveMessageKey(event.Payload, event.Type)),
 		Value: value,
 		Time:  time.Now().UTC(),
 	}
 
 	if err := p.writer.WriteMessages(ctx, msg); err != nil {
-		eventbusmetrics.RecordPublish("kafka", topic, eventType, "error")
+		eventbusmetrics.RecordPublish("kafka", topic, event.Type, "error")
 		return fmt.Errorf("kafka publisher: write message: %w", err)
 	}
 
-	eventbusmetrics.RecordPublish("kafka", topic, eventType, "ok")
+	eventbusmetrics.RecordPublish("kafka", topic, event.Type, "ok")
 	return nil
 }
 

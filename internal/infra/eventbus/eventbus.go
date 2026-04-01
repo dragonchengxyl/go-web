@@ -34,6 +34,7 @@ type AudioJobCreatedPayload = events.AudioJobCreatedPayload
 
 type Publisher interface {
 	Publish(ctx context.Context, eventType string, payload interface{}) error
+	PublishEvent(ctx context.Context, event Event) error
 	Close() error
 }
 

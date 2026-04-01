@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/studio/platform/internal/domain/notification"
 )
@@ -31,6 +32,37 @@ func (r *NotificationRepository) Create(ctx context.Context, n *notification.Not
 		return fmt.Errorf("failed to create notification: %w", err)
 	}
 	return nil
+}
+
+const markProcessedEventSQL = `
+	INSERT INTO processed_events (consumer_name, event_id, processed_at)
+	VALUES ($1, $2, NOW())
+`
+
+func (r *NotificationRepository) CreateIfEventNotProcessed(ctx context.Context, consumerName string, eventID uuid.UUID, n *notification.Notification) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin notification transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, markProcessedEventSQL, consumerName, eventID); err != nil {
+		if isNotificationUniqueViolation(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("insert processed event: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, createNotificationSQL,
+		n.ID, n.UserID, n.ActorID, string(n.Type), n.TargetID, n.TargetType, n.IsRead, n.CreatedAt,
+	); err != nil {
+		return false, fmt.Errorf("failed to create notification: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit notification transaction: %w", err)
+	}
+	return true, nil
 }
 
 const listNotificationsSQL = `
@@ -101,4 +133,11 @@ func (r *NotificationRepository) CountUnread(ctx context.Context, userID uuid.UU
 		userID,
 	).Scan(&count)
 	return count, err
+}
+
+func isNotificationUniqueViolation(err error) bool {
+	if pgErr, ok := err.(*pgconn.PgError); ok {
+		return pgErr.Code == "23505"
+	}
+	return false
 }

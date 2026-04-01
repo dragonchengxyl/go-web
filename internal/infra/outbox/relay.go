@@ -19,15 +19,15 @@ type deadLetterPublisher interface {
 }
 
 type Event struct {
-	ID           uuid.UUID
-	SourceTable  string
+	ID            uuid.UUID
+	SourceTable   string
 	AggregateType string
-	AggregateID  *uuid.UUID
-	EventType    string
-	Topic        string
-	PartitionKey string
-	Payload      json.RawMessage
-	AttemptCount int
+	AggregateID   *uuid.UUID
+	EventType     string
+	Topic         string
+	PartitionKey  string
+	Payload       json.RawMessage
+	AttemptCount  int
 }
 
 type Relay struct {
@@ -135,7 +135,11 @@ func (r *Relay) processBatch(ctx context.Context) error {
 	}
 
 	for _, event := range events {
-		if err := r.publisher.Publish(ctx, event.EventType, event.Payload); err != nil {
+		if err := r.publisher.PublishEvent(ctx, eventbus.Event{
+			EventID: event.ID.String(),
+			Type:    event.EventType,
+			Payload: event.Payload,
+		}); err != nil {
 			eventbusmetrics.RecordOutboxDispatch("relay", event.Topic, event.EventType, "error")
 			if markErr := r.markFailed(ctx, tx, event, err); markErr != nil {
 				return fmt.Errorf("mark outbox failure: %w", markErr)
