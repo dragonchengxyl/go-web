@@ -27,9 +27,10 @@ func (h *TipHandler) CreateTip(c *gin.Context) {
 	}
 
 	var req struct {
-		ToUserID  string  `json:"to_user_id" binding:"required"`
-		Amount    float64 `json:"amount" binding:"required,gt=0"`
-		Message   string  `json:"message"`
+		ToUserID       string  `json:"to_user_id" binding:"required"`
+		Amount         float64 `json:"amount" binding:"required,gt=0"`
+		Message        string  `json:"message"`
+		IdempotencyKey string  `json:"idempotency_key"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
@@ -43,10 +44,11 @@ func (h *TipHandler) CreateTip(c *gin.Context) {
 	}
 
 	order, err := h.tipService.CreateTip(c.Request.Context(), usecase.CreateTipInput{
-		FromUserID: fromUserID,
-		ToUserID:   toUserID,
-		AmountCNY:  req.Amount,
-		Message:    req.Message,
+		FromUserID:     fromUserID,
+		ToUserID:       toUserID,
+		AmountCNY:      req.Amount,
+		Message:        req.Message,
+		IdempotencyKey: firstNonEmpty(c.GetHeader("Idempotency-Key"), req.IdempotencyKey),
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -69,4 +71,13 @@ func (h *TipHandler) ListReceivedTips(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"tips": tips, "total": total, "page": page, "size": len(tips)})
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }

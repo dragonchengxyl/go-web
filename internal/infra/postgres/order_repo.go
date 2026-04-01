@@ -56,16 +56,29 @@ const getOrderByIDSQL = `
 	FROM orders WHERE id = $1
 `
 
+const getOrderByIdempotencyKeySQL = `
+	SELECT id, order_no, user_id, status, total_cents, currency, discount_cents, coupon_code, payment_method, paid_at, idempotency_key, metadata, created_at, expires_at, updated_at
+	FROM orders WHERE idempotency_key = $1
+`
+
 func (r *orderRepo) GetByID(ctx context.Context, id uuid.UUID) (*order.Order, error) {
+	return r.getOne(ctx, getOrderByIDSQL, id, "id", id.String())
+}
+
+func (r *orderRepo) GetByIdempotencyKey(ctx context.Context, key string) (*order.Order, error) {
+	return r.getOne(ctx, getOrderByIdempotencyKeySQL, key, "idempotency_key", key)
+}
+
+func (r *orderRepo) getOne(ctx context.Context, query string, arg any, field, value string) (*order.Order, error) {
 	var o order.Order
 	var metadataJSON []byte
-	err := r.db.QueryRow(ctx, getOrderByIDSQL, id).Scan(
+	err := r.db.QueryRow(ctx, query, arg).Scan(
 		&o.ID, &o.OrderNo, &o.UserID, &o.Status, &o.TotalCents, &o.Currency,
 		&o.DiscountCents, &o.CouponCode, &o.PaymentMethod, &o.PaidAt,
 		&o.IdempotencyKey, &metadataJSON, &o.CreatedAt, &o.ExpiresAt, &o.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
-		return nil, apperr.NotFound("order", "id", id.String())
+		return nil, apperr.NotFound("order", field, value)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get order: %w", err)

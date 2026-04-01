@@ -6,6 +6,7 @@
 
 - 基础路径：`/api/v1`
 - 鉴权方式：`Authorization: Bearer <access_token>`
+- 对会创建资金订单的接口，优先使用 `Idempotency-Key` 请求头避免重试或重复点击创建多笔订单
 - 成功响应：统一由 `response.Success` 返回，核心字段为 `code/message/data/request_id/timestamp`
 - 失败响应：统一由 `response.Error` 返回，业务错误码定义在 [internal/pkg/apperr/codes.go](/home/chenlongting/go-web/internal/pkg/apperr/codes.go)
 - 请求追踪：每个请求都有 `X-Request-ID`，服务端会回写到响应头和结构化日志中

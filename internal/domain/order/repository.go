@@ -23,6 +23,9 @@ type Repository interface {
 	// GetByID 根据ID获取订单
 	GetByID(ctx context.Context, id uuid.UUID) (*Order, error)
 
+	// GetByIdempotencyKey 根据幂等键获取订单
+	GetByIdempotencyKey(ctx context.Context, key string) (*Order, error)
+
 	// Update 更新订单
 	Update(ctx context.Context, order *Order) error
 

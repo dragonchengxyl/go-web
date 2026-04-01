@@ -109,6 +109,7 @@ func main() {
 	// Initialize token store
 	tokenStore := redis.NewTokenStore(redisClient)
 	leaderboard := redis.NewLeaderboard(redisClient)
+	idempotencyStore := redis.NewIdempotencyStore(redisClient)
 
 	// Initialize storage service.
 	var storageService oss.StorageService
@@ -225,7 +226,11 @@ func main() {
 	postService := usecase.NewPostService(postRepo, postOpts...)
 	followService := usecase.NewFollowService(followRepo, usecase.WithFollowPublisher(publisher))
 	chatService := usecase.NewChatService(chatRepo)
-	tipService := usecase.NewTipService(orderRepo, usecase.WithTipPublisher(publisher))
+	tipService := usecase.NewTipService(
+		orderRepo,
+		usecase.WithTipPublisher(publisher),
+		usecase.WithTipIdempotency(idempotencyStore, 5*time.Second),
+	)
 	ossService := usecase.NewOSSService(storageService)
 
 	eventService := usecase.NewEventService(eventRepo)

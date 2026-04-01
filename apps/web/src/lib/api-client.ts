@@ -1,6 +1,18 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 
+function createIdempotencyKey(): string {
+  if (typeof globalThis !== "undefined" && "crypto" in globalThis) {
+    const cryptoObj = globalThis.crypto as Crypto & {
+      randomUUID?: () => string;
+    };
+    if (typeof cryptoObj.randomUUID === "function") {
+      return cryptoObj.randomUUID();
+    }
+  }
+  return `idem-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
 interface ApiResponse<T> {
   code: number;
   message: string;
@@ -936,10 +948,15 @@ class ApiClient {
     return this.request<T>(endpoint, { method: "GET" });
   }
 
-  async post<T = any>(endpoint: string, body?: any): Promise<T> {
+  async post<T = any>(
+    endpoint: string,
+    body?: any,
+    headers?: Record<string, string>,
+  ): Promise<T> {
     return this.request<T>(endpoint, {
       method: "POST",
       body: body ? JSON.stringify(body) : undefined,
+      headers,
     });
   }
 
@@ -1360,11 +1377,18 @@ class ApiClient {
 
   // ── Tips ──────────────────────────────────────────────────────────────
 
-  async createTip(toUserId: string, amount: number, message?: string) {
+  async createTip(
+    toUserId: string,
+    amount: number,
+    message?: string,
+    idempotencyKey = createIdempotencyKey(),
+  ) {
     return this.post<TipOrder>("/tips", {
       to_user_id: toUserId,
       amount,
       message,
+    }, {
+      "Idempotency-Key": idempotencyKey,
     });
   }
 
