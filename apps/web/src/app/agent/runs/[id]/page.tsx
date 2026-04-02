@@ -118,35 +118,101 @@ export default function AgentRunDetailPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-slate-950">执行时间线</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!(data.steps?.length) ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                  还没有步骤记录。
-                </div>
-              ) : null}
-              {(data.steps || []).map((step) => (
-                <div key={step.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {step.step_index}. {step.title}
-                      </p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                        {step.kind} · {step.status}
-                      </p>
-                    </div>
+          <div className="space-y-6">
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-slate-950">执行时间线</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!(data.steps?.length) ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                    还没有步骤记录。
                   </div>
-                  {step.summary ? (
-                    <p className="mt-3 text-sm leading-6 text-slate-600">{step.summary}</p>
-                  ) : null}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ) : null}
+                {(data.steps || []).map((step) => (
+                  <div key={step.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {step.step_index}. {step.title}
+                        </p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
+                          {step.kind} · {step.status}
+                        </p>
+                      </div>
+                    </div>
+                    {step.summary ? (
+                      <p className="mt-3 text-sm leading-6 text-slate-600">{step.summary}</p>
+                    ) : null}
+                    {step.error_text ? (
+                      <p className="mt-3 text-sm leading-6 text-rose-600">{step.error_text}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-slate-950">只读工具调用</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!(data.tool_calls?.length) ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                    还没有工具调用记录。
+                  </div>
+                ) : null}
+                {(data.tool_calls || []).map((call) => (
+                  <div key={call.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{call.tool_name}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
+                          {call.access_level} · {call.status}
+                        </p>
+                      </div>
+                    </div>
+                    {call.output_data ? (
+                      <pre className="mt-3 whitespace-pre-wrap break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
+                        {JSON.stringify(call.output_data, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-slate-950">结构化产物</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!(data.artifacts?.length) ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                    当前还没有生成产物。
+                  </div>
+                ) : null}
+                {(data.artifacts || []).map((artifact) => (
+                  <div key={artifact.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-900">{artifact.title}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
+                      {artifact.kind}
+                    </p>
+                    {artifact.content ? (
+                      <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                        {artifact.content}
+                      </div>
+                    ) : null}
+                    {artifact.structured_data ? (
+                      <pre className="mt-3 whitespace-pre-wrap break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
+                        {JSON.stringify(artifact.structured_data, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       ) : null}
     </div>

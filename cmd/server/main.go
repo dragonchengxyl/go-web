@@ -313,7 +313,7 @@ func main() {
 		groupService,
 		eventService,
 	)
-	agentService := usecase.NewAgentService(agentRepo)
+	agentService := usecase.NewAgentService(agentRepo, postService)
 	gameService := usecase.NewHexBlitzRoomService(
 		logger,
 		usecase.WithHexBlitzRepository(hexBlitzRepo),

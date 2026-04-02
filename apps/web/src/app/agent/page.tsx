@@ -222,10 +222,13 @@ export default function AgentWorkspacePage() {
                   </div>
                   <StatusBadge status={run.status} />
                 </div>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+              <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
                   <span>{run.scenario}</span>
                   <span>{new Date(run.updated_at).toLocaleString("zh-CN")}</span>
                 </div>
+                {run.latest_summary ? (
+                  <p className="mt-2 text-sm leading-6 text-slate-500">{run.latest_summary}</p>
+                ) : null}
               </Link>
             ))}
           </CardContent>
