@@ -379,29 +379,18 @@ func (s *AgentService) executeRunAsync(run agentdomain.Run) {
 }
 
 func (s *AgentService) executeRunSafe(ctx context.Context, run agentdomain.Run) {
-	if err := s.executeRun(ctx, &run); err != nil {
-		current, getErr := s.repo.GetRunByID(ctx, run.ID)
-		if getErr == nil && current != nil && current.Status == agentdomain.RunStatusCancelled {
-			return
-		}
+	startedAt := time.Now()
+	started, err := s.repo.TryStartRun(ctx, run.ID, startedAt)
+	if err != nil {
+		s.recordRunFailure(ctx, run.ID, err)
+		return
+	}
+	if !started {
+		return
+	}
 
-		failAt := time.Now()
-		_ = s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusFailed, "", err.Error(), &failAt)
-		failStep := &agentdomain.Step{
-			ID:          uuid.New(),
-			RunID:       run.ID,
-			StepIndex:   9999,
-			Kind:        "system",
-			Title:       "任务执行失败",
-			Status:      agentdomain.StepStatusFailed,
-			Summary:     "当前这次 Agent 运行没有顺利完成。",
-			ErrorText:   err.Error(),
-			CreatedAt:   failAt,
-			StartedAt:   &failAt,
-			CompletedAt: &failAt,
-		}
-		_ = s.repo.CreateStep(ctx, failStep)
-		s.publishRunEvent(run.ID, "failed", failStep.Summary)
+	if err := s.executeRun(ctx, &run); err != nil {
+		s.recordRunFailure(ctx, run.ID, err)
 	}
 }
 
@@ -425,7 +414,6 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return nil
 	}
 
-	startedAt := time.Now()
 	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusRunning, "正在分析当前草稿和页面上下文。", "", nil); err != nil {
 		return err
 	}
@@ -435,19 +423,24 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	pageContext, contextSummary := buildAgentPostPageContext(run.ContextSnapshot)
 	state.PageContext = pageContext
 	state.ContextSummary = contextSummary
+	planStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
+		return err
+	}
+	planTime := time.Now()
 	planStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
-		StepIndex:   2,
+		StepIndex:   planStepIndex,
 		Kind:        "plan",
 		Title:       "拆解发帖任务",
 		Status:      agentdomain.StepStatusCompleted,
 		Summary:     "先读取草稿与页面上下文，再生成标题、正文润色、标签和可见性建议。",
 		InputData:   cloneAgentMap(run.ContextSnapshot),
 		OutputData:  map[string]any{"scenario": run.Scenario, "context_summary": contextSummary},
-		CreatedAt:   startedAt,
-		StartedAt:   &startedAt,
-		CompletedAt: &startedAt,
+		CreatedAt:   planTime,
+		StartedAt:   &planTime,
+		CompletedAt: &planTime,
 	}
 	if err := s.repo.CreateStep(ctx, planStep); err != nil {
 		return err
@@ -471,11 +464,15 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return nil
 	}
 
+	artifactStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
+		return err
+	}
 	artifactStepTime := time.Now()
 	artifactStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
-		StepIndex:   3,
+		StepIndex:   artifactStepIndex,
 		Kind:        "artifact_generation",
 		Title:       "生成发帖建议产物",
 		Status:      agentdomain.StepStatusCompleted,
@@ -561,10 +558,14 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return err
 	}
 	s.publishRunEvent(run.ID, "waiting_approval", runSummary)
+	finalStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
+		return err
+	}
 	finalStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
-		StepIndex:   4,
+		StepIndex:   finalStepIndex,
 		Kind:        "approval",
 		Title:       "等待批准回填草稿",
 		Status:      agentdomain.StepStatusCompleted,
@@ -579,6 +580,43 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	}
 	s.publishRunEvent(run.ID, "step_completed", finalStep.Summary)
 	return nil
+}
+
+func (s *AgentService) recordRunFailure(ctx context.Context, runID uuid.UUID, err error) {
+	current, getErr := s.repo.GetRunByID(ctx, runID)
+	if getErr == nil && current != nil && current.Status == agentdomain.RunStatusCancelled {
+		return
+	}
+
+	failAt := time.Now()
+	_ = s.repo.UpdateRunStatus(ctx, runID, agentdomain.RunStatusFailed, "", err.Error(), &failAt)
+	stepIndex, stepErr := s.nextRunStepIndex(ctx, runID)
+	if stepErr != nil {
+		stepIndex = 9999
+	}
+	failStep := &agentdomain.Step{
+		ID:          uuid.New(),
+		RunID:       runID,
+		StepIndex:   stepIndex,
+		Kind:        "system",
+		Title:       "任务执行失败",
+		Status:      agentdomain.StepStatusFailed,
+		Summary:     "当前这次 Agent 运行没有顺利完成。",
+		ErrorText:   err.Error(),
+		CreatedAt:   failAt,
+		StartedAt:   &failAt,
+		CompletedAt: &failAt,
+	}
+	_ = s.repo.CreateStep(ctx, failStep)
+	s.publishRunEvent(runID, "failed", failStep.Summary)
+}
+
+func (s *AgentService) nextRunStepIndex(ctx context.Context, runID uuid.UUID) (int, error) {
+	steps, err := s.repo.ListSteps(ctx, runID)
+	if err != nil {
+		return 0, err
+	}
+	return len(steps) + 1, nil
 }
 
 func (s *AgentService) runStopped(ctx context.Context, runID uuid.UUID) (bool, error) {

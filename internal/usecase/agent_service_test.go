@@ -54,6 +54,20 @@ func (r *inMemoryAgentRepo) ListRuns(_ context.Context, userID uuid.UUID, _, _ i
 	return items, int64(len(items)), nil
 }
 
+func (r *inMemoryAgentRepo) TryStartRun(_ context.Context, id uuid.UUID, startedAt time.Time) (bool, error) {
+	item, ok := r.runs[id]
+	if !ok {
+		return false, agentdomain.ErrRunNotFound
+	}
+	if item.Status != agentdomain.RunStatusQueued {
+		return false, nil
+	}
+	item.Status = agentdomain.RunStatusRunning
+	item.StartedAt = &startedAt
+	item.UpdatedAt = startedAt
+	return true, nil
+}
+
 func (r *inMemoryAgentRepo) UpdateRunStatus(_ context.Context, id uuid.UUID, status agentdomain.RunStatus, summary, lastError string, completedAt *time.Time) error {
 	item, ok := r.runs[id]
 	if !ok {

@@ -76,6 +76,7 @@ function AgentWorkspaceContent() {
   const initialForm = useMemo(() => buildInitialForm(searchParams), [searchParams]);
   const [form, setForm] = useState<CreateAgentRunInput>(initialForm);
   const [message, setMessage] = useState("");
+  const hasExternalContext = Boolean(form.context_snapshot && Object.keys(form.context_snapshot).length > 0);
 
   const { data, isLoading } = useQuery({
     queryKey: ["agent-runs"],
@@ -123,24 +124,48 @@ function AgentWorkspaceContent() {
       <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-500">
-            Agent Workspace
+            Site Agent
           </p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-950">AI Agent 工作台</h1>
+          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">AI Agent</h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
-            当前版本会在后台异步执行发帖 Agent，并把步骤、工具调用和审批结果持续写入运行详情页。
+            这是一个独立的大页面，用来发起和管理 Agent 任务。当前开放的是 `发帖 Agent`，后续会继续扩到圈子与活动场景。
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/posts/create">返回发布动态</Link>
-        </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
+        <Card className="border-orange-200 bg-orange-50/70">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-950">发帖 Agent</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm leading-6 text-slate-600">
+            当前可用。适合整理标题、正文、标签和可见性建议，并在批准后回填到草稿。
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-950">圈子 Agent</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm leading-6 text-slate-500">
+            即将开放。会围绕圈子规则、氛围和发帖方向给出连续执行建议。
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="text-base text-slate-950">活动 Agent</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm leading-6 text-slate-500">
+            即将开放。会处理活动摘要、是否参加判断和行前准备清单。
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <Card className="border-slate-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-slate-950">
               <Sparkles className="h-5 w-5 text-orange-500" />
-              新建 Agent 任务
+              发起任务
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -167,18 +192,17 @@ function AgentWorkspaceContent() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-900">场景</label>
-              <Input
-                value={form.scenario || "post_agent"}
-                onChange={(e) => setForm((prev) => ({ ...prev, scenario: e.target.value }))}
-              />
+              <label className="text-sm font-medium text-slate-900">当前场景</label>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                发帖 Agent
+              </div>
             </div>
-            {form.context_snapshot && Object.keys(form.context_snapshot).length > 0 ? (
+            {hasExternalContext ? (
               <div className="rounded-2xl border border-orange-200 bg-orange-50/70 px-4 py-3">
-                <p className="text-sm font-medium text-slate-900">已带入页面上下文</p>
-                <pre className="mt-2 whitespace-pre-wrap break-all text-xs leading-6 text-slate-600">
-                  {JSON.stringify(form.context_snapshot, null, 2)}
-                </pre>
+                <p className="text-sm font-medium text-slate-900">已接收外部上下文</p>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  当前任务已经关联了一份页面草稿信息，Agent 会在后台自动读取并使用。
+                </p>
               </div>
             ) : null}
             <Button
@@ -231,7 +255,6 @@ function AgentWorkspaceContent() {
                   <StatusBadge status={run.status} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-                  <span>{run.scenario}</span>
                   <span>{new Date(run.updated_at).toLocaleString("zh-CN")}</span>
                 </div>
                 {run.latest_summary ? (

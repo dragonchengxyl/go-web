@@ -110,6 +110,21 @@ func (r *AgentRepository) ListRuns(ctx context.Context, userID uuid.UUID, page, 
 	return items, total, rows.Err()
 }
 
+func (r *AgentRepository) TryStartRun(ctx context.Context, id uuid.UUID, startedAt time.Time) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE agent_runs
+		SET status = 'running',
+		    updated_at = $2,
+		    started_at = COALESCE(started_at, $2)
+		WHERE id = $1
+		  AND status = 'queued'
+	`, id, startedAt)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *AgentRepository) UpdateRunStatus(ctx context.Context, id uuid.UUID, status agentdomain.RunStatus, summary, lastError string, completedAt *time.Time) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE agent_runs

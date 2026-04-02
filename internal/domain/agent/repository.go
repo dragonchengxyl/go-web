@@ -11,6 +11,7 @@ type Repository interface {
 	CreateRun(ctx context.Context, item *Run) error
 	GetRunByID(ctx context.Context, id uuid.UUID) (*Run, error)
 	ListRuns(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*Run, int64, error)
+	TryStartRun(ctx context.Context, id uuid.UUID, startedAt time.Time) (bool, error)
 	UpdateRunStatus(ctx context.Context, id uuid.UUID, status RunStatus, summary, lastError string, completedAt *time.Time) error
 
 	CreateStep(ctx context.Context, item *Step) error

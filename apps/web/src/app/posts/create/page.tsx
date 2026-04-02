@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Sparkles, Tag, X, ImagePlus, Loader2, Users } from "lucide-react";
 import { apiClient, MediaAnalysisItem } from "@/lib/api-client";
@@ -327,32 +326,7 @@ export default function CreatePostPage() {
 
   return (
     <div className="max-w-2xl mx-auto pt-20 px-4 pb-8">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">发布动态</h1>
-        <Link
-          href={{
-            pathname: "/agent",
-            query: {
-              scenario: "post_agent",
-              source_path: "/posts/create",
-              draft_title: truncateForAssistant(title, 60),
-              draft_content: truncateForAssistant(content, 240),
-              draft_tags: truncateForAssistant(tags, 80),
-              group_name: groupName,
-              visibility:
-                visibility === "followers_only"
-                  ? "仅关注者可见"
-                  : visibility === "private"
-                    ? "私密"
-                    : "公开",
-            },
-          }}
-          className="inline-flex items-center justify-center rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 transition-colors hover:border-orange-300 hover:bg-orange-100"
-        >
-          <Sparkles className="mr-2 h-4 w-4" />
-          交给 Agent 处理
-        </Link>
-      </div>
+      <h1 className="mb-6 text-2xl font-bold">发布动态</h1>
       {restoreMessage ? (
         <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {restoreMessage}

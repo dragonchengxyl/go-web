@@ -99,6 +99,17 @@ export default function AgentRunDetailPage() {
     );
   }
 
+  const contextSummary = data?.run?.context_snapshot
+    ? [
+        data.run.context_snapshot["group_name"] ? `目标圈子：${String(data.run.context_snapshot["group_name"])}` : "",
+        data.run.context_snapshot["source_path"] ? `来源：${String(data.run.context_snapshot["source_path"])}` : "",
+        data.run.context_snapshot["draft_title"] ? "已带标题草稿" : "",
+        data.run.context_snapshot["draft_content"] ? "已带正文草稿" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
   return (
     <div className="mx-auto max-w-5xl px-4 pt-24 pb-12">
       <div className="mb-6 flex items-center justify-between gap-4">
@@ -166,12 +177,10 @@ export default function AgentRunDetailPage() {
                   <p className="mt-2 text-sm leading-7 text-slate-600">{data.run.latest_summary}</p>
                 </div>
               ) : null}
-              {data.run.context_snapshot ? (
+              {contextSummary ? (
                 <div>
-                  <p className="text-sm font-medium text-slate-900">上下文快照</p>
-                  <pre className="mt-2 whitespace-pre-wrap break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
-                    {JSON.stringify(data.run.context_snapshot, null, 2)}
-                  </pre>
+                  <p className="text-sm font-medium text-slate-900">关联上下文</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">{contextSummary}</p>
                 </div>
               ) : null}
             </CardContent>
@@ -213,12 +222,12 @@ export default function AgentRunDetailPage() {
 
             <Card className="border-slate-200">
               <CardHeader>
-                <CardTitle className="text-slate-950">审批动作</CardTitle>
+                <CardTitle className="text-slate-950">下一步动作</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {!(data.approvals?.length) ? (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                    当前没有待处理的审批动作。
+                    当前没有待处理动作。
                   </div>
                 ) : null}
                 {(data.approvals || []).map((approval) => (
@@ -226,8 +235,12 @@ export default function AgentRunDetailPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{approval.title}</p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                          {approval.action_type} · {approval.status}
+                        <p className="mt-1 text-sm leading-6 text-slate-500">
+                          {approval.status === "pending"
+                            ? "你可以选择是否把这轮 Agent 结果带回草稿页面。"
+                            : approval.status === "approved"
+                              ? "这次结果已经被批准回填。"
+                              : "这次结果已保留，但不会自动回填。"}
                         </p>
                       </div>
                     </div>
@@ -261,41 +274,6 @@ export default function AgentRunDetailPage() {
                         </Button>
                       </div>
                     ) : null}
-                    {approval.payload ? (
-                      <pre className="mt-3 whitespace-pre-wrap break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
-                        {JSON.stringify(approval.payload, null, 2)}
-                      </pre>
-                    ) : null}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-slate-950">只读工具调用</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!(data.tool_calls?.length) ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                    还没有工具调用记录。
-                  </div>
-                ) : null}
-                {(data.tool_calls || []).map((call) => (
-                  <div key={call.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{call.tool_name}</p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                          {call.access_level} · {call.status}
-                        </p>
-                      </div>
-                    </div>
-                    {call.output_data ? (
-                      <pre className="mt-3 whitespace-pre-wrap break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
-                        {JSON.stringify(call.output_data, null, 2)}
-                      </pre>
-                    ) : null}
                   </div>
                 ))}
               </CardContent>
@@ -321,11 +299,10 @@ export default function AgentRunDetailPage() {
                       <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
                         {artifact.content}
                       </div>
-                    ) : null}
-                    {artifact.structured_data ? (
-                      <pre className="mt-3 whitespace-pre-wrap break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
-                        {JSON.stringify(artifact.structured_data, null, 2)}
-                      </pre>
+                    ) : artifact.kind === "draft_patch" ? (
+                      <p className="mt-3 text-sm leading-6 text-slate-500">
+                        这份结果用于批准后回填草稿，内部补丁结构不会直接展示在前端。
+                      </p>
                     ) : null}
                   </div>
                 ))}
