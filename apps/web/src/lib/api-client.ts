@@ -314,6 +314,12 @@ export interface AgentApproval {
   created_at: string;
 }
 
+export interface AgentRunEvent {
+  run_id: string;
+  type: string;
+  summary?: string;
+}
+
 export interface DecideAgentApprovalInput {
   approval_id: string;
   decision: "approved" | "rejected";
@@ -922,6 +928,14 @@ interface AssistantStreamHandlers {
   onMeta?: (meta: AssistantMeta) => void;
   onToken?: (token: string) => void;
   onDone?: () => void;
+  onError?: (message: string) => void;
+}
+
+interface AgentRunStreamHandlers {
+  signal?: AbortSignal;
+  onSnapshot?: (detail: AgentRunDetail) => void;
+  onUpdate?: (event: AgentRunEvent) => void;
+  onDone?: (status?: string) => void;
   onError?: (message: string) => void;
 }
 
@@ -2260,6 +2274,82 @@ class ApiClient {
 
   async decideAgentApproval(id: string, data: DecideAgentApprovalInput) {
     return this.post<DecideAgentApprovalOutput>(`/agent/runs/${id}/approve`, data);
+  }
+
+  async streamAgentRun(id: string, handlers: AgentRunStreamHandlers = {}) {
+    const headers: Record<string, string> = {
+      Accept: "text/event-stream",
+    };
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}/agent/runs/${id}/stream`, {
+      method: "POST",
+      headers,
+      signal: handlers.signal,
+    });
+
+    if (!response.ok || !response.body) {
+      let message = "Agent 流式订阅失败";
+      try {
+        const text = await response.text();
+        if (text) {
+          const maybeJSON = JSON.parse(text);
+          message = maybeJSON?.message || maybeJSON?.error || message;
+        }
+      } catch {
+        // ignore
+      }
+      throw new Error(message);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const rawBlock = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        boundary = buffer.indexOf("\n\n");
+
+        const parsed = parseSSEBlock(rawBlock);
+        if (!parsed) continue;
+
+        try {
+          const payload = JSON.parse(parsed.data);
+          switch (parsed.event) {
+            case "snapshot":
+              handlers.onSnapshot?.(payload as AgentRunDetail);
+              break;
+            case "update":
+              handlers.onUpdate?.(payload as AgentRunEvent);
+              break;
+            case "done":
+              handlers.onDone?.(payload?.status as string | undefined);
+              break;
+            case "error": {
+              const message = (payload?.message as string) || "Agent 流式订阅失败";
+              handlers.onError?.(message);
+              throw new Error(message);
+            }
+            default:
+              break;
+          }
+        } catch (err) {
+          if (err instanceof Error) {
+            throw err;
+          }
+          throw new Error("Agent 流响应解析失败");
+        }
+      }
+    }
   }
 
   async getAdminOrders(params?: {

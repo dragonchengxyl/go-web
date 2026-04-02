@@ -395,6 +395,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 				protected.POST("/agent/runs", agentHandler.CreateRun)
 				protected.GET("/agent/runs", agentHandler.ListRuns)
 				protected.GET("/agent/runs/:id", agentHandler.GetRun)
+				protected.POST("/agent/runs/:id/stream", agentHandler.StreamRun)
 				protected.POST("/agent/runs/:id/approve", agentHandler.DecideApproval)
 				protected.POST("/agent/runs/:id/cancel", agentHandler.CancelRun)
 			}

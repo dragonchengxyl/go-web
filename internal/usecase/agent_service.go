@@ -40,6 +40,7 @@ type AgentService struct {
 	repo        agentdomain.Repository
 	postService *PostService
 	async       bool
+	hub         *agentRunHub
 }
 
 func NewAgentService(repo agentdomain.Repository, postService *PostService) *AgentService {
@@ -51,11 +52,24 @@ func newAgentService(repo agentdomain.Repository, postService *PostService, asyn
 		repo:        repo,
 		postService: postService,
 		async:       async,
+		hub:         newAgentRunHub(),
 	}
 }
 
 func (s *AgentService) Enabled() bool {
 	return s != nil && s.repo != nil
+}
+
+func (s *AgentService) SubscribeRun(runID uuid.UUID) (chan AgentRunEvent, func()) {
+	if s == nil || s.hub == nil {
+		ch := make(chan AgentRunEvent)
+		close(ch)
+		return ch, func() {}
+	}
+	ch := s.hub.Subscribe(runID)
+	return ch, func() {
+		s.hub.Unsubscribe(runID, ch)
+	}
 }
 
 func (s *AgentService) CreateRun(ctx context.Context, userID uuid.UUID, input CreateAgentRunInput) (*agentdomain.RunDetail, error) {
@@ -111,6 +125,7 @@ func (s *AgentService) CreateRun(ctx context.Context, userID uuid.UUID, input Cr
 	if err := s.repo.CreateStep(ctx, queuedStep); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "记录 Agent 初始步骤失败", err)
 	}
+	s.publishRunEvent(run.ID, "queued", queuedStep.Summary)
 
 	if s.async {
 		go s.executeRunAsync(*run)
@@ -232,6 +247,7 @@ func (s *AgentService) CancelRun(ctx context.Context, userID, runID uuid.UUID) (
 	if err := s.repo.CreateStep(ctx, step); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "记录取消步骤失败", err)
 	}
+	s.publishRunEvent(runID, "cancelled", step.Summary)
 
 	return s.GetRunDetail(ctx, userID, runID)
 }
@@ -312,6 +328,7 @@ func (s *AgentService) DecideApproval(ctx context.Context, userID, runID uuid.UU
 	if err := s.repo.CreateStep(ctx, step); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "记录审批步骤失败", err)
 	}
+	s.publishRunEvent(runID, "approval_decided", step.Summary)
 
 	nextDetail, err := s.GetRunDetail(ctx, userID, runID)
 	if err != nil {
@@ -343,6 +360,17 @@ func cloneAgentMap(src map[string]any) map[string]any {
 	return out
 }
 
+func (s *AgentService) publishRunEvent(runID uuid.UUID, eventType, summary string) {
+	if s == nil || s.hub == nil {
+		return
+	}
+	s.hub.Publish(runID, AgentRunEvent{
+		RunID:   runID.String(),
+		Type:    eventType,
+		Summary: summary,
+	})
+}
+
 func (s *AgentService) executeRunAsync(run agentdomain.Run) {
 	s.executeRunSafe(context.Background(), run)
 }
@@ -370,6 +398,7 @@ func (s *AgentService) executeRunSafe(ctx context.Context, run agentdomain.Run) 
 			CompletedAt: &failAt,
 		}
 		_ = s.repo.CreateStep(ctx, failStep)
+		s.publishRunEvent(run.ID, "failed", failStep.Summary)
 	}
 }
 
@@ -397,12 +426,13 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusRunning, "正在分析当前草稿和页面上下文。", "", nil); err != nil {
 		return err
 	}
+	s.publishRunEvent(run.ID, "running", "正在分析当前草稿和页面上下文。")
 
 	pageContext, contextSummary := buildAgentPostPageContext(run.ContextSnapshot)
 	planStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
-		StepIndex:   1,
+		StepIndex:   2,
 		Kind:        "plan",
 		Title:       "拆解发帖任务",
 		Status:      agentdomain.StepStatusCompleted,
@@ -416,6 +446,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.CreateStep(ctx, planStep); err != nil {
 		return err
 	}
+	s.publishRunEvent(run.ID, "step_completed", planStep.Summary)
 	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
 		return err
 	} else if stopped {
@@ -442,6 +473,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.CreateToolCall(ctx, contextTool); err != nil {
 		return err
 	}
+	s.publishRunEvent(run.ID, "tool_completed", "已读取发帖页上下文。")
 
 	assistantHelper := &AssistantService{postService: s.postService}
 	insightStartedAt := time.Now()
@@ -466,6 +498,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.CreateToolCall(ctx, insightTool); err != nil {
 		return err
 	}
+	s.publishRunEvent(run.ID, "tool_completed", "已生成发帖建议草稿。")
 	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
 		return err
 	} else if stopped {
@@ -476,7 +509,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	artifactStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
-		StepIndex:   2,
+		StepIndex:   3,
 		Kind:        "artifact_generation",
 		Title:       "生成发帖建议产物",
 		Status:      agentdomain.StepStatusCompleted,
@@ -489,6 +522,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.CreateStep(ctx, artifactStep); err != nil {
 		return err
 	}
+	s.publishRunEvent(run.ID, "step_completed", artifactStep.Summary)
 
 	for _, insight := range insights {
 		if insight.Title == "" && insight.Summary == "" && len(insight.Bullets) == 0 {
@@ -531,6 +565,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 			return err
 		}
 	}
+	s.publishRunEvent(run.ID, "artifact_ready", "结构化产物已经生成。")
 
 	approvalTime := time.Now()
 	approval := &agentdomain.Approval{
@@ -556,10 +591,11 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusWaitingApproval, runSummary, "", nil); err != nil {
 		return err
 	}
+	s.publishRunEvent(run.ID, "waiting_approval", runSummary)
 	finalStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
-		StepIndex:   3,
+		StepIndex:   4,
 		Kind:        "approval",
 		Title:       "等待批准回填草稿",
 		Status:      agentdomain.StepStatusCompleted,
@@ -569,7 +605,11 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		StartedAt:   &approvalTime,
 		CompletedAt: &approvalTime,
 	}
-	return s.repo.CreateStep(ctx, finalStep)
+	if err := s.repo.CreateStep(ctx, finalStep); err != nil {
+		return err
+	}
+	s.publishRunEvent(run.ID, "step_completed", finalStep.Summary)
+	return nil
 }
 
 func (s *AgentService) runStopped(ctx context.Context, runID uuid.UUID) (bool, error) {

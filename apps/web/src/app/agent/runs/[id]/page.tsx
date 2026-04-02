@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Loader2, Square, X } from "lucide-react";
@@ -67,6 +68,28 @@ export default function AgentRunDetailPage() {
       }
     },
   });
+
+  useEffect(() => {
+    if (!isLoggedIn || !params.id) return;
+    const controller = new AbortController();
+
+    void apiClient
+      .streamAgentRun(params.id, {
+        signal: controller.signal,
+        onSnapshot: (detail) => {
+          queryClient.setQueryData(["agent-run", params.id], detail);
+          queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
+        },
+        onDone: () => {
+          queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
+        },
+      })
+      .catch(() => {
+        // keep query-based refresh as fallback
+      });
+
+    return () => controller.abort();
+  }, [isLoggedIn, params.id, queryClient]);
 
   if (!isLoggedIn) {
     return (
