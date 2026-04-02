@@ -186,6 +186,19 @@ func TestAgentServiceCreateRunGeneratesPostArtifacts(t *testing.T) {
 	if len(detail.ToolCalls) < 2 {
 		t.Fatalf("expected tool calls, got %d", len(detail.ToolCalls))
 	}
+	toolNames := make(map[string]struct{}, len(detail.ToolCalls))
+	for _, item := range detail.ToolCalls {
+		toolNames[item.ToolName] = struct{}{}
+	}
+	for _, expected := range []string{
+		"get_post_create_context",
+		"generate_post_copilot_artifacts",
+		"build_post_draft_patch",
+	} {
+		if _, ok := toolNames[expected]; !ok {
+			t.Fatalf("expected tool %q to be executed, got %+v", expected, detail.ToolCalls)
+		}
+	}
 	if len(detail.Artifacts) == 0 {
 		t.Fatalf("expected artifacts to be generated")
 	}

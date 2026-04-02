@@ -41,6 +41,7 @@ type AgentService struct {
 	postService *PostService
 	async       bool
 	hub         *agentRunHub
+	tools       *agentToolRegistry
 }
 
 func NewAgentService(repo agentdomain.Repository, postService *PostService) *AgentService {
@@ -48,12 +49,14 @@ func NewAgentService(repo agentdomain.Repository, postService *PostService) *Age
 }
 
 func newAgentService(repo agentdomain.Repository, postService *PostService, async bool) *AgentService {
-	return &AgentService{
+	service := &AgentService{
 		repo:        repo,
 		postService: postService,
 		async:       async,
 		hub:         newAgentRunHub(),
 	}
+	service.tools = newAgentToolRegistry(service)
+	return service
 }
 
 func (s *AgentService) Enabled() bool {
@@ -428,7 +431,10 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	}
 	s.publishRunEvent(run.ID, "running", "正在分析当前草稿和页面上下文。")
 
+	state := &agentToolState{Run: run}
 	pageContext, contextSummary := buildAgentPostPageContext(run.ContextSnapshot)
+	state.PageContext = pageContext
+	state.ContextSummary = contextSummary
 	planStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
@@ -453,52 +459,12 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return nil
 	}
 
-	toolStartedAt := time.Now()
-	contextTool := &agentdomain.ToolCall{
-		ID:          uuid.New(),
-		RunID:       run.ID,
-		StepID:      &planStep.ID,
-		ToolName:    "get_post_create_context",
-		AccessLevel: agentdomain.ToolAccessReadOnly,
-		Status:      agentdomain.StepStatusCompleted,
-		InputData:   cloneAgentMap(run.ContextSnapshot),
-		OutputData: map[string]any{
-			"context_summary": contextSummary,
-			"page_kind":       pageContext.Kind,
-		},
-		CreatedAt:   toolStartedAt,
-		StartedAt:   &toolStartedAt,
-		CompletedAt: &toolStartedAt,
-	}
-	if err := s.repo.CreateToolCall(ctx, contextTool); err != nil {
+	if _, err := s.executeTool(ctx, state, run.ID, &planStep.ID, "get_post_create_context"); err != nil {
 		return err
 	}
-	s.publishRunEvent(run.ID, "tool_completed", "已读取发帖页上下文。")
-
-	assistantHelper := &AssistantService{postService: s.postService}
-	insightStartedAt := time.Now()
-	insights := assistantHelper.buildPostCreateInsights(ctx, run.Goal, pageContext)
-	insightTool := &agentdomain.ToolCall{
-		ID:          uuid.New(),
-		RunID:       run.ID,
-		StepID:      &planStep.ID,
-		ToolName:    "generate_post_copilot_artifacts",
-		AccessLevel: agentdomain.ToolAccessReadOnly,
-		Status:      agentdomain.StepStatusCompleted,
-		InputData: map[string]any{
-			"goal": run.Goal,
-		},
-		OutputData: map[string]any{
-			"insight_count": len(insights),
-		},
-		CreatedAt:   insightStartedAt,
-		StartedAt:   &insightStartedAt,
-		CompletedAt: &insightStartedAt,
-	}
-	if err := s.repo.CreateToolCall(ctx, insightTool); err != nil {
+	if _, err := s.executeTool(ctx, state, run.ID, &planStep.ID, "generate_post_copilot_artifacts"); err != nil {
 		return err
 	}
-	s.publishRunEvent(run.ID, "tool_completed", "已生成发帖建议草稿。")
 	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
 		return err
 	} else if stopped {
@@ -513,8 +479,8 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		Kind:        "artifact_generation",
 		Title:       "生成发帖建议产物",
 		Status:      agentdomain.StepStatusCompleted,
-		Summary:     firstNonEmpty(buildCopilotFallbackText(insights), "已经根据当前草稿生成建议。"),
-		OutputData:  map[string]any{"insight_count": len(insights)},
+		Summary:     firstNonEmpty(buildCopilotFallbackText(state.Insights), "已经根据当前草稿生成建议。"),
+		OutputData:  map[string]any{"insight_count": len(state.Insights)},
 		CreatedAt:   artifactStepTime,
 		StartedAt:   &artifactStepTime,
 		CompletedAt: &artifactStepTime,
@@ -524,7 +490,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	}
 	s.publishRunEvent(run.ID, "step_completed", artifactStep.Summary)
 
-	for _, insight := range insights {
+	for _, insight := range state.Insights {
 		if insight.Title == "" && insight.Summary == "" && len(insight.Bullets) == 0 {
 			continue
 		}
@@ -549,7 +515,10 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		}
 	}
 
-	draftPatch := buildPostDraftPatch(pageContext, insights)
+	if _, err := s.executeTool(ctx, state, run.ID, &artifactStep.ID, "build_post_draft_patch"); err != nil {
+		return err
+	}
+	draftPatch := state.DraftPatch
 	if len(draftPatch) > 0 {
 		artifact := &agentdomain.Artifact{
 			ID:             uuid.New(),
