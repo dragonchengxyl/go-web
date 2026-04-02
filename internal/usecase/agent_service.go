@@ -26,6 +26,16 @@ type ListAgentRunsOutput struct {
 	Size  int                `json:"size"`
 }
 
+type DecideAgentApprovalInput struct {
+	ApprovalID string `json:"approval_id"`
+	Decision   string `json:"decision"`
+}
+
+type DecideAgentApprovalOutput struct {
+	Detail       *agentdomain.RunDetail `json:"detail"`
+	ApplyPayload map[string]any         `json:"apply_payload,omitempty"`
+}
+
 type AgentService struct {
 	repo        agentdomain.Repository
 	postService *PostService
@@ -216,6 +226,93 @@ func (s *AgentService) CancelRun(ctx context.Context, userID, runID uuid.UUID) (
 	return s.GetRunDetail(ctx, userID, runID)
 }
 
+func (s *AgentService) DecideApproval(ctx context.Context, userID, runID uuid.UUID, input DecideAgentApprovalInput) (*DecideAgentApprovalOutput, error) {
+	if !s.Enabled() {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "Agent 服务未初始化", nil)
+	}
+	if userID == uuid.Nil {
+		return nil, apperr.ErrUnauthorized
+	}
+
+	detail, err := s.GetRunDetail(ctx, userID, runID)
+	if err != nil {
+		return nil, err
+	}
+
+	approvalID, err := uuid.Parse(strings.TrimSpace(input.ApprovalID))
+	if err != nil {
+		return nil, apperr.BadRequest("无效的审批ID")
+	}
+	decision := strings.TrimSpace(strings.ToLower(input.Decision))
+	if decision != "approved" && decision != "rejected" {
+		return nil, apperr.BadRequest("无效的审批决定")
+	}
+
+	var target *agentdomain.Approval
+	for _, item := range detail.Approvals {
+		if item != nil && item.ID == approvalID {
+			target = item
+			break
+		}
+	}
+	if target == nil {
+		return nil, apperr.ErrNotFound
+	}
+	if target.Status != agentdomain.ApprovalStatusPending {
+		return &DecideAgentApprovalOutput{
+			Detail:       detail,
+			ApplyPayload: cloneAgentMap(target.Payload),
+		}, nil
+	}
+
+	now := time.Now()
+	nextStatus := agentdomain.ApprovalStatusApproved
+	runSummary := "已经批准把 Agent 产物回填到发帖页草稿。"
+	stepTitle := "已批准回填草稿"
+	stepSummary := "你已经批准把当前这轮 Agent 生成的草稿建议带回发布页。"
+	var applyPayload map[string]any
+	if decision == "rejected" {
+		nextStatus = agentdomain.ApprovalStatusRejected
+		runSummary = "你保留了这轮分析结果，但没有把建议回填到草稿。"
+		stepTitle = "已拒绝回填草稿"
+		stepSummary = "这次运行仍然保留结构化建议，但不会自动带回发布页。"
+	} else {
+		applyPayload = cloneAgentMap(target.Payload)
+	}
+
+	if err := s.repo.UpdateApprovalStatus(ctx, target.ID, nextStatus, &userID, &now); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "更新审批状态失败", err)
+	}
+	if err := s.repo.UpdateRunStatus(ctx, runID, agentdomain.RunStatusCompleted, runSummary, "", &now); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "更新 Agent 任务状态失败", err)
+	}
+	step := &agentdomain.Step{
+		ID:          uuid.New(),
+		RunID:       runID,
+		StepIndex:   len(detail.Steps) + 1,
+		Kind:        "approval",
+		Title:       stepTitle,
+		Status:      agentdomain.StepStatusCompleted,
+		Summary:     stepSummary,
+		OutputData:  map[string]any{"decision": decision},
+		CreatedAt:   now,
+		StartedAt:   &now,
+		CompletedAt: &now,
+	}
+	if err := s.repo.CreateStep(ctx, step); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "记录审批步骤失败", err)
+	}
+
+	nextDetail, err := s.GetRunDetail(ctx, userID, runID)
+	if err != nil {
+		return nil, err
+	}
+	return &DecideAgentApprovalOutput{
+		Detail:       nextDetail,
+		ApplyPayload: applyPayload,
+	}, nil
+}
+
 func truncateAgentText(text string, limit int) string {
 	text = strings.TrimSpace(text)
 	if limit <= 0 || utf8.RuneCountInString(text) <= limit {
@@ -362,22 +459,54 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		}
 	}
 
-	completedAt := time.Now()
-	runSummary := summarizePostAgentResult(pageContext, insights)
-	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusCompleted, runSummary, "", &completedAt); err != nil {
+	draftPatch := buildPostDraftPatch(pageContext, insights)
+	if len(draftPatch) > 0 {
+		artifact := &agentdomain.Artifact{
+			ID:             uuid.New(),
+			RunID:          run.ID,
+			StepID:         &artifactStep.ID,
+			Kind:           "draft_patch",
+			Title:          "可回填草稿",
+			Content:        "这份产物可在批准后直接回填到发布页草稿。",
+			StructuredData: draftPatch,
+			CreatedAt:      artifactStepTime,
+		}
+		if err := s.repo.CreateArtifact(ctx, artifact); err != nil {
+			return err
+		}
+	}
+
+	approvalTime := time.Now()
+	approval := &agentdomain.Approval{
+		ID:         uuid.New(),
+		RunID:      run.ID,
+		StepID:     &artifactStep.ID,
+		ActionType: "apply_post_draft",
+		Title:      "把建议回填到发帖页草稿",
+		Status:     agentdomain.ApprovalStatusPending,
+		Payload:    draftPatch,
+		CreatedAt:  approvalTime,
+	}
+	if err := s.repo.CreateApproval(ctx, approval); err != nil {
+		return err
+	}
+
+	runSummary := "建议已生成，等待你批准是否把结果回填到发帖页。"
+	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusWaitingApproval, runSummary, "", nil); err != nil {
 		return err
 	}
 	finalStep := &agentdomain.Step{
 		ID:          uuid.New(),
 		RunID:       run.ID,
 		StepIndex:   3,
-		Kind:        "final",
-		Title:       "整理完成",
+		Kind:        "approval",
+		Title:       "等待批准回填草稿",
 		Status:      agentdomain.StepStatusCompleted,
 		Summary:     runSummary,
-		CreatedAt:   completedAt,
-		StartedAt:   &completedAt,
-		CompletedAt: &completedAt,
+		OutputData:  map[string]any{"approval_action": "apply_post_draft"},
+		CreatedAt:   approvalTime,
+		StartedAt:   &approvalTime,
+		CompletedAt: &approvalTime,
 	}
 	return s.repo.CreateStep(ctx, finalStep)
 }
@@ -457,4 +586,106 @@ func summarizePostAgentResult(pageContext *AssistantPageContext, insights []Assi
 		return fmt.Sprintf("已经结合“%s”的发帖场景整理出 %d 组建议，包含标题、正文润色、标签和可见性方向。", groupName, len(insights))
 	}
 	return fmt.Sprintf("已经围绕当前草稿整理出 %d 组发帖建议，重点覆盖标题、正文、标签和可见性。", len(insights))
+}
+
+func buildPostDraftPatch(pageContext *AssistantPageContext, insights []AssistantInsight) map[string]any {
+	if pageContext == nil {
+		return nil
+	}
+
+	fields := pageContext.Fields
+	if fields == nil {
+		fields = map[string]string{}
+	}
+
+	patch := make(map[string]any)
+	title := strings.TrimSpace(fields["draft_title"])
+	content := strings.TrimSpace(fields["draft_content"])
+	groupName := strings.TrimSpace(fields["group_name"])
+	visibilityValue := normalizeDraftVisibility(fields["visibility"])
+
+	for _, insight := range insights {
+		switch insight.Kind {
+		case "title_options":
+			if title == "" && len(insight.Bullets) > 0 {
+				title = strings.TrimSpace(insight.Bullets[0])
+			}
+		case "tag_suggestions":
+			if len(insight.Bullets) > 0 {
+				tags := make([]string, 0, len(insight.Bullets))
+				for _, item := range insight.Bullets {
+					trimmed := strings.TrimSpace(strings.TrimPrefix(item, "#"))
+					if trimmed == "" {
+						continue
+					}
+					tags = append(tags, trimmed)
+				}
+				if len(tags) > 0 {
+					patch["tags"] = strings.Join(tags, ", ")
+				}
+			}
+		case "visibility_suggestion":
+			if normalized := inferVisibilityFromInsight(insight); normalized != "" {
+				visibilityValue = normalized
+			}
+		}
+	}
+
+	if title != "" {
+		patch["title"] = title
+	}
+	if content != "" {
+		patch["content"] = buildSuggestedDraftContent(content, groupName)
+	}
+	if visibilityValue != "" {
+		patch["visibility"] = visibilityValue
+	}
+	if path := strings.TrimSpace(pageContext.Path); path != "" {
+		patch["source_path"] = path
+	}
+	if groupName != "" {
+		patch["group_name"] = groupName
+	}
+	return patch
+}
+
+func buildSuggestedDraftContent(content, groupName string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	if !strings.HasSuffix(content, "。") && !strings.HasSuffix(content, "！") && !strings.HasSuffix(content, "？") {
+		content += "。"
+	}
+	if groupName != "" && !strings.Contains(content, groupName) {
+		content += "\n\n想把这次调整带到 " + groupName + " 这个语境里，也想听听大家对这版方向的看法。"
+	}
+	return content
+}
+
+func normalizeDraftVisibility(value string) string {
+	switch strings.TrimSpace(value) {
+	case "仅关注者可见", "followers_only":
+		return "followers_only"
+	case "私密", "private":
+		return "private"
+	case "公开", "public":
+		return "public"
+	default:
+		return "public"
+	}
+}
+
+func inferVisibilityFromInsight(insight AssistantInsight) string {
+	text := strings.TrimSpace(insight.Summary + " " + strings.Join(insight.Bullets, " "))
+	switch {
+	case strings.Contains(text, "仅关注者可见"):
+		return "followers_only"
+	case strings.Contains(text, "私密"):
+		return "private"
+	case strings.Contains(text, "公开"):
+		return "public"
+	default:
+		return ""
+	}
 }

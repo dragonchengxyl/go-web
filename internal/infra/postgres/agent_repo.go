@@ -271,6 +271,23 @@ func (r *AgentRepository) CreateApproval(ctx context.Context, item *agentdomain.
 	return err
 }
 
+func (r *AgentRepository) GetApprovalByID(ctx context.Context, id uuid.UUID) (*agentdomain.Approval, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, run_id, step_id, action_type, title, status, payload,
+		       approved_by, approved_at, created_at
+		FROM agent_approvals
+		WHERE id = $1
+	`, id)
+	item, err := scanAgentApproval(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, agentdomain.ErrRunNotFound
+		}
+		return nil, err
+	}
+	return item, nil
+}
+
 func (r *AgentRepository) ListApprovals(ctx context.Context, runID uuid.UUID) ([]*agentdomain.Approval, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, run_id, step_id, action_type, title, status, payload,
@@ -293,6 +310,17 @@ func (r *AgentRepository) ListApprovals(ctx context.Context, runID uuid.UUID) ([
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (r *AgentRepository) UpdateApprovalStatus(ctx context.Context, id uuid.UUID, status agentdomain.ApprovalStatus, approvedBy *uuid.UUID, approvedAt *time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE agent_approvals
+		SET status = $2,
+		    approved_by = $3,
+		    approved_at = $4
+		WHERE id = $1
+	`, id, string(status), approvedBy, approvedAt)
+	return err
 }
 
 func (r *AgentRepository) CreateArtifact(ctx context.Context, item *agentdomain.Artifact) error {

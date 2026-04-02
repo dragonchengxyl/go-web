@@ -107,6 +107,37 @@ func (h *AgentHandler) CancelRun(c *gin.Context) {
 	response.Success(c, detail)
 }
 
+func (h *AgentHandler) DecideApproval(c *gin.Context) {
+	userID, ok := getUserID(c)
+	if !ok {
+		response.Error(c, apperr.ErrUnauthorized)
+		return
+	}
+
+	runID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.Error(c, apperr.ErrInvalidParam)
+		return
+	}
+
+	var req usecase.DecideAgentApprovalInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, apperr.New(apperr.CodeInvalidParam, "请求参数错误"))
+		return
+	}
+
+	result, err := h.service.DecideApproval(c.Request.Context(), userID, runID, req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.logAudit(c, userID, audit.ActionUpdate, runID, gin.H{
+		"approval_id": req.ApprovalID,
+		"decision":    req.Decision,
+	})
+	response.Success(c, result)
+}
+
 func (h *AgentHandler) logAudit(c *gin.Context, userID uuid.UUID, action audit.Action, runID uuid.UUID, afterData any) {
 	if h.auditService == nil {
 		return

@@ -8,12 +8,11 @@ import { apiClient, MediaAnalysisItem } from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
 import { useAssistantPageContext } from "@/contexts/assistant-page-context";
 import { useOSSUpload } from "@/hooks/use-oss-upload";
+import { clearStoredPostDraft, readStoredPostDraft, writeStoredPostDraft } from "@/lib/post-draft";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-const DRAFT_KEY = "post_draft";
 
 interface ImageItem {
   url: string;
@@ -45,6 +44,7 @@ export default function CreatePostPage() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [mediaAnalysis, setMediaAnalysis] = useState<MediaAnalysisItem[]>([]);
   const [analyzingImages, setAnalyzingImages] = useState(false);
+  const [restoreMessage, setRestoreMessage] = useState("");
   const { upload } = useOSSUpload();
   const lastAnalysisKeyRef = useRef("");
 
@@ -63,31 +63,37 @@ export default function CreatePostPage() {
         });
     }
 
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return;
-    try {
-      const draft = JSON.parse(raw);
-      if (draft.title || draft.content) {
-        if (confirm("检测到未保存的草稿，是否恢复？")) {
-          if (draft.title) setTitle(draft.title);
-          if (draft.content) setContent(draft.content);
-          if (draft.tags) setTags(draft.tags);
-        }
+    const draft = readStoredPostDraft();
+    if (!draft) return;
+
+    const applyDraft = () => {
+      if (draft.title) setTitle(draft.title);
+      if (draft.content) setContent(draft.content);
+      if (draft.tags) setTags(draft.tags);
+      if (draft.visibility) setVisibility(draft.visibility);
+      if (params.get("agent_applied") === "1") {
+        setRestoreMessage("Agent 建议已经回填到当前草稿，你可以继续检查后再发布。");
       }
-    } catch {
-      // ignore
+    };
+
+    if (params.get("agent_applied") === "1") {
+      applyDraft();
+    } else if (draft.title || draft.content) {
+      if (confirm("检测到未保存的草稿，是否恢复？")) {
+        applyDraft();
+      }
     }
-    localStorage.removeItem(DRAFT_KEY);
+    clearStoredPostDraft();
   }, []);
 
   // Draft auto-save with 2s debounce
   useEffect(() => {
     if (!content && !title) return;
     const timer = setTimeout(() => {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ title, content, tags }));
+      writeStoredPostDraft({ title, content, tags, visibility });
     }, 2000);
     return () => clearTimeout(timer);
-  }, [title, content, tags]);
+  }, [title, content, tags, visibility]);
 
   useEffect(() => {
     const fields: Record<string, string> = {};
@@ -288,7 +294,7 @@ export default function CreatePostPage() {
         group_id: groupId || undefined,
         is_ai_generated: isAIGenerated || undefined,
       });
-      localStorage.removeItem(DRAFT_KEY);
+      clearStoredPostDraft();
       router.push(`/posts/${post.id}?submitted=1`);
     } catch (err: any) {
       setError(err.message || "发布失败");
@@ -347,6 +353,11 @@ export default function CreatePostPage() {
           交给 Agent 处理
         </Link>
       </div>
+      {restoreMessage ? (
+        <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {restoreMessage}
+        </div>
+      ) : null}
       {groupId && (
         <div className="mb-4 rounded-2xl border bg-card p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Square } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Square, X } from "lucide-react";
 import { AgentRunStatus, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { writeStoredPostDraft } from "@/lib/post-draft";
 
 const STATUS_LABELS: Record<AgentRunStatus, string> = {
   queued: "排队中",
@@ -20,6 +21,7 @@ const STATUS_LABELS: Record<AgentRunStatus, string> = {
 
 export default function AgentRunDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { isLoggedIn } = useAuth();
 
@@ -34,6 +36,31 @@ export default function AgentRunDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agent-run", params.id] });
       queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
+    },
+  });
+
+  const approvalMutation = useMutation({
+    mutationFn: ({
+      approvalId,
+      decision,
+    }: {
+      approvalId: string;
+      decision: "approved" | "rejected";
+    }) => apiClient.decideAgentApproval(params.id, { approval_id: approvalId, decision }),
+    onSuccess: (result, variables) => {
+      queryClient.setQueryData(["agent-run", params.id], result.detail);
+      queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
+      if (variables.decision === "approved" && result.apply_payload) {
+        writeStoredPostDraft({
+          title: String(result.apply_payload.title || ""),
+          content: String(result.apply_payload.content || ""),
+          tags: String(result.apply_payload.tags || ""),
+          visibility: String(result.apply_payload.visibility || "public"),
+          source: "agent",
+          agent_run_id: params.id,
+        });
+        router.push("/posts/create?agent_applied=1");
+      }
     },
   });
 
@@ -146,6 +173,66 @@ export default function AgentRunDetailPage() {
                     ) : null}
                     {step.error_text ? (
                       <p className="mt-3 text-sm leading-6 text-rose-600">{step.error_text}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-slate-950">审批动作</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!(data.approvals?.length) ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                    当前没有待处理的审批动作。
+                  </div>
+                ) : null}
+                {(data.approvals || []).map((approval) => (
+                  <div key={approval.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{approval.title}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
+                          {approval.action_type} · {approval.status}
+                        </p>
+                      </div>
+                    </div>
+                    {approval.status === "pending" ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            approvalMutation.mutate({ approvalId: approval.id, decision: "approved" })
+                          }
+                          disabled={approvalMutation.isPending}
+                          className="bg-slate-950 text-white hover:bg-slate-800"
+                        >
+                          {approvalMutation.isPending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className="mr-2 h-4 w-4" />
+                          )}
+                          批准并回填草稿
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            approvalMutation.mutate({ approvalId: approval.id, decision: "rejected" })
+                          }
+                          disabled={approvalMutation.isPending}
+                        >
+                          <X className="mr-2 h-4 w-4" />
+                          暂不回填
+                        </Button>
+                      </div>
+                    ) : null}
+                    {approval.payload ? (
+                      <pre className="mt-3 whitespace-pre-wrap break-all rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-600">
+                        {JSON.stringify(approval.payload, null, 2)}
+                      </pre>
                     ) : null}
                   </div>
                 ))}

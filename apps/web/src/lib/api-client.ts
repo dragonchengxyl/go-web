@@ -314,6 +314,16 @@ export interface AgentApproval {
   created_at: string;
 }
 
+export interface DecideAgentApprovalInput {
+  approval_id: string;
+  decision: "approved" | "rejected";
+}
+
+export interface DecideAgentApprovalOutput {
+  detail: AgentRunDetail;
+  apply_payload?: Record<string, unknown>;
+}
+
 export interface AgentArtifact {
   id: string;
   run_id: string;
@@ -2246,6 +2256,10 @@ class ApiClient {
 
   async cancelAgentRun(id: string) {
     return this.post<AgentRunDetail>(`/agent/runs/${id}/cancel`, {});
+  }
+
+  async decideAgentApproval(id: string, data: DecideAgentApprovalInput) {
+    return this.post<DecideAgentApprovalOutput>(`/agent/runs/${id}/approve`, data);
   }
 
   async getAdminOrders(params?: {
