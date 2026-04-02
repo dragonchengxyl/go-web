@@ -39,12 +39,18 @@ type DecideAgentApprovalOutput struct {
 type AgentService struct {
 	repo        agentdomain.Repository
 	postService *PostService
+	async       bool
 }
 
 func NewAgentService(repo agentdomain.Repository, postService *PostService) *AgentService {
+	return newAgentService(repo, postService, true)
+}
+
+func newAgentService(repo agentdomain.Repository, postService *PostService, async bool) *AgentService {
 	return &AgentService{
 		repo:        repo,
 		postService: postService,
+		async:       async,
 	}
 }
 
@@ -89,23 +95,27 @@ func (s *AgentService) CreateRun(ctx context.Context, userID uuid.UUID, input Cr
 	if err := s.repo.CreateRun(ctx, run); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "创建 Agent 任务失败", err)
 	}
-	if err := s.executeRun(ctx, run); err != nil {
-		failAt := time.Now()
-		_ = s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusFailed, "", err.Error(), &failAt)
-		failStep := &agentdomain.Step{
-			ID:          uuid.New(),
-			RunID:       run.ID,
-			StepIndex:   9999,
-			Kind:        "system",
-			Title:       "任务执行失败",
-			Status:      agentdomain.StepStatusFailed,
-			Summary:     "当前这次 Agent 运行没有顺利完成。",
-			ErrorText:   err.Error(),
-			CreatedAt:   failAt,
-			StartedAt:   &failAt,
-			CompletedAt: &failAt,
-		}
-		_ = s.repo.CreateStep(ctx, failStep)
+
+	queuedStep := &agentdomain.Step{
+		ID:          uuid.New(),
+		RunID:       run.ID,
+		StepIndex:   1,
+		Kind:        "system",
+		Title:       "任务已创建",
+		Status:      agentdomain.StepStatusCompleted,
+		Summary:     "任务已经入队，等待执行。",
+		CreatedAt:   now,
+		StartedAt:   &now,
+		CompletedAt: &now,
+	}
+	if err := s.repo.CreateStep(ctx, queuedStep); err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternalError, "记录 Agent 初始步骤失败", err)
+	}
+
+	if s.async {
+		go s.executeRunAsync(*run)
+	} else {
+		s.executeRunSafe(context.Background(), *run)
 	}
 
 	return s.GetRunDetail(ctx, userID, run.ID)
@@ -333,6 +343,36 @@ func cloneAgentMap(src map[string]any) map[string]any {
 	return out
 }
 
+func (s *AgentService) executeRunAsync(run agentdomain.Run) {
+	s.executeRunSafe(context.Background(), run)
+}
+
+func (s *AgentService) executeRunSafe(ctx context.Context, run agentdomain.Run) {
+	if err := s.executeRun(ctx, &run); err != nil {
+		current, getErr := s.repo.GetRunByID(ctx, run.ID)
+		if getErr == nil && current != nil && current.Status == agentdomain.RunStatusCancelled {
+			return
+		}
+
+		failAt := time.Now()
+		_ = s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusFailed, "", err.Error(), &failAt)
+		failStep := &agentdomain.Step{
+			ID:          uuid.New(),
+			RunID:       run.ID,
+			StepIndex:   9999,
+			Kind:        "system",
+			Title:       "任务执行失败",
+			Status:      agentdomain.StepStatusFailed,
+			Summary:     "当前这次 Agent 运行没有顺利完成。",
+			ErrorText:   err.Error(),
+			CreatedAt:   failAt,
+			StartedAt:   &failAt,
+			CompletedAt: &failAt,
+		}
+		_ = s.repo.CreateStep(ctx, failStep)
+	}
+}
+
 func (s *AgentService) executeRun(ctx context.Context, run *agentdomain.Run) error {
 	if run == nil {
 		return fmt.Errorf("agent run is nil")
@@ -347,6 +387,12 @@ func (s *AgentService) executeRun(ctx context.Context, run *agentdomain.Run) err
 }
 
 func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Run) error {
+	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
+		return err
+	} else if stopped {
+		return nil
+	}
+
 	startedAt := time.Now()
 	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusRunning, "正在分析当前草稿和页面上下文。", "", nil); err != nil {
 		return err
@@ -369,6 +415,11 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	}
 	if err := s.repo.CreateStep(ctx, planStep); err != nil {
 		return err
+	}
+	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
+		return err
+	} else if stopped {
+		return nil
 	}
 
 	toolStartedAt := time.Now()
@@ -414,6 +465,11 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	}
 	if err := s.repo.CreateToolCall(ctx, insightTool); err != nil {
 		return err
+	}
+	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
+		return err
+	} else if stopped {
+		return nil
 	}
 
 	artifactStepTime := time.Now()
@@ -490,6 +546,11 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.CreateApproval(ctx, approval); err != nil {
 		return err
 	}
+	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
+		return err
+	} else if stopped {
+		return nil
+	}
 
 	runSummary := "建议已生成，等待你批准是否把结果回填到发帖页。"
 	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusWaitingApproval, runSummary, "", nil); err != nil {
@@ -509,6 +570,19 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		CompletedAt: &approvalTime,
 	}
 	return s.repo.CreateStep(ctx, finalStep)
+}
+
+func (s *AgentService) runStopped(ctx context.Context, runID uuid.UUID) (bool, error) {
+	item, err := s.repo.GetRunByID(ctx, runID)
+	if err != nil {
+		return false, err
+	}
+	switch item.Status {
+	case agentdomain.RunStatusCancelled, agentdomain.RunStatusCompleted, agentdomain.RunStatusFailed:
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func buildAgentPostPageContext(snapshot map[string]any) (*AssistantPageContext, string) {

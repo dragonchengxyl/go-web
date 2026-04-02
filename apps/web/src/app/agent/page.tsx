@@ -64,6 +64,10 @@ function StatusBadge({ status }: { status: AgentRunStatus }) {
   );
 }
 
+function shouldPollRuns(runs?: AgentRun[]) {
+  return (runs || []).some((run) => run.status === "queued" || run.status === "running");
+}
+
 function AgentWorkspaceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -77,12 +81,16 @@ function AgentWorkspaceContent() {
     queryKey: ["agent-runs"],
     queryFn: () => apiClient.getAgentRuns(1, 20),
     enabled: isLoggedIn,
+    refetchInterval: (query) => {
+      const runs = (query.state.data as { runs?: AgentRun[] } | undefined)?.runs;
+      return shouldPollRuns(runs) ? 1500 : false;
+    },
   });
 
   const createMutation = useMutation({
     mutationFn: (payload: CreateAgentRunInput) => apiClient.createAgentRun(payload),
     onSuccess: (detail) => {
-      setMessage("运行骨架已创建，下一步会接入真正的执行器。");
+      setMessage("任务已创建，Agent 会在后台继续执行。");
       queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
       router.push(`/agent/runs/${detail.run.id}`);
     },
@@ -119,7 +127,7 @@ function AgentWorkspaceContent() {
           </p>
           <h1 className="mt-2 text-3xl font-semibold text-slate-950">AI Agent 工作台</h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-500">
-            Phase 0 先打通运行记录、时间线和任务详情。真正的规划循环、工具执行和审批链路会在后续阶段接入。
+            当前版本会在后台异步执行发帖 Agent，并把步骤、工具调用和审批结果持续写入运行详情页。
           </p>
         </div>
         <Button asChild variant="outline">

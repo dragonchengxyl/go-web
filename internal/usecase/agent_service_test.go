@@ -161,7 +161,7 @@ func (r *inMemoryAgentRepo) ListArtifacts(_ context.Context, runID uuid.UUID) ([
 
 func TestAgentServiceCreateRunGeneratesPostArtifacts(t *testing.T) {
 	repo := newInMemoryAgentRepo()
-	svc := NewAgentService(repo, nil)
+	svc := newAgentService(repo, nil, false)
 	userID := uuid.New()
 
 	detail, err := svc.CreateRun(context.Background(), userID, CreateAgentRunInput{

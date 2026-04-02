@@ -29,6 +29,10 @@ export default function AgentRunDetailPage() {
     queryKey: ["agent-run", params.id],
     queryFn: () => apiClient.getAgentRun(params.id),
     enabled: isLoggedIn && !!params.id,
+    refetchInterval: (query) => {
+      const status = (query.state.data as { run?: { status?: AgentRunStatus } } | undefined)?.run?.status;
+      return status === "queued" || status === "running" ? 1200 : false;
+    },
   });
 
   const cancelMutation = useMutation({
@@ -122,6 +126,11 @@ export default function AgentRunDetailPage() {
                 <span>场景：{data.run.scenario}</span>
                 <span>更新时间：{new Date(data.run.updated_at).toLocaleString("zh-CN")}</span>
               </div>
+              {(data.run.status === "queued" || data.run.status === "running") ? (
+                <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
+                  Agent 正在后台执行，这个页面会自动刷新运行状态。
+                </div>
+              ) : null}
               <div>
                 <p className="text-sm font-medium text-slate-900">任务目标</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-600">
