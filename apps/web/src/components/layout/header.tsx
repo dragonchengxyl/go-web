@@ -8,6 +8,7 @@ import {
   Bell,
   MessageCircle,
   AudioLines,
+  Bot,
   Gamepad2,
   Compass,
   PenSquare,
@@ -136,6 +137,14 @@ function UserAvatar() {
                     管理后台
                   </Link>
                 )}
+                <Link
+                  href="/agent"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                >
+                  <Bot className="h-4 w-4 text-muted-foreground" />
+                  Agent 工作台
+                </Link>
                 <Link
                   href="/creator"
                   onClick={() => setOpen(false)}

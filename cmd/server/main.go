@@ -257,6 +257,7 @@ func main() {
 	embedder := embedding.NewSimpleEmbedder()
 	recommendationService := usecase.NewRecommendationService(postRepo, embedder, redisClient)
 	assistantRepo := postgres.NewAssistantRepository(pool)
+	agentRepo := postgres.NewAgentRepository(pool)
 	bookmarkService := usecase.NewBookmarkService(bookmarkRepo, postService, groupService, eventService, audioWorkService)
 	auditRepo := postgres.NewAuditRepository(pool)
 	auditService := usecase.NewAuditService(auditRepo)
@@ -312,6 +313,7 @@ func main() {
 		groupService,
 		eventService,
 	)
+	agentService := usecase.NewAgentService(agentRepo)
 	gameService := usecase.NewHexBlitzRoomService(
 		logger,
 		usecase.WithHexBlitzRepository(hexBlitzRepo),
@@ -357,6 +359,7 @@ func main() {
 		GroupService:           groupService,
 		RecommendationService:  recommendationService,
 		AssistantService:       assistantService,
+		AgentService:           agentService,
 		AdminAIToolService:     adminAIToolService,
 		MultimodalService:      multimodalService,
 		GameService:            gameService,

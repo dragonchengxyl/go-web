@@ -49,6 +49,7 @@ type RouterConfig struct {
 	GroupService           *usecase.GroupService
 	RecommendationService  *usecase.RecommendationService
 	AssistantService       *usecase.AssistantService
+	AgentService           *usecase.AgentService
 	AdminAIToolService     *usecase.AdminAIToolService
 	MultimodalService      *usecase.MultimodalService
 	GameService            *usecase.HexBlitzRoomService
@@ -124,6 +125,10 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		var assistantHandler *handler.AssistantHandler
 		if cfg.AssistantService != nil {
 			assistantHandler = handler.NewAssistantHandler(cfg.AssistantService, cfg.AuditService, time.Duration(cfg.Config.Assistant.TimeoutSec)*time.Second)
+		}
+		var agentHandler *handler.AgentHandler
+		if cfg.AgentService != nil {
+			agentHandler = handler.NewAgentHandler(cfg.AgentService, cfg.AuditService)
 		}
 		var multimodalHandler *handler.MultimodalHandler
 		if cfg.MultimodalService != nil {
@@ -385,6 +390,12 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 			if assistantHandler != nil {
 				protected.GET("/assistant/conversations", assistantHandler.ListConversations)
 				protected.GET("/assistant/conversations/:id", assistantHandler.GetConversation)
+			}
+			if agentHandler != nil {
+				protected.POST("/agent/runs", agentHandler.CreateRun)
+				protected.GET("/agent/runs", agentHandler.ListRuns)
+				protected.GET("/agent/runs/:id", agentHandler.GetRun)
+				protected.POST("/agent/runs/:id/cancel", agentHandler.CancelRun)
 			}
 			if multimodalHandler != nil {
 				protected.POST("/assistant/media/analyze", multimodalHandler.AnalyzeMedia)

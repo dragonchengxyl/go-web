@@ -239,6 +239,107 @@ export interface AssistantFeedbackInput {
   cards?: AssistantCard[];
 }
 
+export type AgentRunStatus =
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type AgentStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface AgentRun {
+  id: string;
+  user_id: string;
+  title: string;
+  goal: string;
+  scenario: string;
+  status: AgentRunStatus;
+  context_snapshot?: Record<string, unknown>;
+  latest_summary?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface AgentStep {
+  id: string;
+  run_id: string;
+  step_index: number;
+  kind: string;
+  title: string;
+  status: AgentStepStatus;
+  summary?: string;
+  input_data?: Record<string, unknown>;
+  output_data?: Record<string, unknown>;
+  error_text?: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface AgentToolCall {
+  id: string;
+  run_id: string;
+  step_id?: string;
+  tool_name: string;
+  access_level: "read_only" | "write_requires_approval" | "admin_only";
+  status: AgentStepStatus;
+  input_data?: Record<string, unknown>;
+  output_data?: Record<string, unknown>;
+  error_text?: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface AgentApproval {
+  id: string;
+  run_id: string;
+  step_id?: string;
+  action_type: string;
+  title: string;
+  status: "pending" | "approved" | "rejected";
+  payload?: Record<string, unknown>;
+  approved_by?: string;
+  approved_at?: string;
+  created_at: string;
+}
+
+export interface AgentArtifact {
+  id: string;
+  run_id: string;
+  step_id?: string;
+  kind: string;
+  title: string;
+  content?: string;
+  structured_data?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentRunDetail {
+  run: AgentRun;
+  steps?: AgentStep[];
+  tool_calls?: AgentToolCall[];
+  approvals?: AgentApproval[];
+  artifacts?: AgentArtifact[];
+}
+
+export interface CreateAgentRunInput {
+  title?: string;
+  goal: string;
+  scenario?: string;
+  context_snapshot?: Record<string, unknown>;
+}
+
 export interface AssistantOverviewData {
   overview: {
     indexed_documents: number;
@@ -2124,6 +2225,27 @@ class ApiClient {
       media_urls: mediaUrls,
       purpose,
     });
+  }
+
+  async createAgentRun(data: CreateAgentRunInput) {
+    return this.post<AgentRunDetail>("/agent/runs", data);
+  }
+
+  async getAgentRuns(page = 1, pageSize = 20) {
+    return this.get<{
+      runs: AgentRun[];
+      total: number;
+      page: number;
+      size: number;
+    }>(`/agent/runs?page=${page}&page_size=${pageSize}`);
+  }
+
+  async getAgentRun(id: string) {
+    return this.get<AgentRunDetail>(`/agent/runs/${id}`);
+  }
+
+  async cancelAgentRun(id: string) {
+    return this.post<AgentRunDetail>(`/agent/runs/${id}/cancel`, {});
   }
 
   async getAdminOrders(params?: {

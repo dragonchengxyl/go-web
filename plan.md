@@ -1,3 +1,571 @@
+# AI Agent Workspace 实施计划
+
+> 面向当前仓库，不是独立 AI demo。
+> 更新时间：2026-04-02
+> 目标：在现有 `Assistant + Copilot + RAG + Multimodal` 基础上，落地一个真正可执行、可审批、可观测的 `Agent Workspace`，V1 聚焦“发帖 Agent”。
+
+---
+
+## 1. 核心目标
+
+我们现在要做的不是：
+
+- 直接把现有站内浮窗助手硬改成万能 Agent
+- 新开一个独立 `agent-web/` 或 `agent-service/` 子项目
+- 让模型直接拼 SQL、直接调 repo、直接越过 usecase 写业务数据
+- 一上来做“全站万能自动化”，覆盖发帖、活动、圈子、私信、后台全部场景
+- 先做复杂多 Agent 编排，再回头补审批、审计和运行态
+
+我们现在要做的是：
+
+- 保留现有浮窗助手，继续承担轻量问答、站内导览和页面 Copilot
+- 新开一个全页 `Agent Workspace`，承载真正的执行型任务
+- 先把 Agent 范围收窄到一个清晰闭环：`发帖 Agent`
+- 明确区分只读工具和写入工具，所有写入动作必须可审批
+- 把运行态、步骤、工具调用、审批记录、产物都沉淀下来，支持回看和审计
+
+一句话定义：
+
+> 在现有网站里新增一个“Agent 工作台”，让用户可以围绕发帖目标发起任务，由服务端 Agent 在受控工具集合内做规划、检索、分析、生成草稿，并在用户批准后执行有限写操作。
+
+---
+
+## 2. 当前仓库基线
+
+当前项目已经具备一条很好的 AI 接入基础，但它更偏“助手”，还不是严格意义上的 Agent：
+
+- 站内浮窗助手：`apps/web/src/components/assistant/furry-assistant.tsx`
+- 页面级上下文注入：`apps/web/src/contexts/assistant-page-context.tsx`
+- 助手核心服务：`internal/usecase/assistant_service.go`
+- 页面 Copilot：`internal/usecase/assistant_copilot.go`
+- 知识索引与反馈：`internal/usecase/assistant_rag.go`
+- 多模态分析：`internal/usecase/multimodal_service.go`
+- 后台 AI 工具：`internal/usecase/admin_ai_tools.go`
+- SSE 接口：`internal/transport/http/handler/assistant_handler.go`
+- 多模态接口：`internal/transport/http/handler/multimodal_handler.go`
+- 后台工作台：`apps/web/src/app/admin/assistant/page.tsx`
+- 主服务接线：`cmd/server/main.go`
+
+这意味着我们不需要从零造轮子，但也不应该继续把 `AssistantService` 往“万能执行器”方向堆。
+
+---
+
+## 3. 产品范围定义
+
+## 3.1 V1 必须做到的范围
+
+- 保留现有浮窗助手，不替换
+- 新增全页 `Agent Workspace`
+- 新增 `发帖 Agent` 单一任务域
+- 支持从 `发布动态` 页面带着上下文进入 Agent
+- Agent 运行过程可流式展示
+- 展示规划步骤、工具调用、观察结果、最终建议
+- 支持结构化产物输出：
+  - 标题备选
+  - 正文润色稿
+  - 标签建议
+  - 可见性建议
+  - 图片理解摘要
+- 支持审批型动作：
+  - 保存草稿
+  - 回填发帖页草稿
+- 运行记录持久化
+- 支持取消运行、查看历史运行结果
+- 写入动作全量审计
+
+## 3.2 V1 推荐一并做
+
+- `Agent Runs` 历史页
+- 每次运行的 `step timeline`
+- 失败重试与错误摘要
+- 运行状态统计与后台观测
+- 将现有多模态缓存和页面上下文更稳定地复用给 Agent
+
+## 3.3 V1 明确不做
+
+- 全站万能 Agent
+- 多 Agent 并行协作
+- 长期人格记忆
+- 自动发帖且无审批
+- 自动加入圈子、自动报名活动、自动发私信
+- 任意代码执行、任意 HTTP 调用、任意数据库写入
+- 复杂 workflow builder
+
+---
+
+## 4. 关键架构决策
+
+## 4.1 双轨并存，不替换现有助手
+
+现有浮窗适合：
+
+- 快速提问
+- 页面导览
+- 轻量 Copilot 建议
+
+新的 Agent Workspace 适合：
+
+- 明确目标
+- 多步骤执行
+- 产物整理
+- 审批写入
+
+也就是说：
+
+- `Assistant` 继续做“聊天”
+- `Agent` 开始做“任务执行”
+
+## 4.2 Agent 必须是服务端循环，不是前端拼 prompt
+
+不能让前端自己组织“步骤 -> 工具 -> 结果”的循环。
+
+必须坚持：
+
+- 规划逻辑在服务端
+- 工具调用在服务端
+- 权限校验在服务端
+- 审批拦截在服务端
+- 前端只负责呈现运行态和提交批准
+
+## 4.3 工具必须是 typed tools，不允许模型直接碰 usecase 之外的底层
+
+Agent 不应该直接访问：
+
+- SQL
+- repo
+- Redis 原始 key
+- 任意内部服务对象
+
+正确方式是：
+
+- Agent 只能看到一个受控工具注册表
+- 每个工具都有明确输入输出
+- 每个工具内部再调用现有 usecase
+
+## 4.4 写操作默认需要审批
+
+V1 必须把风险控住：
+
+- `read_only` 工具可直接执行
+- `write_requires_approval` 工具必须等用户批准
+- `admin_only` 工具暂不进入用户 Agent
+
+## 4.5 先做单域闭环，再扩场景
+
+第一阶段只做 `发帖 Agent`，原因很现实：
+
+- 当前发帖页已有页面上下文
+- 已有图片分析结果
+- 产物天然是结构化的
+- 风险相对可控
+- 审批边界清晰
+
+---
+
+## 5. 目标接入形态
+
+## 5.1 面向用户的页面
+
+- `/agent`
+  - Agent Workspace 主页面
+  - 创建任务、查看运行态、审批动作、查看产物
+- `/agent/runs/[id]`
+  - 单次运行详情页
+  - 支持回放执行时间线
+
+## 5.2 面向页面场景的入口
+
+- `/posts/create`
+  - 新增“交给 Agent 处理”入口
+  - 自动带入草稿、标签、可见性、图片分析和目标圈子信息
+- 第二阶段可选接入：
+  - `/groups/[id]`
+  - `/events/[id]`
+
+## 5.3 面向后台的页面
+
+- 先复用 `/admin/assistant`
+- 后续可扩：
+  - `Agent 运行量`
+  - `审批通过率`
+  - `步骤失败率`
+  - `各工具调用量`
+
+---
+
+## 6. 后端设计
+
+## 6.1 新增领域对象
+
+建议新增 `internal/domain/agent`：
+
+- `Run`
+- `Step`
+- `ToolCall`
+- `Approval`
+- `Artifact`
+
+建议的核心状态：
+
+- `queued`
+- `running`
+- `waiting_approval`
+- `completed`
+- `failed`
+- `cancelled`
+
+## 6.2 建议新增数据表
+
+- `agent_runs`
+- `agent_steps`
+- `agent_tool_calls`
+- `agent_approvals`
+- `agent_artifacts`
+
+其中：
+
+- `agent_runs` 记录目标、状态、所属用户、场景、最终摘要
+- `agent_steps` 记录规划步骤和执行结果
+- `agent_tool_calls` 记录工具输入输出、耗时、错误
+- `agent_approvals` 记录待批准动作、批准人、批准时间
+- `agent_artifacts` 记录草稿产物和结构化结果
+
+## 6.3 建议新增用例层
+
+建议新增：
+
+- `internal/usecase/agent_service.go`
+- `internal/usecase/agent_tools.go`
+- `internal/usecase/agent_runner.go`
+
+职责拆分：
+
+- `AgentService`
+  - 创建运行
+  - 获取运行
+  - 流式执行
+  - 审批继续
+  - 取消运行
+- `ToolRegistry`
+  - 注册工具
+  - 校验工具权限
+  - 统一执行工具
+- `Runner`
+  - 执行“规划 -> 工具 -> 观察 -> 再规划”的循环
+
+## 6.4 不建议直接改造现有 AssistantService 为 AgentService
+
+推荐关系：
+
+- `AssistantService`
+  - 继续负责聊天和 RAG
+- `AgentService`
+  - 复用 `AssistantService` 的部分能力
+  - 但单独维护运行态和工具循环
+
+也就是说：
+
+- Agent 可以调用现有助手能力
+- 但 Agent 不等于助手
+
+---
+
+## 7. 工具设计
+
+## 7.1 V1 只读工具
+
+建议优先实现：
+
+- `get_post_create_context`
+- `analyze_attached_media`
+- `get_group_context`
+- `search_similar_posts`
+- `suggest_tags`
+- `summarize_draft_risks`
+- `generate_post_variants`
+
+这些工具的特点：
+
+- 不修改用户数据
+- 输出结构稳定
+- 易于测试
+
+## 7.2 V1 审批型写工具
+
+建议只开放：
+
+- `save_post_draft`
+- `apply_agent_artifact_to_draft`
+
+V1 不建议直接开放：
+
+- `publish_post`
+- `join_group`
+- `attend_event`
+
+## 7.3 工具协议要求
+
+每个工具至少应有：
+
+- `name`
+- `description`
+- `access_level`
+- `input_schema`
+- `output_schema`
+- `timeout`
+- `idempotent`
+
+---
+
+## 8. API 与流式协议
+
+## 8.1 HTTP 接口建议
+
+- `POST /api/v1/agent/runs`
+- `GET /api/v1/agent/runs`
+- `GET /api/v1/agent/runs/:id`
+- `POST /api/v1/agent/runs/:id/stream`
+- `POST /api/v1/agent/runs/:id/approve`
+- `POST /api/v1/agent/runs/:id/cancel`
+
+## 8.2 SSE 事件建议
+
+现有助手 SSE 只有聊天粒度，不够 Agent 用。Agent 需要扩成：
+
+- `meta`
+- `plan`
+- `step`
+- `tool_call`
+- `tool_result`
+- `approval_required`
+- `artifact`
+- `final`
+- `error`
+
+## 8.3 前后端协议原则
+
+- 前端不推断 Agent 状态
+- 所有状态跃迁由服务端给出
+- 所有审批动作必须带 `run_id` 和 `approval_id`
+
+---
+
+## 9. 前端工作台设计
+
+## 9.1 页面结构
+
+`/agent` 推荐采用三栏或双栏信息架构：
+
+- 左侧：
+  - 任务创建
+  - 场景选择
+  - 历史运行列表
+- 中间：
+  - 执行时间线
+  - 当前步骤
+  - 工具结果
+- 右侧：
+  - 最终产物
+  - 审批卡片
+  - 可应用到草稿的操作
+
+## 9.2 交互原则
+
+- 聊天不是主角，任务进度才是主角
+- 用户始终能知道 Agent 在做什么
+- 用户始终能知道哪些动作还没被执行，只是在等待批准
+
+## 9.3 与现有页面上下文的关系
+
+Agent 需要复用已有 `AssistantPageContext`，但不能只停留在提示词层面。
+
+应该做到：
+
+- 从页面上下文构造初始任务输入
+- 把页面上下文同时存到 `agent_runs.context_snapshot`
+- 后续每个工具都可读取这个快照，而不是依赖前端重复提交
+
+---
+
+## 10. V1 发帖 Agent 目标链路
+
+期望形成这样一条真实链路：
+
+`/posts/create` -> 点击“交给 Agent 处理” -> 跳转 `/agent` 并带入当前草稿上下文 -> Agent 先拆解任务 -> 调用图片分析 / 圈子上下文 / 相似内容检索 / 标签建议工具 -> 生成结构化草稿结果 -> 用户批准“应用到草稿” -> 回填发布页 -> 用户自行确认并发布
+
+这里必须注意：
+
+- V1 的最终发布动作仍由用户自己点
+- Agent 只负责把草稿做得更完整、更可发
+
+---
+
+## 11. 权限、安全与治理
+
+## 11.1 用户边界
+
+- Agent 只能操作当前用户自己的草稿和上下文
+- 不能读取他人私有数据
+- 不能调用后台工具
+
+## 11.2 审计要求
+
+以下行为必须记审计：
+
+- 创建运行
+- 触发审批
+- 批准写入
+- 取消运行
+- 工具执行失败
+
+## 11.3 运行保护
+
+V1 需要硬性限制：
+
+- 单次运行最大步骤数
+- 单次运行最大工具调用数
+- 单工具超时
+- 总运行超时
+- 同用户并发运行数
+
+---
+
+## 12. 观测与指标
+
+建议新增或扩展指标：
+
+- `agent_runs_total`
+- `agent_run_duration_seconds`
+- `agent_steps_total`
+- `agent_tool_calls_total`
+- `agent_tool_call_duration_seconds`
+- `agent_approval_wait_seconds`
+- `agent_failures_total`
+
+后台至少要能看到：
+
+- 最近运行数
+- 完成率
+- 失败率
+- 审批通过率
+- 最常调用工具
+
+---
+
+## 13. 文件落点建议
+
+后端建议新增：
+
+- `internal/domain/agent/entity.go`
+- `internal/domain/agent/repository.go`
+- `internal/infra/postgres/agent_repo.go`
+- `internal/usecase/agent_service.go`
+- `internal/usecase/agent_tools.go`
+- `internal/transport/http/handler/agent_handler.go`
+- `migrations/*_create_agent_tables.up.sql`
+
+前端建议新增：
+
+- `apps/web/src/app/agent/page.tsx`
+- `apps/web/src/app/agent/runs/[id]/page.tsx`
+- `apps/web/src/components/agent/*`
+- `apps/web/src/lib/agent-client.ts`
+
+现有文件建议增量接入：
+
+- `apps/web/src/app/posts/create/page.tsx`
+- `apps/web/src/lib/api-client.ts`
+- `internal/transport/http/router.go`
+- `cmd/server/main.go`
+
+---
+
+## 14. 开发阶段建议
+
+## 14.1 Phase 0：骨架搭建
+
+- 建表
+- 建 domain / repo / usecase 骨架
+- 建 `/agent` 页面空壳
+- 建运行状态和时间线 UI 基础组件
+
+## 14.2 Phase 1：只读 Agent 跑通
+
+- 支持创建运行
+- 支持只读工具调用
+- 支持时间线流式展示
+- 支持生成结构化草稿产物
+
+## 14.3 Phase 2：审批型写工具
+
+- 增加审批卡片
+- 增加“应用到草稿”
+- 跑通从 Agent 到发帖页的回填链路
+
+## 14.4 Phase 3：观测与扩展
+
+- 后台运行指标
+- 历史运行页
+- 更多任务域：
+  - 圈子 Agent
+  - 活动 Agent
+
+---
+
+## 15. 验收标准
+
+V1 完成后，项目里应具备以下真实能力：
+
+- 用户可以进入 `/agent`
+- 用户可以从发帖页带着草稿进入 Agent
+- Agent 能展示规划、步骤、工具调用和结果
+- Agent 能生成可读、可复用的发帖产物
+- 写动作不会直接执行，必须经过批准
+- 用户批准后可以把结果回填到草稿
+- 运行过程和结果可以回看
+- 后端可以审计和观测这条链路
+
+---
+
+## 16. AI / 开发执行顺序
+
+如果让 AI 或开发者按顺序推进，建议严格按下面执行：
+
+1. 先建 `agent` 的数据结构和运行状态，不要先写大段 prompt
+2. 再建工具注册表和只读工具，不要先开放写工具
+3. 再做 `/agent` 页面和 SSE 时间线，不要先把功能塞进浮窗
+4. 再接入发帖页场景，让闭环真正跑通
+5. 最后再做审批写入、历史运行和后台观测
+
+优先级永远是：
+
+1. 可控
+2. 可解释
+3. 可执行
+4. 可观测
+5. 可扩展
+
+---
+
+## 17. 下一步最小实现范围
+
+下一步不应该直接做“全套 Agent 平台”，而应该只做最小可跑版本：
+
+- 新增 `/agent`
+- 新增 `AgentService` 骨架
+- 新增 `agent_runs`、`agent_steps`、`agent_tool_calls`
+- 接一个 `发帖 Agent`
+- 先支持只读工具和结构化产物
+- 暂时把写入动作收敛到“批准后回填草稿”
+
+---
+
+## 附录 A. 历史规划保留
+
+以下保留原有斗地主接入计划，避免覆盖已有方案；后续可以再单独拆到 `docs/`。
+
+---
+
 # 斗地主接入现有网站实施计划
 
 > 面向当前仓库，不是独立项目模板。
