@@ -574,20 +574,6 @@ func formatInsightBullets(items []string) string {
 	return strings.Join(lines, "\n")
 }
 
-func summarizePostAgentResult(pageContext *AssistantPageContext, insights []AssistantInsight) string {
-	if len(insights) == 0 {
-		return "这次运行没有产出有效建议，后续需要补更多输入校验。"
-	}
-	groupName := ""
-	if pageContext != nil && pageContext.Fields != nil {
-		groupName = strings.TrimSpace(pageContext.Fields["group_name"])
-	}
-	if groupName != "" {
-		return fmt.Sprintf("已经结合“%s”的发帖场景整理出 %d 组建议，包含标题、正文润色、标签和可见性方向。", groupName, len(insights))
-	}
-	return fmt.Sprintf("已经围绕当前草稿整理出 %d 组发帖建议，重点覆盖标题、正文、标签和可见性。", len(insights))
-}
-
 func buildPostDraftPatch(pageContext *AssistantPageContext, insights []AssistantInsight) map[string]any {
 	if pageContext == nil {
 		return nil

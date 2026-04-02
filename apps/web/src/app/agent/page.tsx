@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Loader2, PlayCircle, Sparkles } from "lucide-react";
@@ -64,7 +64,7 @@ function StatusBadge({ status }: { status: AgentRunStatus }) {
   );
 }
 
-export default function AgentWorkspacePage() {
+function AgentWorkspaceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -222,7 +222,7 @@ export default function AgentWorkspacePage() {
                   </div>
                   <StatusBadge status={run.status} />
                 </div>
-              <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
                   <span>{run.scenario}</span>
                   <span>{new Date(run.updated_at).toLocaleString("zh-CN")}</span>
                 </div>
@@ -235,5 +235,22 @@ export default function AgentWorkspacePage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function AgentWorkspacePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-6xl px-4 pt-24 pb-12">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            正在加载 Agent 工作台
+          </div>
+        </div>
+      }
+    >
+      <AgentWorkspaceContent />
+    </Suspense>
   );
 }
