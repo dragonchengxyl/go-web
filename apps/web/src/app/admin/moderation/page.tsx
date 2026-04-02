@@ -41,7 +41,7 @@ export default function AdminModerationPage() {
   const [tab, setTab] = useState('pending')
   const [page, setPage] = useState(1)
   const [selectedExplainPostId, setSelectedExplainPostId] = useState('')
-  const pageSize = 20
+  const pageSize = 50
 
   const { data, isLoading } = useQuery<ListPostsOutput>({
     queryKey: ['admin-posts', tab, page],
@@ -61,6 +61,34 @@ export default function AdminModerationPage() {
       showAdminToast('审核操作失败，请重试', 'error')
     },
   })
+  const batchModerateMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: string }) => {
+      await Promise.all(ids.map((id) => apiClient.put(`/admin/posts/${id}/moderation`, { status })))
+      return { ids, status }
+    },
+    onSuccess: ({ ids, status }) => {
+      showAdminToast(
+        status === 'approved'
+          ? `已批量通过 ${ids.length} 条帖子`
+          : `已批量封禁 ${ids.length} 条帖子`,
+        'success',
+      )
+      queryClient.setQueryData<ListPostsOutput | undefined>(['admin-posts', tab, page], (current) => {
+        if (!current) return current
+        const filtered = current.posts.filter((post) => !ids.includes(post.id))
+        return {
+          ...current,
+          posts: filtered,
+          total: Math.max(0, current.total - ids.length),
+        }
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin-posts'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] })
+    },
+    onError: () => {
+      showAdminToast('批量审核失败，请重试', 'error')
+    },
+  })
   const explainMutation = useMutation<AdminAIToolResult, Error, string>({
     mutationFn: (postId: string) => apiClient.generateAdminModerationExplanation(postId),
     onError: () => {
@@ -70,6 +98,25 @@ export default function AdminModerationPage() {
 
   const posts = data?.posts ?? []
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1
+
+  function handleModeratePost(id: string, status: string) {
+    moderateMutation.mutate(
+      { id, status },
+      {
+        onSuccess: () => {
+          if (tab !== 'pending') return
+          queryClient.setQueryData<ListPostsOutput | undefined>(['admin-posts', tab, page], (current) => {
+            if (!current) return current
+            return {
+              ...current,
+              posts: current.posts.filter((post) => post.id !== id),
+              total: Math.max(0, current.total - 1),
+            }
+          })
+        },
+      },
+    )
+  }
 
   const columns: AdminColumn<PostRow>[] = [
     {
@@ -132,7 +179,7 @@ export default function AdminModerationPage() {
               variant="outline"
               className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
               disabled={moderateMutation.isPending}
-              onClick={() => moderateMutation.mutate({ id: post.id, status: 'approved' })}
+              onClick={() => handleModeratePost(post.id, 'approved')}
             >
               <CheckCircle2 className="mr-1 h-4 w-4" />
               通过
@@ -142,7 +189,7 @@ export default function AdminModerationPage() {
               variant="outline"
               className="border-rose-200 text-rose-700 hover:bg-rose-50"
               disabled={moderateMutation.isPending}
-              onClick={() => moderateMutation.mutate({ id: post.id, status: 'blocked' })}
+              onClick={() => handleModeratePost(post.id, 'blocked')}
             >
               <XCircle className="mr-1 h-4 w-4" />
               封禁
@@ -216,7 +263,7 @@ export default function AdminModerationPage() {
         <AdminMetricCard
           label="本页帖子"
           value={posts.length.toLocaleString()}
-          hint="单页最多展示 20 条"
+          hint="单页最多展示 50 条"
           icon={Tag}
           tone="default"
         />
@@ -242,6 +289,33 @@ export default function AdminModerationPage() {
           </div>
         </div>
       </div>
+
+      {tab === 'pending' && posts.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            disabled={batchModerateMutation.isPending}
+            onClick={() => batchModerateMutation.mutate({ ids: posts.map((post) => post.id), status: 'approved' })}
+            className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+          >
+            {batchModerateMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+            )}
+            本页全部通过
+          </Button>
+          <Button
+            variant="outline"
+            disabled={batchModerateMutation.isPending}
+            onClick={() => batchModerateMutation.mutate({ ids: posts.map((post) => post.id), status: 'blocked' })}
+            className="border-rose-200 text-rose-700 hover:bg-rose-50"
+          >
+            <XCircle className="mr-2 h-4 w-4" />
+            本页全部封禁
+          </Button>
+        </div>
+      )}
 
       <AdminDataTable
         data={posts}

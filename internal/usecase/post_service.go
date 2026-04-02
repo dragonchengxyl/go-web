@@ -150,12 +150,6 @@ func (s *PostService) CreatePost(ctx context.Context, input CreatePostInput) (*p
 			}
 		}
 		s.moderatePostAsync(p)
-	} else {
-		// No moderation backend configured: approve immediately.
-		p.ModerationStatus = post.ModerationApproved
-		if err := s.postRepo.UpdateModerationStatus(ctx, p.ID, post.ModerationApproved); err != nil {
-			return nil, apperr.Wrap(apperr.CodeInternalError, "更新帖子状态失败", err)
-		}
 	}
 
 	return p, nil
@@ -533,5 +527,30 @@ func (s *PostService) AdminListPosts(ctx context.Context, status string, page, p
 
 // AdminUpdateModerationStatus updates a post's moderation_status (admin use only).
 func (s *PostService) AdminUpdateModerationStatus(ctx context.Context, postID uuid.UUID, status post.ModerationStatus) error {
-	return s.postRepo.UpdateModerationStatus(ctx, postID, status)
+	item, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		if errors.Is(err, post.ErrNotFound) {
+			return apperr.ErrNotFound
+		}
+		return err
+	}
+
+	prevStatus := item.ModerationStatus
+	if err := s.postRepo.UpdateModerationStatus(ctx, postID, status); err != nil {
+		return err
+	}
+	if s.publisher != nil && prevStatus != status && (status == post.ModerationApproved || status == post.ModerationBlocked) {
+		pubStatus := "blocked"
+		if status == post.ModerationApproved {
+			pubStatus = "approved"
+		}
+		if err := s.publisher.Publish(ctx, eventbus.EventPostModerated, eventbus.PostModeratedPayload{
+			PostID:   item.ID.String(),
+			AuthorID: item.AuthorID.String(),
+			Status:   pubStatus,
+		}); err != nil && s.logger != nil {
+			s.logger.Error("publish admin post.moderated failed", zap.Error(err), zap.String("post_id", item.ID.String()))
+		}
+	}
+	return nil
 }

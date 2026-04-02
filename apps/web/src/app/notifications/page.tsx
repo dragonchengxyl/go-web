@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Bell, Heart, MessageCircle, UserPlus, Gift, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiClient, Notification } from '@/lib/api-client';
+import { useWS } from '@/contexts/ws-context';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -79,13 +80,23 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const { subscribe } = useWS();
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     apiClient.setToken(token);
     loadNotifications();
   }, []);
+
+  useEffect(() => {
+    return subscribe('notification', () => {
+      void loadNotifications();
+    });
+  }, [subscribe]);
 
   async function loadNotifications() {
     try {
@@ -140,6 +151,11 @@ export default function NotificationsPage() {
           </Button>
         )}
       </div>
+      {total > 0 && notifications.length === 0 && !loading && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          当前总通知数大于 0，但本页没有拿到通知记录。通常说明列表刚被清空或服务状态短暂不同步，刷新后会重新拉取。
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">

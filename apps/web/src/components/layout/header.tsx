@@ -207,6 +207,8 @@ export function Header() {
     permissions: user?.permissions,
   });
 
+  const refreshUnreadCount = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
@@ -215,12 +217,25 @@ export function Header() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    apiClient
-      .getUnreadCount()
-      .then((data) => setUnreadCount(data.count))
-      .catch(() => {});
-    return subscribe("notification", () => setUnreadCount((c) => c + 1));
+    const syncUnreadCount = () => {
+      apiClient
+        .getUnreadCount()
+        .then((data) => setUnreadCount(data.count))
+        .catch(() => {});
+    };
+    refreshUnreadCount.current = syncUnreadCount;
+    syncUnreadCount();
+    return subscribe("notification", () => {
+      refreshUnreadCount.current?.();
+    });
   }, [subscribe, isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (pathname === "/notifications" || pathname.startsWith("/notifications/")) {
+      refreshUnreadCount.current?.();
+    }
+  }, [isLoggedIn, pathname]);
 
   function handleMobileLogout() {
     logout();
