@@ -287,6 +287,27 @@ func TestAgentWorkerProcessRunGeneratesPostArtifacts(t *testing.T) {
 	if len(detail.ToolCalls) < 2 {
 		t.Fatalf("expected tool calls, got %d", len(detail.ToolCalls))
 	}
+	foundPlanStep := false
+	foundPlanArtifact := false
+	for _, step := range detail.Steps {
+		if step.Kind == "plan" {
+			foundPlanStep = true
+			if _, ok := step.OutputData["stages"]; !ok {
+				t.Fatalf("expected plan stages in plan step output")
+			}
+		}
+	}
+	for _, artifact := range detail.Artifacts {
+		if artifact.Kind == "execution_plan" {
+			foundPlanArtifact = true
+		}
+	}
+	if !foundPlanStep {
+		t.Fatalf("expected explicit plan step")
+	}
+	if !foundPlanArtifact {
+		t.Fatalf("expected execution_plan artifact")
+	}
 }
 
 func TestAgentServiceCreateRunGeneratesPostArtifacts(t *testing.T) {

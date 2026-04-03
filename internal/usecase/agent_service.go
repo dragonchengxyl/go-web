@@ -431,6 +431,9 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	pageContext, contextSummary := buildAgentPostPageContext(run.ContextSnapshot)
 	state.PageContext = pageContext
 	state.ContextSummary = contextSummary
+	plan := buildPostAgentExecutionPlan(run, contextSummary)
+	planData := plan.toMap()
+
 	planStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
 	if err != nil {
 		return err
@@ -441,16 +444,29 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		RunID:       run.ID,
 		StepIndex:   planStepIndex,
 		Kind:        "plan",
-		Title:       "拆解发帖任务",
+		Title:       "生成执行计划",
 		Status:      agentdomain.StepStatusCompleted,
-		Summary:     "先读取草稿与页面上下文，再生成标题、正文润色、标签和可见性建议。",
+		Summary:     "已经生成本次发帖 Agent 的执行计划。",
 		InputData:   cloneAgentMap(run.ContextSnapshot),
-		OutputData:  map[string]any{"scenario": run.Scenario, "context_summary": contextSummary},
+		OutputData:  planData,
 		CreatedAt:   planTime,
 		StartedAt:   &planTime,
 		CompletedAt: &planTime,
 	}
 	if err := s.repo.CreateStep(ctx, planStep); err != nil {
+		return err
+	}
+	planArtifact := &agentdomain.Artifact{
+		ID:             uuid.New(),
+		RunID:          run.ID,
+		StepID:         &planStep.ID,
+		Kind:           "execution_plan",
+		Title:          "执行计划",
+		Content:        formatAgentExecutionPlan(plan),
+		StructuredData: planData,
+		CreatedAt:      planTime,
+	}
+	if err := s.repo.CreateArtifact(ctx, planArtifact); err != nil {
 		return err
 	}
 	s.publishRunEvent(run.ID, "step_completed", planStep.Summary)
@@ -460,11 +476,38 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return nil
 	}
 
-	if _, err := s.executeTool(ctx, state, run.ID, &planStep.ID, "get_post_create_context"); err != nil {
+	executionStage := plan.findStage("execution")
+	if executionStage == nil {
+		return fmt.Errorf("agent execution plan missing execution stage")
+	}
+	executionStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
 		return err
 	}
-	if _, err := s.executeTool(ctx, state, run.ID, &planStep.ID, "generate_post_copilot_artifacts"); err != nil {
+	executionTime := time.Now()
+	executionStep := &agentdomain.Step{
+		ID:        uuid.New(),
+		RunID:     run.ID,
+		StepIndex: executionStepIndex,
+		Kind:      executionStage.Kind,
+		Title:     executionStage.Title,
+		Status:    agentdomain.StepStatusCompleted,
+		Summary:   executionStage.Summary,
+		OutputData: map[string]any{
+			"tools":    append([]string(nil), executionStage.Tools...),
+			"produces": append([]string(nil), executionStage.Produces...),
+		},
+		CreatedAt:   executionTime,
+		StartedAt:   &executionTime,
+		CompletedAt: &executionTime,
+	}
+	if err := s.repo.CreateStep(ctx, executionStep); err != nil {
 		return err
+	}
+	for _, toolName := range executionStage.Tools {
+		if _, err := s.executeTool(ctx, state, run.ID, &executionStep.ID, toolName); err != nil {
+			return err
+		}
 	}
 	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
 		return err
@@ -472,20 +515,28 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return nil
 	}
 
+	artifactStage := plan.findStage("artifact_generation")
+	if artifactStage == nil {
+		return fmt.Errorf("agent execution plan missing artifact stage")
+	}
 	artifactStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
 	if err != nil {
 		return err
 	}
 	artifactStepTime := time.Now()
 	artifactStep := &agentdomain.Step{
-		ID:          uuid.New(),
-		RunID:       run.ID,
-		StepIndex:   artifactStepIndex,
-		Kind:        "artifact_generation",
-		Title:       "生成发帖建议产物",
-		Status:      agentdomain.StepStatusCompleted,
-		Summary:     firstNonEmpty(buildCopilotFallbackText(state.Insights), "已经根据当前草稿生成建议。"),
-		OutputData:  map[string]any{"insight_count": len(state.Insights)},
+		ID:        uuid.New(),
+		RunID:     run.ID,
+		StepIndex: artifactStepIndex,
+		Kind:      artifactStage.Kind,
+		Title:     artifactStage.Title,
+		Status:    agentdomain.StepStatusCompleted,
+		Summary:   firstNonEmpty(buildCopilotFallbackText(state.Insights), artifactStage.Summary),
+		OutputData: map[string]any{
+			"tools":         append([]string(nil), artifactStage.Tools...),
+			"produces":      append([]string(nil), artifactStage.Produces...),
+			"insight_count": len(state.Insights),
+		},
 		CreatedAt:   artifactStepTime,
 		StartedAt:   &artifactStepTime,
 		CompletedAt: &artifactStepTime,
@@ -520,8 +571,10 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		}
 	}
 
-	if _, err := s.executeTool(ctx, state, run.ID, &artifactStep.ID, "build_post_draft_patch"); err != nil {
-		return err
+	for _, toolName := range artifactStage.Tools {
+		if _, err := s.executeTool(ctx, state, run.ID, &artifactStep.ID, toolName); err != nil {
+			return err
+		}
 	}
 	draftPatch := state.DraftPatch
 	if len(draftPatch) > 0 {
@@ -541,12 +594,16 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	}
 	s.publishRunEvent(run.ID, "artifact_ready", "结构化产物已经生成。")
 
+	approvalStage := plan.findStage("approval")
+	if approvalStage == nil {
+		return fmt.Errorf("agent execution plan missing approval stage")
+	}
 	approvalTime := time.Now()
 	approval := &agentdomain.Approval{
 		ID:         uuid.New(),
 		RunID:      run.ID,
 		StepID:     &artifactStep.ID,
-		ActionType: "apply_post_draft",
+		ActionType: approvalStage.ApprovalAction,
 		Title:      "把建议回填到发帖页草稿",
 		Status:     agentdomain.ApprovalStatusPending,
 		Payload:    draftPatch,
@@ -561,7 +618,7 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return nil
 	}
 
-	runSummary := "建议已生成，等待你批准是否把结果回填到发帖页。"
+	runSummary := approvalStage.Summary
 	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusWaitingApproval, runSummary, "", nil); err != nil {
 		return err
 	}
@@ -571,14 +628,16 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 		return err
 	}
 	finalStep := &agentdomain.Step{
-		ID:          uuid.New(),
-		RunID:       run.ID,
-		StepIndex:   finalStepIndex,
-		Kind:        "approval",
-		Title:       "等待批准回填草稿",
-		Status:      agentdomain.StepStatusCompleted,
-		Summary:     runSummary,
-		OutputData:  map[string]any{"approval_action": "apply_post_draft"},
+		ID:        uuid.New(),
+		RunID:     run.ID,
+		StepIndex: finalStepIndex,
+		Kind:      approvalStage.Kind,
+		Title:     approvalStage.Title,
+		Status:    agentdomain.StepStatusCompleted,
+		Summary:   runSummary,
+		OutputData: map[string]any{
+			"approval_action": approvalStage.ApprovalAction,
+		},
 		CreatedAt:   approvalTime,
 		StartedAt:   &approvalTime,
 		CompletedAt: &approvalTime,
@@ -703,6 +762,131 @@ func (s *AgentService) runStopped(ctx context.Context, runID uuid.UUID) (bool, e
 	default:
 		return false, nil
 	}
+}
+
+type agentExecutionPlan struct {
+	Scenario       string                  `json:"scenario"`
+	Goal           string                  `json:"goal"`
+	ContextSummary string                  `json:"context_summary,omitempty"`
+	Stages         []agentExecutionStage   `json:"stages"`
+}
+
+type agentExecutionStage struct {
+	Name           string   `json:"name"`
+	Kind           string   `json:"kind"`
+	Title          string   `json:"title"`
+	Summary        string   `json:"summary"`
+	Tools          []string `json:"tools,omitempty"`
+	Produces       []string `json:"produces,omitempty"`
+	ApprovalAction string   `json:"approval_action,omitempty"`
+}
+
+func (p agentExecutionPlan) toMap() map[string]any {
+	stages := make([]map[string]any, 0, len(p.Stages))
+	for _, stage := range p.Stages {
+		stages = append(stages, map[string]any{
+			"name":            stage.Name,
+			"kind":            stage.Kind,
+			"title":           stage.Title,
+			"summary":         stage.Summary,
+			"tools":           append([]string(nil), stage.Tools...),
+			"produces":        append([]string(nil), stage.Produces...),
+			"approval_action": stage.ApprovalAction,
+		})
+	}
+	return map[string]any{
+		"scenario":        p.Scenario,
+		"goal":            p.Goal,
+		"context_summary": p.ContextSummary,
+		"stages":          stages,
+	}
+}
+
+func (p agentExecutionPlan) findStage(name string) *agentExecutionStage {
+	for i := range p.Stages {
+		if p.Stages[i].Name == name {
+			return &p.Stages[i]
+		}
+	}
+	return nil
+}
+
+func buildPostAgentExecutionPlan(run *agentdomain.Run, contextSummary string) agentExecutionPlan {
+	goal := ""
+	if run != nil {
+		goal = run.Goal
+	}
+	return agentExecutionPlan{
+		Scenario: firstNonEmpty(func() string {
+			if run == nil {
+				return agentdomain.ScenarioPostAgent
+			}
+			return run.Scenario
+		}(), agentdomain.ScenarioPostAgent),
+		Goal:           goal,
+		ContextSummary: contextSummary,
+		Stages: []agentExecutionStage{
+			{
+				Name:     "planning",
+				Kind:     "plan",
+				Title:    "生成执行计划",
+				Summary:  "先确认上下文，再进入工具执行与产物生成。",
+				Produces: []string{"execution_plan"},
+			},
+			{
+				Name:     "execution",
+				Kind:     "execution",
+				Title:    "执行建议生成工具",
+				Summary:  "依次读取发帖上下文并生成结构化发帖建议。",
+				Tools:    []string{"get_post_create_context", "generate_post_copilot_artifacts"},
+				Produces: []string{"post_context", "copilot_insights"},
+			},
+			{
+				Name:     "artifact_generation",
+				Kind:     "artifact_generation",
+				Title:    "生成发帖建议产物",
+				Summary:  "把结构化建议整理为可展示产物，并生成可回填草稿。",
+				Tools:    []string{"build_post_draft_patch"},
+				Produces: []string{"insight_artifacts", "draft_patch"},
+			},
+			{
+				Name:           "approval",
+				Kind:           "approval",
+				Title:          "等待批准回填草稿",
+				Summary:        "建议已生成，等待你批准是否把结果回填到发帖页。",
+				ApprovalAction: "apply_post_draft",
+				Produces:       []string{"approval_request"},
+			},
+		},
+	}
+}
+
+func formatAgentExecutionPlan(plan agentExecutionPlan) string {
+	lines := []string{
+		"执行计划概览：",
+		"- 场景：" + plan.Scenario,
+	}
+	if strings.TrimSpace(plan.Goal) != "" {
+		lines = append(lines, "- 目标："+plan.Goal)
+	}
+	if strings.TrimSpace(plan.ContextSummary) != "" {
+		lines = append(lines, "- 上下文："+plan.ContextSummary)
+	}
+	lines = append(lines, "", "阶段：")
+	for idx, stage := range plan.Stages {
+		line := fmt.Sprintf("%d. %s — %s", idx+1, stage.Title, stage.Summary)
+		lines = append(lines, line)
+		if len(stage.Tools) > 0 {
+			lines = append(lines, "   tools: "+strings.Join(stage.Tools, ", "))
+		}
+		if len(stage.Produces) > 0 {
+			lines = append(lines, "   produces: "+strings.Join(stage.Produces, ", "))
+		}
+		if stage.ApprovalAction != "" {
+			lines = append(lines, "   approval: "+stage.ApprovalAction)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildAgentPostPageContext(snapshot map[string]any) (*AssistantPageContext, string) {
