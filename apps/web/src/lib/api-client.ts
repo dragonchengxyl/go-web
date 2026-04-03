@@ -264,10 +264,14 @@ export interface AgentRun {
   context_snapshot?: Record<string, unknown>;
   latest_summary?: string;
   last_error?: string;
+  attempt_count: number;
+  max_attempts: number;
   created_at: string;
   updated_at: string;
   started_at?: string;
   completed_at?: string;
+  next_retry_at?: string;
+  last_error_at?: string;
 }
 
 export interface AgentStep {

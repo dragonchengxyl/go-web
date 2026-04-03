@@ -9,6 +9,7 @@ import { apiClient, CreateAgentRunInput, AgentRun, AgentRunStatus } from "@/lib/
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -68,6 +69,15 @@ function shouldPollRuns(runs?: AgentRun[]) {
   return (runs || []).some((run) => run.status === "queued" || run.status === "running");
 }
 
+function formatDateTime(value?: string) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN");
+}
+
+function countRunsByStatus(runs: AgentRun[] | undefined, status: AgentRunStatus) {
+  return (runs || []).filter((run) => run.status === status).length;
+}
+
 function AgentWorkspaceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -91,11 +101,17 @@ function AgentWorkspaceContent() {
   const createMutation = useMutation({
     mutationFn: (payload: CreateAgentRunInput) => apiClient.createAgentRun(payload),
     onSuccess: (detail) => {
-      setMessage("任务已创建，Agent 会在后台继续执行。");
+      setMessage("任务已创建，当前会由独立 worker 在后台执行。你可以进入详情页查看时间线、工具轨迹和审批状态。");
       queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
       router.push(`/agent/runs/${detail.run.id}`);
     },
   });
+
+  const runs = data?.runs || [];
+  const queuedCount = countRunsByStatus(runs, "queued");
+  const runningCount = countRunsByStatus(runs, "running");
+  const waitingApprovalCount = countRunsByStatus(runs, "waiting_approval");
+  const failedRuns = runs.filter((run) => run.status === "failed").slice(0, 3);
 
   if (!isLoggedIn) {
     return (
@@ -131,6 +147,47 @@ function AgentWorkspaceContent() {
             这是一个独立的大页面，用来发起和管理 Agent 任务。当前开放的是 `发帖 Agent`，后续会继续扩到圈子与活动场景。
           </p>
         </div>
+      </div>
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-4">
+        <Card className="border-cyan-200 bg-cyan-50/80">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-slate-950">排队中</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-semibold text-slate-950">{queuedCount}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">等待 worker claim 的任务。</p>
+          </CardContent>
+        </Card>
+        <Card className="border-sky-200 bg-sky-50/80">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-slate-950">运行中</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-semibold text-slate-950">{runningCount}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">正在生成步骤、工具调用和产物。</p>
+          </CardContent>
+        </Card>
+        <Card className="border-amber-200 bg-amber-50/80">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-slate-950">待审批</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-semibold text-slate-950">{waitingApprovalCount}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">结果已生成，等待你决定是否回填。</p>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200 bg-slate-50/80">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm text-slate-950">执行模式</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-slate-600">
+            <Badge className="border-emerald-200 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+              Worker-backed
+            </Badge>
+            <p className="leading-6">当前任务由独立 Agent worker 在后台执行，而不是挂在 Web 请求里。</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
@@ -236,12 +293,31 @@ function AgentWorkspaceContent() {
                 正在读取运行记录
               </div>
             ) : null}
-            {!isLoading && !(data?.runs?.length) ? (
+            {!isLoading && !(runs.length) ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
                 还没有运行记录。先创建一个发帖 Agent 任务。
               </div>
             ) : null}
-            {(data?.runs || []).map((run: AgentRun) => (
+            {failedRuns.length > 0 ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+                <p className="text-sm font-medium text-rose-700">最近失败任务</p>
+                <div className="mt-3 space-y-2">
+                  {failedRuns.map((run) => (
+                    <div key={run.id} className="rounded-xl border border-rose-200 bg-white px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="truncate text-sm font-semibold text-slate-900">{run.title}</p>
+                        <StatusBadge status={run.status} />
+                      </div>
+                      {run.last_error ? (
+                        <p className="mt-2 text-sm leading-6 text-rose-600">{run.last_error}</p>
+                      ) : null}
+                      <p className="mt-2 text-xs text-slate-400">最后更新时间：{formatDateTime(run.last_error_at || run.updated_at)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {runs.map((run: AgentRun) => (
               <Link
                 key={run.id}
                 href={`/agent/runs/${run.id}`}
@@ -255,7 +331,9 @@ function AgentWorkspaceContent() {
                   <StatusBadge status={run.status} />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-                  <span>{new Date(run.updated_at).toLocaleString("zh-CN")}</span>
+                  <span>{formatDateTime(run.updated_at)}</span>
+                  <span>尝试 {run.attempt_count}/{run.max_attempts}</span>
+                  {run.next_retry_at ? <span>下次重试：{formatDateTime(run.next_retry_at)}</span> : null}
                 </div>
                 {run.latest_summary ? (
                   <p className="mt-2 text-sm leading-6 text-slate-500">{run.latest_summary}</p>

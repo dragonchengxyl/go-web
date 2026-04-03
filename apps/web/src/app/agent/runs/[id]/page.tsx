@@ -5,8 +5,9 @@ import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Loader2, Square, X } from "lucide-react";
-import { AgentRunStatus, apiClient } from "@/lib/api-client";
+import { AgentRunStatus, AgentStepStatus, apiClient } from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { writeStoredPostDraft } from "@/lib/post-draft";
@@ -19,6 +20,56 @@ const STATUS_LABELS: Record<AgentRunStatus, string> = {
   failed: "失败",
   cancelled: "已取消",
 };
+
+const STEP_STATUS_LABELS: Record<AgentStepStatus, string> = {
+  pending: "待处理",
+  running: "运行中",
+  completed: "已完成",
+  failed: "失败",
+  skipped: "已跳过",
+};
+
+function formatDateTime(value?: string) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN");
+}
+
+function formatDuration(startedAt?: string, completedAt?: string) {
+  if (!startedAt || !completedAt) return "-";
+  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "-";
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+function StepStatusBadge({ status }: { status: AgentStepStatus }) {
+  const className =
+    status === "completed"
+      ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+      : status === "failed"
+        ? "border-rose-200 bg-rose-100 text-rose-700"
+        : status === "running"
+          ? "border-cyan-200 bg-cyan-100 text-cyan-700"
+          : status === "skipped"
+            ? "border-slate-200 bg-slate-100 text-slate-600"
+            : "border-amber-200 bg-amber-100 text-amber-700";
+  return <Badge className={className}>{STEP_STATUS_LABELS[status]}</Badge>;
+}
+
+function RunStatusBadge({ status }: { status: AgentRunStatus }) {
+  const className =
+    status === "completed"
+      ? "border-emerald-200 bg-emerald-100 text-emerald-700"
+      : status === "failed"
+        ? "border-rose-200 bg-rose-100 text-rose-700"
+        : status === "cancelled"
+          ? "border-slate-200 bg-slate-100 text-slate-700"
+          : status === "waiting_approval"
+            ? "border-amber-200 bg-amber-100 text-amber-700"
+            : "border-cyan-200 bg-cyan-100 text-cyan-700";
+  return <Badge className={className}>{STATUS_LABELS[status]}</Badge>;
+}
 
 export default function AgentRunDetailPage() {
   const params = useParams<{ id: string }>();
@@ -155,14 +206,15 @@ export default function AgentRunDetailPage() {
               <CardTitle className="text-slate-950">{data.run.title}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-3 text-sm text-slate-500">
-                <span>状态：{STATUS_LABELS[data.run.status]}</span>
+              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                <RunStatusBadge status={data.run.status} />
                 <span>场景：{data.run.scenario}</span>
-                <span>更新时间：{new Date(data.run.updated_at).toLocaleString("zh-CN")}</span>
+                <span>尝试：{data.run.attempt_count}/{data.run.max_attempts}</span>
+                <span>更新时间：{formatDateTime(data.run.updated_at)}</span>
               </div>
               {(data.run.status === "queued" || data.run.status === "running") ? (
                 <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
-                  Agent 正在后台执行，这个页面会自动刷新运行状态。
+                  Agent 正在由独立 worker 在后台执行，这个页面会自动刷新运行状态。
                 </div>
               ) : null}
               <div>
@@ -175,6 +227,16 @@ export default function AgentRunDetailPage() {
                 <div>
                   <p className="text-sm font-medium text-slate-900">当前摘要</p>
                   <p className="mt-2 text-sm leading-7 text-slate-600">{data.run.latest_summary}</p>
+                </div>
+              ) : null}
+              {data.run.last_error ? (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+                  <p className="text-sm font-medium text-rose-700">最近一次错误</p>
+                  <p className="mt-2 text-sm leading-6 text-rose-600">{data.run.last_error}</p>
+                  <p className="mt-2 text-xs text-slate-400">
+                    错误时间：{formatDateTime(data.run.last_error_at)}
+                    {data.run.next_retry_at ? ` · 下次重试：${formatDateTime(data.run.next_retry_at)}` : ""}
+                  </p>
                 </div>
               ) : null}
               {contextSummary ? (
@@ -205,15 +267,60 @@ export default function AgentRunDetailPage() {
                           {step.step_index}. {step.title}
                         </p>
                         <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                          {step.kind} · {step.status}
+                          {step.kind}
                         </p>
                       </div>
+                      <StepStatusBadge status={step.status} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                      <span>开始：{formatDateTime(step.started_at || step.created_at)}</span>
+                      <span>结束：{formatDateTime(step.completed_at)}</span>
+                      <span>耗时：{formatDuration(step.started_at || step.created_at, step.completed_at)}</span>
                     </div>
                     {step.summary ? (
                       <p className="mt-3 text-sm leading-6 text-slate-600">{step.summary}</p>
                     ) : null}
                     {step.error_text ? (
                       <p className="mt-3 text-sm leading-6 text-rose-600">{step.error_text}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="text-slate-950">工具轨迹</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!(data.tool_calls?.length) ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                    当前还没有工具调用记录。
+                  </div>
+                ) : null}
+                {(data.tool_calls || []).map((toolCall) => (
+                  <div key={toolCall.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{toolCall.tool_name}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
+                          {toolCall.access_level}
+                        </p>
+                      </div>
+                      <StepStatusBadge status={toolCall.status} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                      <span>开始：{formatDateTime(toolCall.started_at || toolCall.created_at)}</span>
+                      <span>结束：{formatDateTime(toolCall.completed_at)}</span>
+                      <span>耗时：{formatDuration(toolCall.started_at || toolCall.created_at, toolCall.completed_at)}</span>
+                    </div>
+                    {toolCall.output_data ? (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs leading-6 text-slate-600">
+                        <pre className="whitespace-pre-wrap break-all">{JSON.stringify(toolCall.output_data, null, 2)}</pre>
+                      </div>
+                    ) : null}
+                    {toolCall.error_text ? (
+                      <p className="mt-3 text-sm leading-6 text-rose-600">{toolCall.error_text}</p>
                     ) : null}
                   </div>
                 ))}
