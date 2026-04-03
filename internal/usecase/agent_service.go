@@ -42,6 +42,7 @@ type AgentService struct {
 	async       bool
 	hub         *agentRunHub
 	tools       *agentToolRegistry
+	maxAttempts int
 }
 
 func NewAgentService(repo agentdomain.Repository, postService *PostService) *AgentService {
@@ -54,6 +55,7 @@ func newAgentService(repo agentdomain.Repository, postService *PostService, asyn
 		postService: postService,
 		async:       async,
 		hub:         newAgentRunHub(),
+		maxAttempts: 3,
 	}
 	service.tools = newAgentToolRegistry(service)
 	return service
@@ -105,7 +107,9 @@ func (s *AgentService) CreateRun(ctx context.Context, userID uuid.UUID, input Cr
 		Scenario:        truncateAgentText(scenario, 64),
 		Status:          agentdomain.RunStatusQueued,
 		ContextSnapshot: cloneAgentMap(input.ContextSnapshot),
-		LatestSummary:   "任务已创建，等待执行器接入。",
+		LatestSummary:   "任务已创建，等待执行器处理。",
+		AttemptCount:    0,
+		MaxAttempts:     s.maxAttempts,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -128,14 +132,13 @@ func (s *AgentService) CreateRun(ctx context.Context, userID uuid.UUID, input Cr
 	if err := s.repo.CreateStep(ctx, queuedStep); err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternalError, "记录 Agent 初始步骤失败", err)
 	}
-	s.publishRunEvent(run.ID, "queued", queuedStep.Summary)
-
 	if s.async {
-		go s.executeRunAsync(*run)
-	} else {
-		s.executeRunSafe(context.Background(), *run)
+		s.publishRunEvent(run.ID, "queued", queuedStep.Summary)
+		return s.GetRunDetail(ctx, userID, run.ID)
 	}
 
+	s.publishRunEvent(run.ID, "queued", queuedStep.Summary)
+	s.executeRunSafe(context.Background(), *run)
 	return s.GetRunDetail(ctx, userID, run.ID)
 }
 
@@ -389,7 +392,12 @@ func (s *AgentService) executeRunSafe(ctx context.Context, run agentdomain.Run) 
 		return
 	}
 
-	if err := s.executeRun(ctx, &run); err != nil {
+	currentRun, err := s.repo.GetRunByID(ctx, run.ID)
+	if err != nil {
+		s.recordRunFailure(ctx, run.ID, err)
+		return
+	}
+	if err := s.executeRun(ctx, currentRun); err != nil {
 		s.recordRunFailure(ctx, run.ID, err)
 	}
 }
@@ -589,6 +597,10 @@ func (s *AgentService) recordRunFailure(ctx context.Context, runID uuid.UUID, er
 	}
 
 	failAt := time.Now()
+	if current != nil {
+		s.handleRunExecutionFailure(ctx, current, err)
+		return
+	}
 	_ = s.repo.UpdateRunStatus(ctx, runID, agentdomain.RunStatusFailed, "", err.Error(), &failAt)
 	stepIndex, stepErr := s.nextRunStepIndex(ctx, runID)
 	if stepErr != nil {
@@ -609,6 +621,67 @@ func (s *AgentService) recordRunFailure(ctx context.Context, runID uuid.UUID, er
 	}
 	_ = s.repo.CreateStep(ctx, failStep)
 	s.publishRunEvent(runID, "failed", failStep.Summary)
+}
+
+func (s *AgentService) handleRunExecutionFailure(ctx context.Context, run *agentdomain.Run, err error) {
+	if run == nil {
+		return
+	}
+	failAt := time.Now()
+	run.UpdatedAt = failAt
+	run.LastError = err.Error()
+	run.LastErrorAt = &failAt
+	run.LatestSummary = "当前这次 Agent 运行没有顺利完成。"
+
+	if run.AttemptCount >= run.MaxAttempts {
+		run.Status = agentdomain.RunStatusFailed
+		run.CompletedAt = &failAt
+		run.NextRetryAt = nil
+	} else {
+		run.Status = agentdomain.RunStatusQueued
+		run.CompletedAt = nil
+		nextRetryAt := failAt.Add(s.retryDelay(run.AttemptCount))
+		run.NextRetryAt = &nextRetryAt
+		run.LatestSummary = "任务执行失败，稍后会自动重试。"
+	}
+	_ = s.repo.UpdateRun(ctx, run)
+
+	stepIndex, stepErr := s.nextRunStepIndex(ctx, run.ID)
+	if stepErr != nil {
+		stepIndex = 9999
+	}
+	failStep := &agentdomain.Step{
+		ID:        uuid.New(),
+		RunID:     run.ID,
+		StepIndex: stepIndex,
+		Kind:      "system",
+		Status:    agentdomain.StepStatusFailed,
+		ErrorText: err.Error(),
+		CreatedAt: failAt,
+		StartedAt: &failAt,
+	}
+	if run.Status == agentdomain.RunStatusQueued {
+		failStep.Title = "任务执行失败，等待重试"
+		failStep.Summary = "当前这次 Agent 运行失败，系统会稍后自动重试。"
+	} else {
+		failStep.Title = "任务执行失败"
+		failStep.Summary = "当前这次 Agent 运行没有顺利完成。"
+		failStep.CompletedAt = &failAt
+	}
+	_ = s.repo.CreateStep(ctx, failStep)
+
+	if run.Status == agentdomain.RunStatusQueued {
+		s.publishRunEvent(run.ID, "retry_scheduled", failStep.Summary)
+		return
+	}
+	s.publishRunEvent(run.ID, "failed", failStep.Summary)
+}
+
+func (s *AgentService) retryDelay(attemptCount int) time.Duration {
+	if attemptCount < 1 {
+		attemptCount = 1
+	}
+	return time.Duration(attemptCount*attemptCount) * time.Second
 }
 
 func (s *AgentService) nextRunStepIndex(ctx context.Context, runID uuid.UUID) (int, error) {

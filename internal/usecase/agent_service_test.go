@@ -55,17 +55,63 @@ func (r *inMemoryAgentRepo) ListRuns(_ context.Context, userID uuid.UUID, _, _ i
 }
 
 func (r *inMemoryAgentRepo) TryStartRun(_ context.Context, id uuid.UUID, startedAt time.Time) (bool, error) {
+	item, claimed, err := r.ClaimRunForProcessing(context.Background(), id, startedAt)
+	if err != nil {
+		return false, err
+	}
+	return claimed && item != nil, nil
+}
+
+func (r *inMemoryAgentRepo) ClaimRunForProcessing(_ context.Context, id uuid.UUID, now time.Time) (*agentdomain.Run, bool, error) {
 	item, ok := r.runs[id]
 	if !ok {
-		return false, agentdomain.ErrRunNotFound
+		return nil, false, agentdomain.ErrRunNotFound
 	}
 	if item.Status != agentdomain.RunStatusQueued {
-		return false, nil
+		return nil, false, nil
+	}
+	if item.NextRetryAt != nil && item.NextRetryAt.After(now) {
+		return nil, false, nil
 	}
 	item.Status = agentdomain.RunStatusRunning
-	item.StartedAt = &startedAt
-	item.UpdatedAt = startedAt
-	return true, nil
+	item.AttemptCount++
+	item.StartedAt = &now
+	item.CompletedAt = nil
+	item.NextRetryAt = nil
+	item.LastError = ""
+	item.UpdatedAt = now
+	clone := *item
+	return &clone, true, nil
+}
+
+func (r *inMemoryAgentRepo) ListRunnableRunIDs(_ context.Context, readyBefore time.Time, limit int) ([]uuid.UUID, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	ids := make([]uuid.UUID, 0, limit)
+	for id, item := range r.runs {
+		if item.Status != agentdomain.RunStatusQueued {
+			continue
+		}
+		if item.NextRetryAt != nil && item.NextRetryAt.After(readyBefore) {
+			continue
+		}
+		ids = append(ids, id)
+		if len(ids) >= limit {
+			break
+		}
+	}
+	return ids, nil
+}
+
+func (r *inMemoryAgentRepo) UpdateRun(_ context.Context, item *agentdomain.Run) error {
+	_, ok := r.runs[item.ID]
+	if !ok {
+		return agentdomain.ErrRunNotFound
+	}
+	clone := *item
+	r.runs[item.ID] = &clone
+	return nil
 }
 
 func (r *inMemoryAgentRepo) UpdateRunStatus(_ context.Context, id uuid.UUID, status agentdomain.RunStatus, summary, lastError string, completedAt *time.Time) error {
@@ -78,6 +124,10 @@ func (r *inMemoryAgentRepo) UpdateRunStatus(_ context.Context, id uuid.UUID, sta
 	item.LastError = lastError
 	item.UpdatedAt = time.Now()
 	item.CompletedAt = completedAt
+	if lastError != "" {
+		now := time.Now()
+		item.LastErrorAt = &now
+	}
 	return nil
 }
 
@@ -171,6 +221,72 @@ func (r *inMemoryAgentRepo) ListArtifacts(_ context.Context, runID uuid.UUID) ([
 		out = append(out, &clone)
 	}
 	return out, nil
+}
+
+func TestAgentServiceCreateRunQueuesWhenAsync(t *testing.T) {
+	repo := newInMemoryAgentRepo()
+	svc := newAgentService(repo, nil, true)
+	userID := uuid.New()
+
+	detail, err := svc.CreateRun(context.Background(), userID, CreateAgentRunInput{
+		Scenario: agentdomain.ScenarioPostAgent,
+		Goal:     "请帮我整理这条动态草稿",
+	})
+	if err != nil {
+		t.Fatalf("CreateRun error: %v", err)
+	}
+	if detail.Run.Status != agentdomain.RunStatusQueued {
+		t.Fatalf("run status = %q, want queued", detail.Run.Status)
+	}
+	if detail.Run.MaxAttempts != 3 {
+		t.Fatalf("max attempts = %d, want 3", detail.Run.MaxAttempts)
+	}
+	if detail.Run.AttemptCount != 0 {
+		t.Fatalf("attempt count = %d, want 0", detail.Run.AttemptCount)
+	}
+}
+
+func TestAgentWorkerProcessRunGeneratesPostArtifacts(t *testing.T) {
+	repo := newInMemoryAgentRepo()
+	svc := newAgentService(repo, nil, true)
+	worker := NewAgentWorker(svc, nil, time.Millisecond, 10)
+	_ = worker
+	userID := uuid.New()
+
+	detail, err := svc.CreateRun(context.Background(), userID, CreateAgentRunInput{
+		Scenario: agentdomain.ScenarioPostAgent,
+		Goal:     "请帮我整理这条动态草稿",
+		ContextSnapshot: map[string]any{
+			"draft_title":   "春日兽设草稿",
+			"draft_content": "最近把角色设定调整了一版，想分享新的配色和情绪氛围。",
+			"group_name":    "原创设定研究所",
+			"visibility":    "公开",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateRun error: %v", err)
+	}
+	if detail.Run.Status != agentdomain.RunStatusQueued {
+		t.Fatalf("run status = %q, want queued", detail.Run.Status)
+	}
+
+	if err := svc.ProcessRun(context.Background(), detail.Run.ID); err != nil {
+		t.Fatalf("ProcessRun error: %v", err)
+	}
+
+	detail, err = svc.GetRunDetail(context.Background(), userID, detail.Run.ID)
+	if err != nil {
+		t.Fatalf("GetRunDetail error: %v", err)
+	}
+	if detail.Run.Status != agentdomain.RunStatusWaitingApproval {
+		t.Fatalf("run status = %q, want waiting_approval", detail.Run.Status)
+	}
+	if detail.Run.AttemptCount != 1 {
+		t.Fatalf("attempt count = %d, want 1", detail.Run.AttemptCount)
+	}
+	if len(detail.ToolCalls) < 2 {
+		t.Fatalf("expected tool calls, got %d", len(detail.ToolCalls))
+	}
 }
 
 func TestAgentServiceCreateRunGeneratesPostArtifacts(t *testing.T) {

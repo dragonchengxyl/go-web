@@ -80,6 +80,7 @@ type ObservabilityConfig struct {
 	ModerationHTTPPort   int `mapstructure:"moderation_http_port"`
 	AudioWorkerHTTPPort  int `mapstructure:"audio_worker_http_port"`
 	OutboxHTTPPort       int `mapstructure:"outbox_http_port"`
+	AgentWorkerHTTPPort  int `mapstructure:"agent_worker_http_port"`
 }
 
 type EmailConfig struct {

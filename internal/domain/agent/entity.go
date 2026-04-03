@@ -58,10 +58,14 @@ type Run struct {
 	ContextSnapshot map[string]any `json:"context_snapshot,omitempty"`
 	LatestSummary   string         `json:"latest_summary,omitempty"`
 	LastError       string         `json:"last_error,omitempty"`
+	AttemptCount    int            `json:"attempt_count"`
+	MaxAttempts     int            `json:"max_attempts"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 	StartedAt       *time.Time     `json:"started_at,omitempty"`
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
+	NextRetryAt     *time.Time     `json:"next_retry_at,omitempty"`
+	LastErrorAt     *time.Time     `json:"last_error_at,omitempty"`
 }
 
 type Step struct {

@@ -1,4 +1,4 @@
-.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-audio-worker dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-audio-worker build-studio-cli build-all seed-dev frontend-lint frontend-typecheck frontend-build perf-db-report pprof-cpu pprof-heap ci-backend ci-frontend ci
+.PHONY: help setup build run test lint clean migrate-up migrate-down docker-up docker-down backup restore docker-build security-check infra-up infra-down dev-backend dev-frontend dev-audio-worker dev-agent-worker dev-all dev-setup proto-gen build-stats-svc build-moderation-svc build-notification-svc build-audio-worker build-agent-worker build-studio-cli build-all seed-dev frontend-lint frontend-typecheck frontend-build perf-db-report pprof-cpu pprof-heap ci-backend ci-frontend ci
 
 PPROF_URL ?= http://localhost:8080/debug/pprof
 PPROF_SECONDS ?= 30
@@ -33,6 +33,9 @@ build-notification-svc: ## Build the notification microservice
 build-audio-worker: ## Build the audio worker
 	go build -o bin/audio-worker ./cmd/audio-worker
 
+build-agent-worker: ## Build the agent worker
+	go build -o bin/agent-worker ./cmd/agent-worker
+
 build-studio-cli: ## Build the operational CLI
 	go build -o bin/studio-cli ./cmd/studio-cli
 
@@ -42,6 +45,7 @@ build-all: ## Build all binaries
 	@make build-moderation-svc
 	@make build-notification-svc
 	@make build-audio-worker
+	@make build-agent-worker
 	@make build-studio-cli
 	@echo "✓ All binaries built successfully"
 
@@ -158,6 +162,9 @@ dev-backend: ## Run backend with LOCAL config
 dev-audio-worker: ## Run audio worker with LOCAL config
 	go run ./cmd/audio-worker/main.go -config configs/config.local.yaml
 
+dev-agent-worker: ## Run agent worker with LOCAL config
+	go run ./cmd/agent-worker/main.go -config configs/config.local.yaml
+
 prod-backend: ## Run backend with PRODUCTION config
 	go run ./cmd/server/main.go -config configs/config.prod.yaml
 
@@ -172,6 +179,7 @@ dev-all: ## Setup + start infra + print next steps
 	@echo "✓ Ready. Now run in separate terminals:"
 	@echo "  make dev-backend    # Go API (local config)"
 	@echo "  make dev-audio-worker # Audio worker"
+	@echo "  make dev-agent-worker # Agent worker"
 	@echo "  make dev-frontend   # Next.js"
 	@echo ""
 

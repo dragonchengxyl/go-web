@@ -29,11 +29,13 @@ func (r *AgentRepository) CreateRun(ctx context.Context, item *agentdomain.Run) 
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO agent_runs (
 			id, user_id, title, goal, scenario, status, context_snapshot,
-			latest_summary, last_error, created_at, updated_at, started_at, completed_at
+			latest_summary, last_error, attempt_count, max_attempts,
+			created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
 		)
 		VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11, $12, $13
+			$8, $9, $10, $11,
+			$12, $13, $14, $15, $16, $17
 		)
 	`,
 		item.ID,
@@ -45,10 +47,14 @@ func (r *AgentRepository) CreateRun(ctx context.Context, item *agentdomain.Run) 
 		contextJSON,
 		item.LatestSummary,
 		item.LastError,
+		item.AttemptCount,
+		item.MaxAttempts,
 		item.CreatedAt,
 		item.UpdatedAt,
 		item.StartedAt,
 		item.CompletedAt,
+		item.NextRetryAt,
+		item.LastErrorAt,
 	)
 	return err
 }
@@ -56,7 +62,8 @@ func (r *AgentRepository) CreateRun(ctx context.Context, item *agentdomain.Run) 
 func (r *AgentRepository) GetRunByID(ctx context.Context, id uuid.UUID) (*agentdomain.Run, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, title, goal, scenario, status, context_snapshot,
-		       latest_summary, last_error, created_at, updated_at, started_at, completed_at
+		       latest_summary, last_error, attempt_count, max_attempts,
+		       created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
 		FROM agent_runs
 		WHERE id = $1
 	`, id)
@@ -88,7 +95,8 @@ func (r *AgentRepository) ListRuns(ctx context.Context, userID uuid.UUID, page, 
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, title, goal, scenario, status, context_snapshot,
-		       latest_summary, last_error, created_at, updated_at, started_at, completed_at
+		       latest_summary, last_error, attempt_count, max_attempts,
+		       created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
 		FROM agent_runs
 		WHERE user_id = $1
 		ORDER BY updated_at DESC
@@ -111,18 +119,114 @@ func (r *AgentRepository) ListRuns(ctx context.Context, userID uuid.UUID, page, 
 }
 
 func (r *AgentRepository) TryStartRun(ctx context.Context, id uuid.UUID, startedAt time.Time) (bool, error) {
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE agent_runs
-		SET status = 'running',
-		    updated_at = $2,
-		    started_at = COALESCE(started_at, $2)
-		WHERE id = $1
-		  AND status = 'queued'
-	`, id, startedAt)
+	item, claimed, err := r.ClaimRunForProcessing(ctx, id, startedAt)
 	if err != nil {
 		return false, err
 	}
-	return tag.RowsAffected() > 0, nil
+	return claimed && item != nil, nil
+}
+
+func (r *AgentRepository) ClaimRunForProcessing(ctx context.Context, id uuid.UUID, now time.Time) (*agentdomain.Run, bool, error) {
+	row := r.pool.QueryRow(ctx, `
+		UPDATE agent_runs
+		SET status = 'running',
+		    attempt_count = attempt_count + 1,
+		    updated_at = $2,
+		    started_at = COALESCE(started_at, $2),
+		    completed_at = NULL,
+		    next_retry_at = NULL,
+		    last_error = ''
+		WHERE id = $1
+		  AND status = 'queued'
+		  AND (next_retry_at IS NULL OR next_retry_at <= $2)
+		RETURNING id, user_id, title, goal, scenario, status, context_snapshot,
+		          latest_summary, last_error, attempt_count, max_attempts,
+		          created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
+	`, id, now)
+	item, err := scanAgentRun(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return item, true, nil
+}
+
+func (r *AgentRepository) ListRunnableRunIDs(ctx context.Context, readyBefore time.Time, limit int) ([]uuid.UUID, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id
+		FROM agent_runs
+		WHERE status = 'queued'
+		  AND (next_retry_at IS NULL OR next_retry_at <= $1)
+		ORDER BY created_at ASC
+		LIMIT $2
+	`, readyBefore, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0, limit)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *AgentRepository) UpdateRun(ctx context.Context, item *agentdomain.Run) error {
+	contextJSON, err := marshalAgentJSON(item.ContextSnapshot)
+	if err != nil {
+		return fmt.Errorf("marshal agent run context: %w", err)
+	}
+	result, err := r.pool.Exec(ctx, `
+		UPDATE agent_runs
+		SET title = $2,
+		    goal = $3,
+		    scenario = $4,
+		    status = $5,
+		    context_snapshot = $6,
+		    latest_summary = $7,
+		    last_error = $8,
+		    attempt_count = $9,
+		    max_attempts = $10,
+		    updated_at = $11,
+		    started_at = $12,
+		    completed_at = $13,
+		    next_retry_at = $14,
+		    last_error_at = $15
+		WHERE id = $1
+	`,
+		item.ID,
+		item.Title,
+		item.Goal,
+		item.Scenario,
+		string(item.Status),
+		contextJSON,
+		item.LatestSummary,
+		item.LastError,
+		item.AttemptCount,
+		item.MaxAttempts,
+		item.UpdatedAt,
+		item.StartedAt,
+		item.CompletedAt,
+		item.NextRetryAt,
+		item.LastErrorAt,
+	)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return agentdomain.ErrRunNotFound
+	}
+	return nil
 }
 
 func (r *AgentRepository) UpdateRunStatus(ctx context.Context, id uuid.UUID, status agentdomain.RunStatus, summary, lastError string, completedAt *time.Time) error {
@@ -132,7 +236,9 @@ func (r *AgentRepository) UpdateRunStatus(ctx context.Context, id uuid.UUID, sta
 		    latest_summary = $3,
 		    last_error = $4,
 		    updated_at = $5,
-		    completed_at = $6
+		    completed_at = $6,
+		    next_retry_at = NULL,
+		    last_error_at = CASE WHEN $4 <> '' THEN $5 ELSE NULL END
 		WHERE id = $1
 	`, id, string(status), summary, lastError, time.Now(), completedAt)
 	return err
@@ -400,10 +506,14 @@ func scanAgentRun(row interface{ Scan(dest ...any) error }) (*agentdomain.Run, e
 		&contextJSON,
 		&item.LatestSummary,
 		&item.LastError,
+		&item.AttemptCount,
+		&item.MaxAttempts,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 		&item.StartedAt,
 		&item.CompletedAt,
+		&item.NextRetryAt,
+		&item.LastErrorAt,
 	); err != nil {
 		return nil, err
 	}
