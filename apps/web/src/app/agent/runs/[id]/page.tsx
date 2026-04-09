@@ -1,74 +1,287 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Loader2, Square, X } from "lucide-react";
-import { AgentRunStatus, AgentStepStatus, apiClient } from "@/lib/api-client";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bot,
+  Check,
+  Clock3,
+  Loader2,
+  ShieldCheck,
+  Sparkles,
+  Square,
+  Workflow,
+  X,
+} from "lucide-react";
+import {
+  AgentApproval,
+  AgentArtifact,
+  AgentRun,
+  AgentRunEvent,
+  AgentStep,
+  AgentToolCall,
+  apiClient,
+} from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AgentContextChips,
+  AgentEmptyState,
+  AgentMetricCard,
+  AgentProgressBar,
+  AgentScenarioBadge,
+  AgentSectionHeader,
+  AgentStatusBadge,
+  AgentStepStatusBadge,
+  AgentSurface,
+  calculateRunProgress,
+  formatAgentDateTime,
+  formatAgentDuration,
+  formatAgentElapsed,
+  getRunStatusNarrative,
+} from "@/components/agent/agent-ui";
 import { writeStoredPostDraft } from "@/lib/post-draft";
+import { cn } from "@/lib/utils";
 
-const STATUS_LABELS: Record<AgentRunStatus, string> = {
-  queued: "排队中",
-  running: "运行中",
-  waiting_approval: "待审批",
-  completed: "已完成",
-  failed: "失败",
-  cancelled: "已取消",
-};
+function buildReplayHref(run: AgentRun) {
+  const params = new URLSearchParams();
+  params.set("scenario", run.scenario);
+  params.set("title", run.title);
+  params.set("goal", run.goal);
 
-const STEP_STATUS_LABELS: Record<AgentStepStatus, string> = {
-  pending: "待处理",
-  running: "运行中",
-  completed: "已完成",
-  failed: "失败",
-  skipped: "已跳过",
-};
+  Object.entries(run.context_snapshot || {}).forEach(([key, value]) => {
+    if (value == null) return;
+    params.set(key, String(value));
+  });
 
-function formatDateTime(value?: string) {
-  if (!value) return "-";
-  return new Date(value).toLocaleString("zh-CN");
+  return `/agent?${params.toString()}`;
 }
 
-function formatDuration(startedAt?: string, completedAt?: string) {
-  if (!startedAt || !completedAt) return "-";
-  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return "-";
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60_000).toFixed(1)}m`;
-}
-
-function StepStatusBadge({ status }: { status: AgentStepStatus }) {
+function StreamBadge({ mode }: { mode: "connecting" | "live" | "fallback" }) {
   const className =
-    status === "completed"
-      ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-      : status === "failed"
-        ? "border-rose-200 bg-rose-100 text-rose-700"
-        : status === "running"
-          ? "border-cyan-200 bg-cyan-100 text-cyan-700"
-          : status === "skipped"
-            ? "border-slate-200 bg-slate-100 text-slate-600"
-            : "border-amber-200 bg-amber-100 text-amber-700";
-  return <Badge className={className}>{STEP_STATUS_LABELS[status]}</Badge>;
+    mode === "live"
+      ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+      : mode === "fallback"
+        ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+        : "border-cyan-300/30 bg-cyan-300/10 text-cyan-100";
+
+  const label =
+    mode === "live"
+      ? "实时流已接通"
+      : mode === "fallback"
+        ? "轮询兜底"
+        : "连接实时流";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+        className,
+      )}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full bg-current", mode !== "fallback" ? "animate-pulse" : "")} />
+      {label}
+    </span>
+  );
 }
 
-function RunStatusBadge({ status }: { status: AgentRunStatus }) {
-  const className =
-    status === "completed"
-      ? "border-emerald-200 bg-emerald-100 text-emerald-700"
-      : status === "failed"
-        ? "border-rose-200 bg-rose-100 text-rose-700"
-        : status === "cancelled"
-          ? "border-slate-200 bg-slate-100 text-slate-700"
-          : status === "waiting_approval"
-            ? "border-amber-200 bg-amber-100 text-amber-700"
-            : "border-cyan-200 bg-cyan-100 text-cyan-700";
-  return <Badge className={className}>{STATUS_LABELS[status]}</Badge>;
+function TimelineStepCard({ step }: { step: AgentStep }) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/62">
+              Step {step.step_index}
+            </span>
+            <p className="text-sm font-semibold text-white">{step.title}</p>
+          </div>
+          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
+            {step.kind}
+          </p>
+        </div>
+        <AgentStepStatusBadge status={step.status} />
+      </div>
+
+      {step.summary ? (
+        <p className="mt-4 text-sm leading-6 text-white/64">{step.summary}</p>
+      ) : null}
+      {step.error_text ? (
+        <div className="mt-4 rounded-[18px] border border-rose-300/20 bg-rose-300/8 px-3 py-3 text-sm leading-6 text-rose-100">
+          {step.error_text}
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-white/40">
+        <span>开始 {formatAgentDateTime(step.started_at || step.created_at)}</span>
+        <span>结束 {formatAgentDateTime(step.completed_at)}</span>
+        <span>耗时 {formatAgentDuration(step.started_at || step.created_at, step.completed_at)}</span>
+      </div>
+    </div>
+  );
+}
+
+function ToolTraceCard({ toolCall }: { toolCall: AgentToolCall }) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">{toolCall.tool_name}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
+              {toolCall.access_level}
+            </span>
+          </div>
+        </div>
+        <AgentStepStatusBadge status={toolCall.status} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-white/40">
+        <span>开始 {formatAgentDateTime(toolCall.started_at || toolCall.created_at)}</span>
+        <span>结束 {formatAgentDateTime(toolCall.completed_at)}</span>
+        <span>
+          耗时 {formatAgentDuration(toolCall.started_at || toolCall.created_at, toolCall.completed_at)}
+        </span>
+      </div>
+
+      {toolCall.error_text ? (
+        <div className="mt-4 rounded-[18px] border border-rose-300/20 bg-rose-300/8 px-3 py-3 text-sm leading-6 text-rose-100">
+          {toolCall.error_text}
+        </div>
+      ) : null}
+
+      {toolCall.output_data ? (
+        <details className="mt-4 overflow-hidden rounded-[18px] border border-white/10 bg-slate-950/40">
+          <summary className="cursor-pointer list-none px-3 py-3 text-sm font-medium text-white/78">
+            查看工具输出
+          </summary>
+          <pre className="overflow-x-auto border-t border-white/10 px-3 py-3 text-xs leading-6 text-white/62">
+            {JSON.stringify(toolCall.output_data, null, 2)}
+          </pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function ArtifactCard({
+  artifact,
+  compact = false,
+}: {
+  artifact: AgentArtifact;
+  compact?: boolean;
+}) {
+  const content = artifact.content?.trim();
+  const preview = compact && content && content.length > 280
+    ? `${content.slice(0, 280).trim()}...`
+    : content;
+
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">{artifact.title}</p>
+          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
+            {artifact.kind}
+          </p>
+        </div>
+        <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/58">
+          Artifact
+        </span>
+      </div>
+
+      {preview ? (
+        <div className="mt-4 whitespace-pre-wrap text-sm leading-6 text-white/68">
+          {preview}
+        </div>
+      ) : null}
+
+      {!preview && artifact.kind === "draft_patch" ? (
+        <p className="mt-4 text-sm leading-6 text-white/58">
+          这份结果用于审批通过后的自动回填，前端不直接展开内部补丁结构。
+        </p>
+      ) : null}
+
+      {!preview && artifact.structured_data ? (
+        <details className="mt-4 overflow-hidden rounded-[18px] border border-white/10 bg-slate-950/40">
+          <summary className="cursor-pointer list-none px-3 py-3 text-sm font-medium text-white/78">
+            查看结构化数据
+          </summary>
+          <pre className="overflow-x-auto border-t border-white/10 px-3 py-3 text-xs leading-6 text-white/62">
+            {JSON.stringify(artifact.structured_data, null, 2)}
+          </pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function ApprovalCard({
+  approval,
+  onApprove,
+  onReject,
+  isPending,
+}: {
+  approval: AgentApproval;
+  onApprove: (approvalId: string) => void;
+  onReject: (approvalId: string) => void;
+  isPending: boolean;
+}) {
+  const isActionable = approval.status === "pending";
+
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
+          {approval.action_type}
+        </span>
+        <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
+          {approval.status}
+        </span>
+      </div>
+      <p className="mt-4 text-sm font-semibold text-white">{approval.title}</p>
+      <p className="mt-2 text-sm leading-6 text-white/58">
+        {approval.status === "pending"
+          ? "这一步需要你做最终决定。批准后如果存在回填 payload，会自动带回对应页面。"
+          : approval.status === "approved"
+            ? "这一轮审批已经通过，相关回填动作已经完成。"
+            : "你保留了这轮结果，但不会自动执行回填。"}
+      </p>
+
+      {isActionable ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            onClick={() => onApprove(approval.id)}
+            disabled={isPending}
+            className="rounded-full bg-white text-slate-950 hover:bg-white/90"
+          >
+            {isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="mr-2 h-4 w-4" />
+            )}
+            批准并继续
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onReject(approval.id)}
+            disabled={isPending}
+            className="rounded-full border-white/16 bg-white/6 text-white hover:bg-white/10 hover:text-white"
+          >
+            <X className="mr-2 h-4 w-4" />
+            暂不执行
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function AgentRunDetailPage() {
@@ -76,13 +289,15 @@ export default function AgentRunDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isLoggedIn } = useAuth();
+  const [streamMode, setStreamMode] = useState<"connecting" | "live" | "fallback">("connecting");
+  const [liveEvent, setLiveEvent] = useState<AgentRunEvent | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["agent-run", params.id],
     queryFn: () => apiClient.getAgentRun(params.id),
     enabled: isLoggedIn && !!params.id,
     refetchInterval: (query) => {
-      const status = (query.state.data as { run?: { status?: AgentRunStatus } } | undefined)?.run?.status;
+      const status = (query.state.data as { run?: AgentRun } | undefined)?.run?.status;
       return status === "queued" || status === "running" ? 1200 : false;
     },
   });
@@ -106,6 +321,7 @@ export default function AgentRunDetailPage() {
     onSuccess: (result, variables) => {
       queryClient.setQueryData(["agent-run", params.id], result.detail);
       queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
+
       if (variables.decision === "approved" && result.apply_payload) {
         writeStoredPostDraft({
           title: String(result.apply_payload.title || ""),
@@ -123,301 +339,520 @@ export default function AgentRunDetailPage() {
   useEffect(() => {
     if (!isLoggedIn || !params.id) return;
     const controller = new AbortController();
+    setStreamMode("connecting");
 
     void apiClient
       .streamAgentRun(params.id, {
         signal: controller.signal,
         onSnapshot: (detail) => {
+          setStreamMode("live");
           queryClient.setQueryData(["agent-run", params.id], detail);
           queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
+        },
+        onUpdate: (event) => {
+          setStreamMode("live");
+          setLiveEvent(event);
         },
         onDone: () => {
           queryClient.invalidateQueries({ queryKey: ["agent-runs"] });
         },
+        onError: () => {
+          setStreamMode("fallback");
+        },
       })
       .catch(() => {
-        // keep query-based refresh as fallback
+        setStreamMode("fallback");
       });
 
     return () => controller.abort();
   }, [isLoggedIn, params.id, queryClient]);
 
+  const run = data?.run;
+  const steps = data?.steps || [];
+  const toolCalls = data?.tool_calls || [];
+  const approvals = data?.approvals || [];
+  const artifacts = data?.artifacts || [];
+  const pendingApproval = approvals.find((approval) => approval.status === "pending");
+  const progress = run ? calculateRunProgress(run.status, steps) : 0;
+  const activeStep = steps.find((step) => step.status === "running");
+  const replayHref = run ? buildReplayHref(run) : "/agent";
+
+  const artifactPreview = artifacts.slice(0, 2);
+  const canCancel = Boolean(
+    run && run.status !== "completed" && run.status !== "failed" && run.status !== "cancelled",
+  );
+
   if (!isLoggedIn) {
     return (
-      <div className="mx-auto max-w-3xl px-4 pt-24 pb-12">
-        <p className="text-sm text-slate-500">请先登录后再查看 Agent 运行详情。</p>
+      <div className="agent-page-shell relative min-h-screen overflow-hidden">
+        <div className="agent-page-grid pointer-events-none absolute inset-0" />
+        <div className="mx-auto max-w-5xl px-4 pb-16 pt-24">
+          <AgentSurface className="px-6 py-8 sm:px-8">
+            <p className="text-sm text-white/62">请先登录后再查看 Agent 任务详情。</p>
+          </AgentSurface>
+        </div>
       </div>
     );
   }
 
-  const contextSummary = data?.run?.context_snapshot
-    ? [
-        data.run.context_snapshot["group_name"] ? `目标圈子：${String(data.run.context_snapshot["group_name"])}` : "",
-        data.run.context_snapshot["source_path"] ? `来源：${String(data.run.context_snapshot["source_path"])}` : "",
-        data.run.context_snapshot["draft_title"] ? "已带标题草稿" : "",
-        data.run.context_snapshot["draft_content"] ? "已带正文草稿" : "",
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
-
   return (
-    <div className="mx-auto max-w-5xl px-4 pt-24 pb-12">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <Button asChild variant="outline">
-          <Link href="/agent">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            返回工作台
-          </Link>
-        </Button>
-        {data?.run && data.run.status !== "completed" && data.run.status !== "failed" && data.run.status !== "cancelled" ? (
-          <Button
-            variant="outline"
-            onClick={() => cancelMutation.mutate()}
-            disabled={cancelMutation.isPending}
-          >
-            {cancelMutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Square className="mr-2 h-4 w-4" />
-            )}
-            取消任务
-          </Button>
-        ) : null}
-      </div>
+    <div className="agent-page-shell relative min-h-screen overflow-hidden">
+      <div className="agent-page-grid pointer-events-none absolute inset-0" />
+      <div className="pointer-events-none absolute left-[-8rem] top-28 h-72 w-72 rounded-full bg-cyan-400/18 blur-3xl" />
+      <div className="pointer-events-none absolute right-[-6rem] top-24 h-80 w-80 rounded-full bg-orange-400/14 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/2 h-96 w-[38rem] -translate-x-1/2 rounded-full bg-sky-500/10 blur-3xl" />
 
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          正在读取运行详情
-        </div>
-      ) : null}
+      <div className="mx-auto max-w-7xl px-4 pb-16 pt-24">
+        <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+          <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Button
+                asChild
+                variant="outline"
+                className="rounded-full border-white/16 bg-white/6 text-white hover:bg-white/10 hover:text-white"
+              >
+                <Link href="/agent">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  返回 Agent Studio
+                </Link>
+              </Button>
 
-      {error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">
-          {error instanceof Error ? error.message : "读取运行详情失败"}
-        </div>
-      ) : null}
-
-      {data?.run ? (
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle className="text-slate-950">{data.run.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                <RunStatusBadge status={data.run.status} />
-                <span>场景：{data.run.scenario}</span>
-                <span>尝试：{data.run.attempt_count}/{data.run.max_attempts}</span>
-                <span>更新时间：{formatDateTime(data.run.updated_at)}</span>
-              </div>
-              {(data.run.status === "queued" || data.run.status === "running") ? (
-                <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
-                  Agent 正在由独立 worker 在后台执行，这个页面会自动刷新运行状态。
-                </div>
+              {run ? (
+                <Button
+                  asChild
+                  variant="outline"
+                  className="rounded-full border-white/16 bg-white/6 text-white hover:bg-white/10 hover:text-white"
+                >
+                  <Link href={replayHref}>
+                    基于本次再开一轮
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
               ) : null}
-              <div>
-                <p className="text-sm font-medium text-slate-900">任务目标</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-600">
-                  {data.run.goal}
+            </div>
+
+            {isLoading ? (
+              <div className="mt-8 flex items-center gap-2 text-sm text-white/60">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                正在载入任务详情
+              </div>
+            ) : null}
+
+            {error ? (
+              <div className="mt-8 rounded-[24px] border border-rose-300/20 bg-rose-300/8 px-4 py-4 text-sm text-rose-100">
+                {error instanceof Error ? error.message : "读取任务详情失败"}
+              </div>
+            ) : null}
+
+            {run ? (
+              <>
+                <div className="mt-8 flex flex-wrap items-center gap-2">
+                  <AgentStatusBadge status={run.status} pulse />
+                  <AgentScenarioBadge scenario={run.scenario} />
+                  <StreamBadge mode={streamMode} />
+                </div>
+
+                <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white sm:text-[2.9rem]">
+                  {run.title}
+                </h1>
+                <p className="mt-5 max-w-3xl whitespace-pre-wrap text-base leading-8 text-white/68">
+                  {run.goal}
                 </p>
-              </div>
-              {data.run.latest_summary ? (
-                <div>
-                  <p className="text-sm font-medium text-slate-900">当前摘要</p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">{data.run.latest_summary}</p>
+
+                <div className="mt-6 flex flex-wrap gap-3 text-xs text-white/44">
+                  <span>Run ID {run.id}</span>
+                  <span>创建于 {formatAgentDateTime(run.created_at)}</span>
+                  <span>最近更新 {formatAgentDateTime(run.updated_at)}</span>
+                  <span>尝试 {run.attempt_count}/{run.max_attempts}</span>
                 </div>
-              ) : null}
-              {data.run.last_error ? (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
-                  <p className="text-sm font-medium text-rose-700">最近一次错误</p>
-                  <p className="mt-2 text-sm leading-6 text-rose-600">{data.run.last_error}</p>
-                  <p className="mt-2 text-xs text-slate-400">
-                    错误时间：{formatDateTime(data.run.last_error_at)}
-                    {data.run.next_retry_at ? ` · 下次重试：${formatDateTime(data.run.next_retry_at)}` : ""}
+
+                <div className="mt-6 rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-white">Mission Progress</p>
+                    <span className="text-sm text-white/62">{progress}%</span>
+                  </div>
+                  <AgentProgressBar value={progress} className="mt-3" />
+                  <p className="mt-3 text-sm leading-6 text-white/58">{getRunStatusNarrative(run.status)}</p>
+                  {activeStep ? (
+                    <p className="mt-2 text-sm text-cyan-100">
+                      当前步骤：{activeStep.title}
+                    </p>
+                  ) : liveEvent?.summary ? (
+                    <p className="mt-2 text-sm text-cyan-100">{liveEvent.summary}</p>
+                  ) : null}
+                </div>
+
+                {run.latest_summary ? (
+                  <div className="mt-6 rounded-[24px] border border-cyan-300/18 bg-cyan-300/8 px-4 py-4">
+                    <p className="text-sm font-semibold text-white">最新摘要</p>
+                    <p className="mt-3 text-sm leading-7 text-white/68">{run.latest_summary}</p>
+                  </div>
+                ) : null}
+
+                {run.last_error ? (
+                  <div className="mt-6 rounded-[24px] border border-rose-300/20 bg-rose-300/8 px-4 py-4">
+                    <p className="text-sm font-semibold text-rose-100">最近一次错误</p>
+                    <p className="mt-3 text-sm leading-7 text-rose-50/90">{run.last_error}</p>
+                    <p className="mt-3 text-xs text-white/40">
+                      错误时间 {formatAgentDateTime(run.last_error_at)}
+                      {run.next_retry_at ? ` · 下次重试 ${formatAgentDateTime(run.next_retry_at)}` : ""}
+                    </p>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+          </AgentSurface>
+
+          <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
+            <AgentSectionHeader
+              eyebrow="Telemetry"
+              title="任务遥测"
+              description="把用户最关心的运行状态、连接状态和下一步动作集中到一列，而不是散在四个面板里。"
+            />
+
+            {run ? (
+              <>
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <AgentMetricCard
+                    icon={Clock3}
+                    label="已运行"
+                    value={formatAgentElapsed(run.started_at || run.created_at, run.completed_at)}
+                    meta="从任务开始到现在或结束。"
+                    tone="cyan"
+                  />
+                  <AgentMetricCard
+                    icon={Workflow}
+                    label="步骤数"
+                    value={steps.length}
+                    meta="包含已完成、运行中和失败步骤。"
+                    tone="amber"
+                  />
+                  <AgentMetricCard
+                    icon={Bot}
+                    label="工具轨迹"
+                    value={toolCalls.length}
+                    meta="系统为本轮任务记录的工具调用。"
+                    tone="slate"
+                  />
+                  <AgentMetricCard
+                    icon={Sparkles}
+                    label="产物数"
+                    value={artifacts.length}
+                    meta="文本结果、补丁或其他结构化输出。"
+                    tone="emerald"
+                  />
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                  <p className="text-sm font-semibold text-white">实时信号</p>
+                  <p className="mt-3 text-sm leading-6 text-white/58">
+                    {streamMode === "live"
+                      ? "当前已接通实时流，页面会优先接受服务器推送。"
+                      : streamMode === "fallback"
+                        ? "实时流不可用，当前依赖轮询自动刷新。"
+                        : "正在尝试接通实时流。"}
                   </p>
+                  {liveEvent?.summary ? (
+                    <div className="mt-4 rounded-[18px] border border-white/10 bg-slate-950/40 px-3 py-3 text-sm text-white/70">
+                      {liveEvent.summary}
+                    </div>
+                  ) : null}
+                  {cancelMutation.error ? (
+                    <p className="mt-4 text-sm text-rose-100">
+                      {cancelMutation.error instanceof Error
+                        ? cancelMutation.error.message
+                        : "取消任务失败"}
+                    </p>
+                  ) : null}
                 </div>
-              ) : null}
-              {contextSummary ? (
-                <div>
-                  <p className="text-sm font-medium text-slate-900">关联上下文</p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">{contextSummary}</p>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  {canCancel ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => cancelMutation.mutate()}
+                      disabled={cancelMutation.isPending}
+                      className="rounded-full border-white/16 bg-white/6 text-white hover:bg-white/10 hover:text-white"
+                    >
+                      {cancelMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Square className="mr-2 h-4 w-4" />
+                      )}
+                      取消本轮任务
+                    </Button>
+                  ) : null}
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="rounded-full border-white/16 bg-white/6 text-white hover:bg-white/10 hover:text-white"
+                  >
+                    <Link href={replayHref}>把当前配置带回启动页</Link>
+                  </Button>
                 </div>
-              ) : null}
-            </CardContent>
-          </Card>
+              </>
+            ) : null}
+          </AgentSurface>
+        </div>
+
+        <div className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <div>
+            <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
+              <Tabs defaultValue="overview">
+                <TabsList className="h-auto w-full justify-start gap-2 rounded-full bg-white/6 p-1">
+                  <TabsTrigger
+                    value="overview"
+                    className="rounded-full px-4 py-2 text-xs text-white/68 data-[state=active]:bg-white data-[state=active]:text-slate-950"
+                  >
+                    任务概览
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="operations"
+                    className="rounded-full px-4 py-2 text-xs text-white/68 data-[state=active]:bg-white data-[state=active]:text-slate-950"
+                  >
+                    执行过程
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="results"
+                    className="rounded-full px-4 py-2 text-xs text-white/68 data-[state=active]:bg-white data-[state=active]:text-slate-950"
+                  >
+                    交付结果
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="mt-6 space-y-6">
+                  <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                    <p className="text-sm font-semibold text-white">Mission Brief</p>
+                    <p className="mt-3 text-sm leading-7 text-white/66">
+                      {run?.goal || "—"}
+                    </p>
+                  </div>
+
+                  {artifactPreview.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-white">结果预览</p>
+                        <span className="text-xs text-white/42">Top {artifactPreview.length}</span>
+                      </div>
+                      {artifactPreview.map((artifact) => (
+                        <ArtifactCard key={artifact.id} artifact={artifact} compact />
+                      ))}
+                    </div>
+                  ) : (
+                    <AgentEmptyState
+                      icon={Sparkles}
+                      title="结果还在路上"
+                      description="结构化产物生成后会先出现在这里，完整版会归档到结果页签。"
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="operations" className="mt-6 space-y-6">
+                  <div>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-white">步骤时间线</p>
+                      <span className="text-xs text-white/42">{steps.length} steps</span>
+                    </div>
+                    {steps.length ? (
+                      <div className="space-y-4">
+                        {steps.map((step) => (
+                          <TimelineStepCard key={step.id} step={step} />
+                        ))}
+                      </div>
+                    ) : (
+                      <AgentEmptyState
+                        icon={Workflow}
+                        title="还没有步骤记录"
+                        description="任务一旦真正被 worker 接手，时间线会从这里开始向前推进。"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-white">工具轨迹</p>
+                      <span className="text-xs text-white/42">{toolCalls.length} calls</span>
+                    </div>
+                    {toolCalls.length ? (
+                      <div className="space-y-4">
+                        {toolCalls.map((toolCall) => (
+                          <ToolTraceCard key={toolCall.id} toolCall={toolCall} />
+                        ))}
+                      </div>
+                    ) : (
+                      <AgentEmptyState
+                        icon={Bot}
+                        title="还没有工具调用"
+                        description="如果这一轮任务需要读取外部信息或生成中间产物，工具轨迹会记录在这里。"
+                      />
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="results" className="mt-6 space-y-6">
+                  <div>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-white">结构化产物</p>
+                      <span className="text-xs text-white/42">{artifacts.length} items</span>
+                    </div>
+                    {artifacts.length ? (
+                      <div className="space-y-4">
+                        {artifacts.map((artifact) => (
+                          <ArtifactCard key={artifact.id} artifact={artifact} />
+                        ))}
+                      </div>
+                    ) : (
+                      <AgentEmptyState
+                        icon={Sparkles}
+                        title="还没有产物"
+                        description="Agent 生成可交付内容后，结果会集中出现在这里。"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-white">审批记录</p>
+                      <span className="text-xs text-white/42">{approvals.length} decisions</span>
+                    </div>
+                    {approvals.length ? (
+                      <div className="space-y-4">
+                        {approvals.map((approval) => (
+                          <ApprovalCard
+                            key={approval.id}
+                            approval={approval}
+                            isPending={approvalMutation.isPending}
+                            onApprove={(approvalId) =>
+                              approvalMutation.mutate({ approvalId, decision: "approved" })
+                            }
+                            onReject={(approvalId) =>
+                              approvalMutation.mutate({ approvalId, decision: "rejected" })
+                            }
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <AgentEmptyState
+                        icon={ShieldCheck}
+                        title="暂时没有审批节点"
+                        description="如果这轮任务涉及回填或外部动作，系统会在这里等待你拍板。"
+                      />
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </AgentSurface>
+          </div>
 
           <div className="space-y-6">
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-slate-950">执行时间线</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!(data.steps?.length) ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                    还没有步骤记录。
-                  </div>
-                ) : null}
-                {(data.steps || []).map((step) => (
-                  <div key={step.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {step.step_index}. {step.title}
-                        </p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                          {step.kind}
-                        </p>
-                      </div>
-                      <StepStatusBadge status={step.status} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-                      <span>开始：{formatDateTime(step.started_at || step.created_at)}</span>
-                      <span>结束：{formatDateTime(step.completed_at)}</span>
-                      <span>耗时：{formatDuration(step.started_at || step.created_at, step.completed_at)}</span>
-                    </div>
-                    {step.summary ? (
-                      <p className="mt-3 text-sm leading-6 text-slate-600">{step.summary}</p>
-                    ) : null}
-                    {step.error_text ? (
-                      <p className="mt-3 text-sm leading-6 text-rose-600">{step.error_text}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
+              <AgentSectionHeader
+                eyebrow="Decision Gate"
+                title="下一步动作"
+                description="把需要用户做决定的节点固定到侧边栏，用户不需要在长页面里找审批按钮。"
+              />
 
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-slate-950">工具轨迹</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!(data.tool_calls?.length) ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                    当前还没有工具调用记录。
-                  </div>
-                ) : null}
-                {(data.tool_calls || []).map((toolCall) => (
-                  <div key={toolCall.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{toolCall.tool_name}</p>
-                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                          {toolCall.access_level}
-                        </p>
-                      </div>
-                      <StepStatusBadge status={toolCall.status} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-                      <span>开始：{formatDateTime(toolCall.started_at || toolCall.created_at)}</span>
-                      <span>结束：{formatDateTime(toolCall.completed_at)}</span>
-                      <span>耗时：{formatDuration(toolCall.started_at || toolCall.created_at, toolCall.completed_at)}</span>
-                    </div>
-                    {toolCall.output_data ? (
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs leading-6 text-slate-600">
-                        <pre className="whitespace-pre-wrap break-all">{JSON.stringify(toolCall.output_data, null, 2)}</pre>
-                      </div>
-                    ) : null}
-                    {toolCall.error_text ? (
-                      <p className="mt-3 text-sm leading-6 text-rose-600">{toolCall.error_text}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-slate-950">下一步动作</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!(data.approvals?.length) ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                    当前没有待处理动作。
-                  </div>
-                ) : null}
-                {(data.approvals || []).map((approval) => (
-                  <div key={approval.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{approval.title}</p>
-                        <p className="mt-1 text-sm leading-6 text-slate-500">
-                          {approval.status === "pending"
-                            ? "你可以选择是否把这轮 Agent 结果带回草稿页面。"
-                            : approval.status === "approved"
-                              ? "这次结果已经被批准回填。"
-                              : "这次结果已保留，但不会自动回填。"}
-                        </p>
-                      </div>
-                    </div>
-                    {approval.status === "pending" ? (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            approvalMutation.mutate({ approvalId: approval.id, decision: "approved" })
-                          }
-                          disabled={approvalMutation.isPending}
-                          className="bg-slate-950 text-white hover:bg-slate-800"
-                        >
-                          {approvalMutation.isPending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Check className="mr-2 h-4 w-4" />
-                          )}
-                          批准并回填草稿
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            approvalMutation.mutate({ approvalId: approval.id, decision: "rejected" })
-                          }
-                          disabled={approvalMutation.isPending}
-                        >
-                          <X className="mr-2 h-4 w-4" />
-                          暂不回填
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="text-slate-950">结构化产物</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {!(data.artifacts?.length) ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                    当前还没有生成产物。
-                  </div>
-                ) : null}
-                {(data.artifacts || []).map((artifact) => (
-                  <div key={artifact.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <p className="text-sm font-semibold text-slate-900">{artifact.title}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
-                      {artifact.kind}
+              <div className="mt-6">
+                {pendingApproval ? (
+                  <ApprovalCard
+                    approval={pendingApproval}
+                    isPending={approvalMutation.isPending}
+                    onApprove={(approvalId) =>
+                      approvalMutation.mutate({ approvalId, decision: "approved" })
+                    }
+                    onReject={(approvalId) =>
+                      approvalMutation.mutate({ approvalId, decision: "rejected" })
+                    }
+                  />
+                ) : approvals.length ? (
+                  <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                    <p className="text-sm font-semibold text-white">当前没有待处理审批</p>
+                    <p className="mt-2 text-sm leading-6 text-white/56">
+                      最近一次审批已经处理完成。你可以继续查看执行记录，或基于本次配置重新发起一轮任务。
                     </p>
-                    {artifact.content ? (
-                      <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                        {artifact.content}
-                      </div>
-                    ) : artifact.kind === "draft_patch" ? (
-                      <p className="mt-3 text-sm leading-6 text-slate-500">
-                        这份结果用于批准后回填草稿，内部补丁结构不会直接展示在前端。
-                      </p>
-                    ) : null}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                ) : (
+                  <AgentEmptyState
+                    icon={ShieldCheck}
+                    title="暂时没有需要你拍板的动作"
+                    description="当 Agent 需要用户确认结果是否回填时，这里会优先出现决策卡。"
+                  />
+                )}
+
+                {approvalMutation.error ? (
+                  <p className="mt-4 text-sm text-rose-100">
+                    {approvalMutation.error instanceof Error
+                      ? approvalMutation.error.message
+                      : "处理审批失败"}
+                  </p>
+                ) : null}
+              </div>
+            </AgentSurface>
+
+            <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
+              <AgentSectionHeader
+                eyebrow="Context Pack"
+                title="关联上下文"
+                description="把任务为什么会这样执行说清楚，用户才能建立信任。"
+              />
+
+              <div className="mt-6 rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                {run?.context_snapshot ? (
+                  <>
+                    <p className="text-sm text-white/60">
+                      这轮任务会读取以下上下文线索：
+                    </p>
+                    <AgentContextChips snapshot={run.context_snapshot} className="mt-4" />
+                  </>
+                ) : (
+                  <p className="text-sm leading-6 text-white/56">
+                    本轮任务没有额外挂载上下文，主要依据你手动输入的目标推进。
+                  </p>
+                )}
+              </div>
+            </AgentSurface>
+
+            <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
+              <AgentSectionHeader
+                eyebrow="Operator Notes"
+                title="当前任务值得注意的点"
+                description="让用户在一眼之内知道这轮任务最重要的状态，而不是自己读原始日志。"
+              />
+
+              <div className="mt-6 grid gap-3">
+                <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                  <p className="text-sm font-semibold text-white">状态解读</p>
+                  <p className="mt-2 text-sm leading-6 text-white/56">
+                    {run ? getRunStatusNarrative(run.status) : "—"}
+                  </p>
+                </div>
+                <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                  <p className="text-sm font-semibold text-white">当前推进</p>
+                  <p className="mt-2 text-sm leading-6 text-white/56">
+                    {activeStep
+                      ? `正在执行「${activeStep.title}」。`
+                      : pendingApproval
+                        ? "核心产物已准备好，当前等待你决定是否执行下一步动作。"
+                        : run?.status === "completed"
+                          ? "本轮任务已经结束，可以查看结果或基于它继续发起下一轮。"
+                          : "当前没有正在运行的步骤。"}
+                  </p>
+                </div>
+                <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                  <p className="text-sm font-semibold text-white">用户动作建议</p>
+                  <p className="mt-2 text-sm leading-6 text-white/56">
+                    {pendingApproval
+                      ? "先审阅结果，再决定是否让系统回填。"
+                      : run?.status === "failed"
+                        ? "先查看失败原因，再基于本次配置重新发起一轮。"
+                        : "当前可以继续观察执行，或返回工作台启动新的任务。"}
+                  </p>
+                </div>
+              </div>
+            </AgentSurface>
           </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
