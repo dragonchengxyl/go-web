@@ -85,6 +85,31 @@ func newAgentToolRegistry(s *AgentService) *agentToolRegistry {
 	})
 
 	registry.register(agentToolDefinition{
+		Name:        "generate_group_copilot_artifacts",
+		AccessLevel: agentdomain.ToolAccessReadOnly,
+		Execute: func(ctx context.Context, state *agentToolState) (*agentToolExecutionResult, error) {
+			if state == nil || state.Run == nil {
+				return nil, fmt.Errorf("agent tool state is not ready")
+			}
+			if state.PageContext == nil {
+				pageContext, summary := buildAgentGroupPageContext(state.Run.ContextSnapshot)
+				state.PageContext = pageContext
+				state.ContextSummary = summary
+			}
+			assistantHelper := &AssistantService{}
+			insights := assistantHelper.buildGroupDetailInsights(state.Run.Goal, state.PageContext)
+			state.Insights = insights
+			return &agentToolExecutionResult{
+				Summary: "已生成圈子建议草稿。",
+				OutputData: map[string]any{
+					"insight_count": len(insights),
+					"insight_kinds": collectInsightKinds(insights),
+				},
+			}, nil
+		},
+	})
+
+	registry.register(agentToolDefinition{
 		Name:        "build_post_draft_patch",
 		AccessLevel: agentdomain.ToolAccessReadOnly,
 		Execute: func(_ context.Context, state *agentToolState) (*agentToolExecutionResult, error) {
@@ -100,6 +125,25 @@ func newAgentToolRegistry(s *AgentService) *agentToolRegistry {
 			state.DraftPatch = patch
 			return &agentToolExecutionResult{
 				Summary: "已生成可回填的草稿补丁。",
+				OutputData: map[string]any{
+					"patch_keys": sortedMapKeys(patch),
+					"has_patch":  len(patch) > 0,
+				},
+			}, nil
+		},
+	})
+
+	registry.register(agentToolDefinition{
+		Name:        "build_group_reply_patch",
+		AccessLevel: agentdomain.ToolAccessReadOnly,
+		Execute: func(_ context.Context, state *agentToolState) (*agentToolExecutionResult, error) {
+			if state == nil || state.Run == nil {
+				return nil, fmt.Errorf("agent tool state is not ready")
+			}
+			patch := buildGroupReplyPatch(state.PageContext, state.Insights)
+			state.DraftPatch = patch
+			return &agentToolExecutionResult{
+				Summary: "已生成圈子建议补丁。",
 				OutputData: map[string]any{
 					"patch_keys": sortedMapKeys(patch),
 					"has_patch":  len(patch) > 0,

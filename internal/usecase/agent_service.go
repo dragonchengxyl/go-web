@@ -410,6 +410,8 @@ func (s *AgentService) executeRun(ctx context.Context, run *agentdomain.Run) err
 	switch run.Scenario {
 	case "", agentdomain.ScenarioPostAgent:
 		return s.executePostAgent(ctx, run)
+	case agentdomain.ScenarioGroupAgent:
+		return s.executeGroupAgent(ctx, run)
 	default:
 		return fmt.Errorf("unsupported agent scenario: %s", run.Scenario)
 	}
@@ -898,6 +900,326 @@ func formatAgentExecutionPlan(plan agentExecutionPlan) string {
 	return strings.Join(lines, "\n")
 }
 
+func (s *AgentService) executeGroupAgent(ctx context.Context, run *agentdomain.Run) error {
+	if stopped, err := s.runStopped(ctx, run.ID); err != nil {
+		return err
+	} else if stopped {
+		return nil
+	}
+
+	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusRunning, "正在分析圈子信息与当前目标。", "", nil); err != nil {
+		return err
+	}
+	s.publishRunEvent(run.ID, "running", "正在分析圈子信息与当前目标。")
+
+	state := &agentToolState{Run: run}
+	pageContext, contextSummary := buildAgentGroupPageContext(run.ContextSnapshot)
+	state.PageContext = pageContext
+	state.ContextSummary = contextSummary
+	plan := buildGroupAgentExecutionPlan(run, contextSummary)
+	planData := plan.toMap()
+
+	planStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
+		return err
+	}
+	planTime := time.Now()
+	planStep := &agentdomain.Step{
+		ID:          uuid.New(),
+		RunID:       run.ID,
+		StepIndex:   planStepIndex,
+		Kind:        "plan",
+		Title:       "生成执行计划",
+		Status:      agentdomain.StepStatusCompleted,
+		Summary:     "已经生成本次圈子 Agent 的执行计划。",
+		InputData:   cloneAgentMap(run.ContextSnapshot),
+		OutputData:  planData,
+		CreatedAt:   planTime,
+		StartedAt:   &planTime,
+		CompletedAt: &planTime,
+	}
+	if err := s.repo.CreateStep(ctx, planStep); err != nil {
+		return err
+	}
+	planArtifact := &agentdomain.Artifact{
+		ID:             uuid.New(),
+		RunID:          run.ID,
+		StepID:         &planStep.ID,
+		Kind:           "execution_plan",
+		Title:          "执行计划",
+		Content:        formatAgentExecutionPlan(plan),
+		StructuredData: planData,
+		CreatedAt:      planTime,
+	}
+	if err := s.repo.CreateArtifact(ctx, planArtifact); err != nil {
+		return err
+	}
+	s.publishRunEvent(run.ID, "step_completed", planStep.Summary)
+
+	executionStage := plan.findStage("execution")
+	if executionStage == nil {
+		return fmt.Errorf("group agent execution plan missing execution stage")
+	}
+	executionStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
+		return err
+	}
+	executionTime := time.Now()
+	executionStep := &agentdomain.Step{
+		ID:        uuid.New(),
+		RunID:     run.ID,
+		StepIndex: executionStepIndex,
+		Kind:      executionStage.Kind,
+		Title:     executionStage.Title,
+		Status:    agentdomain.StepStatusCompleted,
+		Summary:   executionStage.Summary,
+		OutputData: map[string]any{
+			"tools":    append([]string(nil), executionStage.Tools...),
+			"produces": append([]string(nil), executionStage.Produces...),
+		},
+		CreatedAt:   executionTime,
+		StartedAt:   &executionTime,
+		CompletedAt: &executionTime,
+	}
+	if err := s.repo.CreateStep(ctx, executionStep); err != nil {
+		return err
+	}
+	for _, toolName := range executionStage.Tools {
+		if _, err := s.executeTool(ctx, state, run.ID, &executionStep.ID, toolName); err != nil {
+			return err
+		}
+	}
+
+	artifactStage := plan.findStage("artifact_generation")
+	if artifactStage == nil {
+		return fmt.Errorf("group agent execution plan missing artifact stage")
+	}
+	artifactStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
+		return err
+	}
+	artifactStepTime := time.Now()
+	artifactStep := &agentdomain.Step{
+		ID:        uuid.New(),
+		RunID:     run.ID,
+		StepIndex: artifactStepIndex,
+		Kind:      artifactStage.Kind,
+		Title:     artifactStage.Title,
+		Status:    agentdomain.StepStatusCompleted,
+		Summary:   firstNonEmpty(buildCopilotFallbackText(state.Insights), artifactStage.Summary),
+		OutputData: map[string]any{
+			"tools":         append([]string(nil), artifactStage.Tools...),
+			"produces":      append([]string(nil), artifactStage.Produces...),
+			"insight_count": len(state.Insights),
+		},
+		CreatedAt:   artifactStepTime,
+		StartedAt:   &artifactStepTime,
+		CompletedAt: &artifactStepTime,
+	}
+	if err := s.repo.CreateStep(ctx, artifactStep); err != nil {
+		return err
+	}
+	s.publishRunEvent(run.ID, "step_completed", artifactStep.Summary)
+	for _, insight := range state.Insights {
+		if insight.Title == "" && insight.Summary == "" && len(insight.Bullets) == 0 {
+			continue
+		}
+		artifact := &agentdomain.Artifact{
+			ID:     uuid.New(),
+			RunID:  run.ID,
+			StepID: &artifactStep.ID,
+			Kind:   insight.Kind,
+			Title:  insight.Title,
+			Content: strings.TrimSpace(strings.Join([]string{
+				insight.Summary,
+				formatInsightBullets(insight.Bullets),
+			}, "\n")),
+			StructuredData: map[string]any{
+				"summary": insight.Summary,
+				"bullets": insight.Bullets,
+			},
+			CreatedAt: artifactStepTime,
+		}
+		if err := s.repo.CreateArtifact(ctx, artifact); err != nil {
+			return err
+		}
+	}
+	for _, toolName := range artifactStage.Tools {
+		if _, err := s.executeTool(ctx, state, run.ID, &artifactStep.ID, toolName); err != nil {
+			return err
+		}
+	}
+	draftPatch := state.DraftPatch
+	if len(draftPatch) > 0 {
+		artifact := &agentdomain.Artifact{
+			ID:             uuid.New(),
+			RunID:          run.ID,
+			StepID:         &artifactStep.ID,
+			Kind:           "group_reply_patch",
+			Title:          "圈子行动建议",
+			Content:        "这份产物可在批准后带回圈子页作为行动建议。",
+			StructuredData: draftPatch,
+			CreatedAt:      artifactStepTime,
+		}
+		if err := s.repo.CreateArtifact(ctx, artifact); err != nil {
+			return err
+		}
+	}
+	s.publishRunEvent(run.ID, "artifact_ready", "圈子建议产物已经生成。")
+
+	approvalStage := plan.findStage("approval")
+	if approvalStage == nil {
+		return fmt.Errorf("group agent execution plan missing approval stage")
+	}
+	approvalTime := time.Now()
+	approval := &agentdomain.Approval{
+		ID:         uuid.New(),
+		RunID:      run.ID,
+		StepID:     &artifactStep.ID,
+		ActionType: approvalStage.ApprovalAction,
+		Title:      "保留圈子建议结果",
+		Status:     agentdomain.ApprovalStatusPending,
+		Payload:    draftPatch,
+		CreatedAt:  approvalTime,
+	}
+	if err := s.repo.CreateApproval(ctx, approval); err != nil {
+		return err
+	}
+	runSummary := approvalStage.Summary
+	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusWaitingApproval, runSummary, "", nil); err != nil {
+		return err
+	}
+	if run != nil {
+		run.Status = agentdomain.RunStatusWaitingApproval
+		run.LeaseOwner = ""
+		run.LeaseExpiresAt = nil
+		run.HeartbeatAt = nil
+	}
+	s.publishRunEvent(run.ID, "waiting_approval", runSummary)
+	finalStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
+	if err != nil {
+		return err
+	}
+	finalStep := &agentdomain.Step{
+		ID:        uuid.New(),
+		RunID:     run.ID,
+		StepIndex: finalStepIndex,
+		Kind:      approvalStage.Kind,
+		Title:     approvalStage.Title,
+		Status:    agentdomain.StepStatusCompleted,
+		Summary:   runSummary,
+		OutputData: map[string]any{
+			"approval_action": approvalStage.ApprovalAction,
+		},
+		CreatedAt:   approvalTime,
+		StartedAt:   &approvalTime,
+		CompletedAt: &approvalTime,
+	}
+	if err := s.repo.CreateStep(ctx, finalStep); err != nil {
+		return err
+	}
+	return nil
+}
+
+func buildGroupAgentExecutionPlan(run *agentdomain.Run, contextSummary string) agentExecutionPlan {
+	goal := ""
+	if run != nil {
+		goal = run.Goal
+	}
+	return agentExecutionPlan{
+		Scenario: firstNonEmpty(func() string {
+			if run == nil {
+				return agentdomain.ScenarioGroupAgent
+			}
+			return run.Scenario
+		}(), agentdomain.ScenarioGroupAgent),
+		Goal:           goal,
+		ContextSummary: contextSummary,
+		Stages: []agentExecutionStage{
+			{
+				Name:     "planning",
+				Kind:     "plan",
+				Title:    "生成执行计划",
+				Summary:  "先确认圈子上下文，再进入建议生成与行动方案整理。",
+				Produces: []string{"execution_plan"},
+			},
+			{
+				Name:     "execution",
+				Kind:     "execution",
+				Title:    "执行圈子分析工具",
+				Summary:  "围绕圈子氛围、规则、加入建议和发帖方向生成结构化建议。",
+				Tools:    []string{"generate_group_copilot_artifacts"},
+				Produces: []string{"group_insights"},
+			},
+			{
+				Name:     "artifact_generation",
+				Kind:     "artifact_generation",
+				Title:    "生成圈子建议产物",
+				Summary:  "把圈子建议整理成可展示的结果和行动建议。",
+				Tools:    []string{"build_group_reply_patch"},
+				Produces: []string{"group_artifacts", "group_reply_patch"},
+			},
+			{
+				Name:           "approval",
+				Kind:           "approval",
+				Title:          "确认保留圈子建议",
+				Summary:        "圈子建议已生成，等待你确认是否保留这组结果。",
+				ApprovalAction: "save_group_recommendation",
+				Produces:       []string{"approval_request"},
+			},
+		},
+	}
+}
+
+func buildAgentGroupPageContext(snapshot map[string]any) (*AssistantPageContext, string) {
+	fields := make(map[string]string)
+	for key, value := range snapshot {
+		trimmed := strings.TrimSpace(fmt.Sprint(value))
+		if trimmed == "" || trimmed == "<nil>" {
+			continue
+		}
+		fields[key] = trimmed
+	}
+	groupName := firstNonEmpty(fields["group_name"], "目标圈子")
+	pageContext := &AssistantPageContext{
+		Path:    firstNonEmpty(fields["source_path"], "/groups"),
+		Kind:    "group_detail",
+		Title:   "圈子详情：" + groupName,
+		Summary: "当前任务来自圈子页，适合输出规则摘要、加入建议和适合发什么内容。",
+		Fields:  fields,
+	}
+	parts := []string{"目标圈子：" + groupName}
+	if v := strings.TrimSpace(fields["group_tags"]); v != "" {
+		parts = append(parts, "已有圈子标签")
+	}
+	if v := strings.TrimSpace(fields["group_rules"]); v != "" {
+		parts = append(parts, "已带圈子规则")
+	}
+	if v := strings.TrimSpace(fields["is_member"]); v != "" {
+		parts = append(parts, "成员状态："+v)
+	}
+	return pageContext, strings.Join(parts, "；")
+}
+
+func buildGroupReplyPatch(pageContext *AssistantPageContext, insights []AssistantInsight) map[string]any {
+	if pageContext == nil {
+		return nil
+	}
+	patch := map[string]any{}
+	for _, insight := range insights {
+		switch insight.Kind {
+		case "join_suggestion":
+			patch["join_summary"] = insight.Summary
+		case "posting_ideas":
+			patch["posting_ideas"] = append([]string(nil), insight.Bullets...)
+		case "rules_summary":
+			patch["rules_summary"] = append([]string(nil), insight.Bullets...)
+		}
+	}
+	patch["group_name"] = strings.TrimSpace(strings.TrimPrefix(pageContext.Title, "圈子详情："))
+	patch["source_path"] = pageContext.Path
+	return patch
+}
 func buildAgentPostPageContext(snapshot map[string]any) (*AssistantPageContext, string) {
 	fields := make(map[string]string)
 	if len(snapshot) > 0 {

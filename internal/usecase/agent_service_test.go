@@ -396,6 +396,67 @@ func TestAgentWorkerReclaimsExpiredRun(t *testing.T) {
 	}
 }
 
+func TestGroupAgentGeneratesGroupArtifacts(t *testing.T) {
+	repo := newInMemoryAgentRepo()
+	svc := newAgentService(repo, nil, true)
+	userID := uuid.New()
+
+	detail, err := svc.CreateRun(context.Background(), userID, CreateAgentRunInput{
+		Scenario: agentdomain.ScenarioGroupAgent,
+		Goal:     "这个圈子适合我加入吗？如果加入，适合先发什么内容？",
+		ContextSnapshot: map[string]any{
+			"group_name":         "原创设定研究所",
+			"group_tags":         "设定,世界观,OC",
+			"group_description":  "围绕原创角色设定和世界观长期交流。",
+			"group_rules":        "保持友善，发帖前先看圈规，避免水贴。",
+			"group_announcement": "最近鼓励大家分享设定演化过程。",
+			"member_count":       "128",
+			"post_count":         "456",
+			"is_member":          "未加入",
+			"source_path":        "/groups/demo",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateRun error: %v", err)
+	}
+	if err := svc.ProcessRun(context.Background(), detail.Run.ID, "worker-group", 30*time.Second, 5*time.Second); err != nil {
+		t.Fatalf("ProcessRun error: %v", err)
+	}
+
+	detail, err = svc.GetRunDetail(context.Background(), userID, detail.Run.ID)
+	if err != nil {
+		t.Fatalf("GetRunDetail error: %v", err)
+	}
+	if detail.Run.Status != agentdomain.RunStatusWaitingApproval {
+		t.Fatalf("run status = %q, want waiting_approval", detail.Run.Status)
+	}
+	toolNames := make(map[string]struct{}, len(detail.ToolCalls))
+	for _, item := range detail.ToolCalls {
+		toolNames[item.ToolName] = struct{}{}
+	}
+	for _, expected := range []string{"generate_group_copilot_artifacts", "build_group_reply_patch"} {
+		if _, ok := toolNames[expected]; !ok {
+			t.Fatalf("expected tool %q to be executed, got %+v", expected, detail.ToolCalls)
+		}
+	}
+	foundAtmosphere := false
+	foundGroupPatch := false
+	for _, item := range detail.Artifacts {
+		if item.Kind == "group_atmosphere" {
+			foundAtmosphere = true
+		}
+		if item.Kind == "group_reply_patch" {
+			foundGroupPatch = true
+		}
+	}
+	if !foundAtmosphere {
+		t.Fatalf("expected group_atmosphere artifact")
+	}
+	if !foundGroupPatch {
+		t.Fatalf("expected group_reply_patch artifact")
+	}
+}
+
 func TestAgentServiceCreateRunGeneratesPostArtifacts(t *testing.T) {
 	repo := newInMemoryAgentRepo()
 	svc := newAgentService(repo, nil, false)

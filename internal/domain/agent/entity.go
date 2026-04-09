@@ -45,7 +45,8 @@ const (
 )
 
 const (
-	ScenarioPostAgent = "post_agent"
+	ScenarioPostAgent  = "post_agent"
+	ScenarioGroupAgent = "group_agent"
 )
 
 type Run struct {
