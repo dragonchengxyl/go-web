@@ -39,6 +39,15 @@ function buildInitialForm(searchParams: URLSearchParams): CreateAgentRunInput {
   if (visibility) contextSnapshot.visibility = visibility;
   if (sourcePath) contextSnapshot.source_path = sourcePath;
 
+  if (scenario === "group_agent") {
+    return {
+      title: groupName ? `分析圈子：${groupName}` : "圈子 Agent 任务",
+      goal: "这个圈子适合我加入吗？如果加入，适合先发什么内容？",
+      scenario,
+      context_snapshot: Object.keys(contextSnapshot).length > 0 ? contextSnapshot : undefined,
+    };
+  }
+
   return {
     title: draftTitle ? `润色草稿：${draftTitle}` : "发帖 Agent 任务",
     goal: "请帮我整理这条动态草稿，给出标题、正文润色、标签和可见性建议。",
@@ -203,8 +212,8 @@ function AgentWorkspaceContent() {
           <CardHeader>
             <CardTitle className="text-base text-slate-950">圈子 Agent</CardTitle>
           </CardHeader>
-          <CardContent className="text-sm leading-6 text-slate-500">
-            即将开放。会围绕圈子规则、氛围和发帖方向给出连续执行建议。
+          <CardContent className="text-sm leading-6 text-slate-600">
+            当前可用。会围绕圈子规则、氛围、是否适合加入以及适合发什么内容给出结构化建议。
           </CardContent>
         </Card>
         <Card className="border-slate-200">
@@ -250,8 +259,40 @@ function AgentWorkspaceContent() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-900">当前场景</label>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                发帖 Agent
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, scenario: "post_agent" }))}
+                  className={`rounded-2xl border px-4 py-3 text-left text-sm transition-colors ${
+                    form.scenario === "group_agent"
+                      ? "border-slate-200 bg-white text-slate-500"
+                      : "border-orange-200 bg-orange-50 text-slate-900"
+                  }`}
+                >
+                  <p className="font-medium">发帖 Agent</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">整理标题、正文、标签和可见性建议。</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      scenario: "group_agent",
+                      title: prev.title?.trim() ? prev.title : `分析圈子：${String(prev.context_snapshot?.group_name || "目标圈子")}`,
+                      goal: prev.goal?.trim() && prev.scenario === "group_agent"
+                        ? prev.goal
+                        : "这个圈子适合我加入吗？如果加入，适合先发什么内容？",
+                    }))
+                  }
+                  className={`rounded-2xl border px-4 py-3 text-left text-sm transition-colors ${
+                    form.scenario === "group_agent"
+                      ? "border-orange-200 bg-orange-50 text-slate-900"
+                      : "border-slate-200 bg-white text-slate-500"
+                  }`}
+                >
+                  <p className="font-medium">圈子 Agent</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">分析圈子氛围、规则、加入建议和发帖方向。</p>
+                </button>
               </div>
             </div>
             {hasExternalContext ? (
