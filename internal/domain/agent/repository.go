@@ -12,8 +12,9 @@ type Repository interface {
 	GetRunByID(ctx context.Context, id uuid.UUID) (*Run, error)
 	ListRuns(ctx context.Context, userID uuid.UUID, page, pageSize int) ([]*Run, int64, error)
 	TryStartRun(ctx context.Context, id uuid.UUID, startedAt time.Time) (bool, error)
-	ClaimRunForProcessing(ctx context.Context, id uuid.UUID, now time.Time) (*Run, bool, error)
+	ClaimRunForProcessing(ctx context.Context, id uuid.UUID, workerID string, now time.Time, leaseTTL time.Duration) (*Run, bool, error)
 	ListRunnableRunIDs(ctx context.Context, readyBefore time.Time, limit int) ([]uuid.UUID, error)
+	RenewRunLease(ctx context.Context, id uuid.UUID, workerID string, heartbeatAt, leaseExpiresAt time.Time) error
 	UpdateRun(ctx context.Context, item *Run) error
 	UpdateRunStatus(ctx context.Context, id uuid.UUID, status RunStatus, summary, lastError string, completedAt *time.Time) error
 

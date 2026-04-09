@@ -55,26 +55,38 @@ func (r *inMemoryAgentRepo) ListRuns(_ context.Context, userID uuid.UUID, _, _ i
 }
 
 func (r *inMemoryAgentRepo) TryStartRun(_ context.Context, id uuid.UUID, startedAt time.Time) (bool, error) {
-	item, claimed, err := r.ClaimRunForProcessing(context.Background(), id, startedAt)
+	item, claimed, err := r.ClaimRunForProcessing(context.Background(), id, "legacy", startedAt, 30*time.Second)
 	if err != nil {
 		return false, err
 	}
 	return claimed && item != nil, nil
 }
 
-func (r *inMemoryAgentRepo) ClaimRunForProcessing(_ context.Context, id uuid.UUID, now time.Time) (*agentdomain.Run, bool, error) {
+func (r *inMemoryAgentRepo) ClaimRunForProcessing(_ context.Context, id uuid.UUID, workerID string, now time.Time, leaseTTL time.Duration) (*agentdomain.Run, bool, error) {
 	item, ok := r.runs[id]
 	if !ok {
 		return nil, false, agentdomain.ErrRunNotFound
 	}
-	if item.Status != agentdomain.RunStatusQueued {
+	if leaseTTL <= 0 {
+		leaseTTL = 30 * time.Second
+	}
+	if item.Status == agentdomain.RunStatusQueued {
+		if item.NextRetryAt != nil && item.NextRetryAt.After(now) {
+			return nil, false, nil
+		}
+		item.AttemptCount++
+	} else if item.Status == agentdomain.RunStatusRunning {
+		if item.LeaseExpiresAt == nil || item.LeaseExpiresAt.After(now) {
+			return nil, false, nil
+		}
+	} else {
 		return nil, false, nil
 	}
-	if item.NextRetryAt != nil && item.NextRetryAt.After(now) {
-		return nil, false, nil
-	}
+	leaseExpiresAt := now.Add(leaseTTL)
 	item.Status = agentdomain.RunStatusRunning
-	item.AttemptCount++
+	item.LeaseOwner = workerID
+	item.HeartbeatAt = &now
+	item.LeaseExpiresAt = &leaseExpiresAt
 	item.StartedAt = &now
 	item.CompletedAt = nil
 	item.NextRetryAt = nil
@@ -90,10 +102,15 @@ func (r *inMemoryAgentRepo) ListRunnableRunIDs(_ context.Context, readyBefore ti
 	}
 	ids := make([]uuid.UUID, 0, limit)
 	for id, item := range r.runs {
-		if item.Status != agentdomain.RunStatusQueued {
-			continue
-		}
-		if item.NextRetryAt != nil && item.NextRetryAt.After(readyBefore) {
+		if item.Status == agentdomain.RunStatusQueued {
+			if item.NextRetryAt != nil && item.NextRetryAt.After(readyBefore) {
+				continue
+			}
+		} else if item.Status == agentdomain.RunStatusRunning {
+			if item.LeaseExpiresAt == nil || item.LeaseExpiresAt.After(readyBefore) {
+				continue
+			}
+		} else {
 			continue
 		}
 		ids = append(ids, id)
@@ -102,6 +119,20 @@ func (r *inMemoryAgentRepo) ListRunnableRunIDs(_ context.Context, readyBefore ti
 		}
 	}
 	return ids, nil
+}
+
+func (r *inMemoryAgentRepo) RenewRunLease(_ context.Context, id uuid.UUID, workerID string, heartbeatAt, leaseExpiresAt time.Time) error {
+	item, ok := r.runs[id]
+	if !ok {
+		return agentdomain.ErrRunNotFound
+	}
+	if item.LeaseOwner != workerID || item.Status != agentdomain.RunStatusRunning {
+		return agentdomain.ErrRunNotFound
+	}
+	item.HeartbeatAt = &heartbeatAt
+	item.LeaseExpiresAt = &leaseExpiresAt
+	item.UpdatedAt = heartbeatAt
+	return nil
 }
 
 func (r *inMemoryAgentRepo) UpdateRun(_ context.Context, item *agentdomain.Run) error {
@@ -122,6 +153,9 @@ func (r *inMemoryAgentRepo) UpdateRunStatus(_ context.Context, id uuid.UUID, sta
 	item.Status = status
 	item.LatestSummary = summary
 	item.LastError = lastError
+	item.LeaseOwner = ""
+	item.LeaseExpiresAt = nil
+	item.HeartbeatAt = nil
 	item.UpdatedAt = time.Now()
 	item.CompletedAt = completedAt
 	if lastError != "" {
@@ -270,7 +304,7 @@ func TestAgentWorkerProcessRunGeneratesPostArtifacts(t *testing.T) {
 		t.Fatalf("run status = %q, want queued", detail.Run.Status)
 	}
 
-	if err := svc.ProcessRun(context.Background(), detail.Run.ID); err != nil {
+	if err := svc.ProcessRun(context.Background(), detail.Run.ID, "worker-a", 30*time.Second, 5*time.Second); err != nil {
 		t.Fatalf("ProcessRun error: %v", err)
 	}
 
@@ -307,6 +341,58 @@ func TestAgentWorkerProcessRunGeneratesPostArtifacts(t *testing.T) {
 	}
 	if !foundPlanArtifact {
 		t.Fatalf("expected execution_plan artifact")
+	}
+}
+
+func TestAgentWorkerReclaimsExpiredRun(t *testing.T) {
+	repo := newInMemoryAgentRepo()
+	userID := uuid.New()
+	runID := uuid.New()
+	startedAt := time.Now().Add(-2 * time.Minute)
+	leaseExpiredAt := time.Now().Add(-time.Minute)
+	repo.runs[runID] = &agentdomain.Run{
+		ID:             runID,
+		UserID:         userID,
+		Title:          "过期任务",
+		Goal:           "请帮我整理这条动态草稿",
+		Scenario:       agentdomain.ScenarioPostAgent,
+		Status:         agentdomain.RunStatusRunning,
+		AttemptCount:   1,
+		MaxAttempts:    3,
+		LeaseOwner:     "worker-a",
+		StartedAt:      &startedAt,
+		LeaseExpiresAt: &leaseExpiredAt,
+		CreatedAt:      time.Now().Add(-3 * time.Minute),
+		UpdatedAt:      leaseExpiredAt,
+		ContextSnapshot: map[string]any{
+			"draft_title":   "春日兽设草稿",
+			"draft_content": "最近把角色设定调整了一版，想分享新的配色和情绪氛围。",
+			"group_name":    "原创设定研究所",
+			"visibility":    "公开",
+		},
+	}
+	service := newAgentService(repo, nil, true)
+
+	ids, err := service.ListRunnableRunIDs(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("ListRunnableRunIDs error: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != runID {
+		t.Fatalf("expected expired run to be reclaimable, got %+v", ids)
+	}
+
+	if err := service.ProcessRun(context.Background(), runID, "worker-b", 30*time.Second, 5*time.Second); err != nil {
+		t.Fatalf("ProcessRun error: %v", err)
+	}
+	updated, err := repo.GetRunByID(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("GetRunByID error: %v", err)
+	}
+	if updated.Status != agentdomain.RunStatusWaitingApproval {
+		t.Fatalf("run status = %q, want waiting_approval", updated.Status)
+	}
+	if updated.LeaseOwner != "" {
+		t.Fatalf("lease owner = %q, want cleared", updated.LeaseOwner)
 	}
 }
 

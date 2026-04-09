@@ -622,6 +622,12 @@ func (s *AgentService) executePostAgent(ctx context.Context, run *agentdomain.Ru
 	if err := s.repo.UpdateRunStatus(ctx, run.ID, agentdomain.RunStatusWaitingApproval, runSummary, "", nil); err != nil {
 		return err
 	}
+	if run != nil {
+		run.Status = agentdomain.RunStatusWaitingApproval
+		run.LeaseOwner = ""
+		run.LeaseExpiresAt = nil
+		run.HeartbeatAt = nil
+	}
 	s.publishRunEvent(run.ID, "waiting_approval", runSummary)
 	finalStepIndex, err := s.nextRunStepIndex(ctx, run.ID)
 	if err != nil {
@@ -703,6 +709,9 @@ func (s *AgentService) handleRunExecutionFailure(ctx context.Context, run *agent
 		run.NextRetryAt = &nextRetryAt
 		run.LatestSummary = "任务执行失败，稍后会自动重试。"
 	}
+	run.LeaseOwner = ""
+	run.LeaseExpiresAt = nil
+	run.HeartbeatAt = nil
 	_ = s.repo.UpdateRun(ctx, run)
 
 	stepIndex, stepErr := s.nextRunStepIndex(ctx, run.ID)

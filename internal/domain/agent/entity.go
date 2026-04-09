@@ -60,12 +60,15 @@ type Run struct {
 	LastError       string         `json:"last_error,omitempty"`
 	AttemptCount    int            `json:"attempt_count"`
 	MaxAttempts     int            `json:"max_attempts"`
+	LeaseOwner      string         `json:"lease_owner,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 	StartedAt       *time.Time     `json:"started_at,omitempty"`
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
 	NextRetryAt     *time.Time     `json:"next_retry_at,omitempty"`
 	LastErrorAt     *time.Time     `json:"last_error_at,omitempty"`
+	LeaseExpiresAt  *time.Time     `json:"lease_expires_at,omitempty"`
+	HeartbeatAt     *time.Time     `json:"heartbeat_at,omitempty"`
 }
 
 type Step struct {

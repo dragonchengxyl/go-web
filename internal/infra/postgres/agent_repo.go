@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,13 +30,13 @@ func (r *AgentRepository) CreateRun(ctx context.Context, item *agentdomain.Run) 
 	_, err = r.pool.Exec(ctx, `
 		INSERT INTO agent_runs (
 			id, user_id, title, goal, scenario, status, context_snapshot,
-			latest_summary, last_error, attempt_count, max_attempts,
-			created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
+			latest_summary, last_error, attempt_count, max_attempts, lease_owner,
+			created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at, lease_expires_at, heartbeat_at
 		)
 		VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10, $11,
-			$12, $13, $14, $15, $16, $17
+			$8, $9, $10, $11, $12,
+			$13, $14, $15, $16, $17, $18, $19, $20
 		)
 	`,
 		item.ID,
@@ -49,12 +50,15 @@ func (r *AgentRepository) CreateRun(ctx context.Context, item *agentdomain.Run) 
 		item.LastError,
 		item.AttemptCount,
 		item.MaxAttempts,
+		item.LeaseOwner,
 		item.CreatedAt,
 		item.UpdatedAt,
 		item.StartedAt,
 		item.CompletedAt,
 		item.NextRetryAt,
 		item.LastErrorAt,
+		item.LeaseExpiresAt,
+		item.HeartbeatAt,
 	)
 	return err
 }
@@ -62,8 +66,8 @@ func (r *AgentRepository) CreateRun(ctx context.Context, item *agentdomain.Run) 
 func (r *AgentRepository) GetRunByID(ctx context.Context, id uuid.UUID) (*agentdomain.Run, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, title, goal, scenario, status, context_snapshot,
-		       latest_summary, last_error, attempt_count, max_attempts,
-		       created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
+		       latest_summary, last_error, attempt_count, max_attempts, lease_owner,
+		       created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at, lease_expires_at, heartbeat_at
 		FROM agent_runs
 		WHERE id = $1
 	`, id)
@@ -95,8 +99,8 @@ func (r *AgentRepository) ListRuns(ctx context.Context, userID uuid.UUID, page, 
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, title, goal, scenario, status, context_snapshot,
-		       latest_summary, last_error, attempt_count, max_attempts,
-		       created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
+		       latest_summary, last_error, attempt_count, max_attempts, lease_owner,
+		       created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at, lease_expires_at, heartbeat_at
 		FROM agent_runs
 		WHERE user_id = $1
 		ORDER BY updated_at DESC
@@ -119,30 +123,45 @@ func (r *AgentRepository) ListRuns(ctx context.Context, userID uuid.UUID, page, 
 }
 
 func (r *AgentRepository) TryStartRun(ctx context.Context, id uuid.UUID, startedAt time.Time) (bool, error) {
-	item, claimed, err := r.ClaimRunForProcessing(ctx, id, startedAt)
+	item, claimed, err := r.ClaimRunForProcessing(ctx, id, "legacy", startedAt, 30*time.Second)
 	if err != nil {
 		return false, err
 	}
 	return claimed && item != nil, nil
 }
 
-func (r *AgentRepository) ClaimRunForProcessing(ctx context.Context, id uuid.UUID, now time.Time) (*agentdomain.Run, bool, error) {
+func (r *AgentRepository) ClaimRunForProcessing(ctx context.Context, id uuid.UUID, workerID string, now time.Time, leaseTTL time.Duration) (*agentdomain.Run, bool, error) {
+	if strings.TrimSpace(workerID) == "" {
+		workerID = "agent-worker"
+	}
+	if leaseTTL <= 0 {
+		leaseTTL = 30 * time.Second
+	}
+	leaseExpiresAt := now.Add(leaseTTL)
 	row := r.pool.QueryRow(ctx, `
 		UPDATE agent_runs
 		SET status = 'running',
-		    attempt_count = attempt_count + 1,
-		    updated_at = $2,
-		    started_at = COALESCE(started_at, $2),
+		    attempt_count = CASE
+		        WHEN status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= $3 THEN attempt_count
+		        ELSE attempt_count + 1
+		    END,
+		    lease_owner = $2,
+		    heartbeat_at = $3,
+		    lease_expires_at = $4,
+		    updated_at = $3,
+		    started_at = COALESCE(started_at, $3),
 		    completed_at = NULL,
 		    next_retry_at = NULL,
 		    last_error = ''
 		WHERE id = $1
-		  AND status = 'queued'
-		  AND (next_retry_at IS NULL OR next_retry_at <= $2)
+		  AND (
+		        (status = 'queued' AND (next_retry_at IS NULL OR next_retry_at <= $3))
+		        OR (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= $3)
+		      )
 		RETURNING id, user_id, title, goal, scenario, status, context_snapshot,
-		          latest_summary, last_error, attempt_count, max_attempts,
-		          created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at
-	`, id, now)
+		          latest_summary, last_error, attempt_count, max_attempts, lease_owner,
+		          created_at, updated_at, started_at, completed_at, next_retry_at, last_error_at, lease_expires_at, heartbeat_at
+	`, id, workerID, now, leaseExpiresAt)
 	item, err := scanAgentRun(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -160,8 +179,8 @@ func (r *AgentRepository) ListRunnableRunIDs(ctx context.Context, readyBefore ti
 	rows, err := r.pool.Query(ctx, `
 		SELECT id
 		FROM agent_runs
-		WHERE status = 'queued'
-		  AND (next_retry_at IS NULL OR next_retry_at <= $1)
+		WHERE (status = 'queued' AND (next_retry_at IS NULL OR next_retry_at <= $1))
+		   OR (status = 'running' AND lease_expires_at IS NOT NULL AND lease_expires_at <= $1)
 		ORDER BY created_at ASC
 		LIMIT $2
 	`, readyBefore, limit)
@@ -181,6 +200,25 @@ func (r *AgentRepository) ListRunnableRunIDs(ctx context.Context, readyBefore ti
 	return ids, rows.Err()
 }
 
+func (r *AgentRepository) RenewRunLease(ctx context.Context, id uuid.UUID, workerID string, heartbeatAt, leaseExpiresAt time.Time) error {
+	result, err := r.pool.Exec(ctx, `
+		UPDATE agent_runs
+		SET heartbeat_at = $3,
+		    lease_expires_at = $4,
+		    updated_at = $3
+		WHERE id = $1
+		  AND status = 'running'
+		  AND lease_owner = $2
+	`, id, workerID, heartbeatAt, leaseExpiresAt)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return agentdomain.ErrRunNotFound
+	}
+	return nil
+}
+
 func (r *AgentRepository) UpdateRun(ctx context.Context, item *agentdomain.Run) error {
 	contextJSON, err := marshalAgentJSON(item.ContextSnapshot)
 	if err != nil {
@@ -197,11 +235,14 @@ func (r *AgentRepository) UpdateRun(ctx context.Context, item *agentdomain.Run) 
 		    last_error = $8,
 		    attempt_count = $9,
 		    max_attempts = $10,
-		    updated_at = $11,
-		    started_at = $12,
-		    completed_at = $13,
-		    next_retry_at = $14,
-		    last_error_at = $15
+		    lease_owner = $11,
+		    updated_at = $12,
+		    started_at = $13,
+		    completed_at = $14,
+		    next_retry_at = $15,
+		    last_error_at = $16,
+		    lease_expires_at = $17,
+		    heartbeat_at = $18
 		WHERE id = $1
 	`,
 		item.ID,
@@ -214,11 +255,14 @@ func (r *AgentRepository) UpdateRun(ctx context.Context, item *agentdomain.Run) 
 		item.LastError,
 		item.AttemptCount,
 		item.MaxAttempts,
+		item.LeaseOwner,
 		item.UpdatedAt,
 		item.StartedAt,
 		item.CompletedAt,
 		item.NextRetryAt,
 		item.LastErrorAt,
+		item.LeaseExpiresAt,
+		item.HeartbeatAt,
 	)
 	if err != nil {
 		return err
@@ -235,9 +279,12 @@ func (r *AgentRepository) UpdateRunStatus(ctx context.Context, id uuid.UUID, sta
 		SET status = $2,
 		    latest_summary = $3,
 		    last_error = $4,
+		    lease_owner = '',
 		    updated_at = $5,
 		    completed_at = $6,
 		    next_retry_at = NULL,
+		    lease_expires_at = NULL,
+		    heartbeat_at = NULL,
 		    last_error_at = CASE WHEN $4 <> '' THEN $5 ELSE NULL END
 		WHERE id = $1
 	`, id, string(status), summary, lastError, time.Now(), completedAt)
@@ -508,12 +555,15 @@ func scanAgentRun(row interface{ Scan(dest ...any) error }) (*agentdomain.Run, e
 		&item.LastError,
 		&item.AttemptCount,
 		&item.MaxAttempts,
+		&item.LeaseOwner,
 		&item.CreatedAt,
 		&item.UpdatedAt,
 		&item.StartedAt,
 		&item.CompletedAt,
 		&item.NextRetryAt,
 		&item.LastErrorAt,
+		&item.LeaseExpiresAt,
+		&item.HeartbeatAt,
 	); err != nil {
 		return nil, err
 	}
