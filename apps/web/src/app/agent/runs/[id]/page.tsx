@@ -48,6 +48,12 @@ import {
 import { writeStoredPostDraft } from "@/lib/post-draft";
 import { cn } from "@/lib/utils";
 
+const APPROVAL_STATUS_LABELS: Record<AgentApproval["status"], string> = {
+  pending: "待确认",
+  approved: "已通过",
+  rejected: "已跳过",
+};
+
 function buildReplayHref(run: AgentRun) {
   const params = new URLSearchParams();
   params.set("scenario", run.scenario);
@@ -72,10 +78,10 @@ function StreamBadge({ mode }: { mode: "connecting" | "live" | "fallback" }) {
 
   const label =
     mode === "live"
-      ? "实时流已接通"
+      ? "已同步"
       : mode === "fallback"
-        ? "轮询兜底"
-        : "连接实时流";
+        ? "更新中"
+        : "同步中";
 
   return (
     <span
@@ -97,13 +103,10 @@ function TimelineStepCard({ step }: { step: AgentStep }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/62">
-              Step {step.step_index}
+              步骤 {step.step_index}
             </span>
             <p className="text-sm font-semibold text-white">{step.title}</p>
           </div>
-          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
-            {step.kind}
-          </p>
         </div>
         <AgentStepStatusBadge status={step.status} />
       </div>
@@ -132,11 +135,7 @@ function ToolTraceCard({ toolCall }: { toolCall: AgentToolCall }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">{toolCall.tool_name}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
-              {toolCall.access_level}
-            </span>
-          </div>
+          <p className="mt-2 text-xs text-white/42">工具调用记录</p>
         </div>
         <AgentStepStatusBadge status={toolCall.status} />
       </div>
@@ -186,12 +185,9 @@ function ArtifactCard({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">{artifact.title}</p>
-          <p className="mt-2 text-xs uppercase tracking-[0.16em] text-white/40">
-            {artifact.kind}
-          </p>
         </div>
         <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/58">
-          Artifact
+          结果
         </span>
       </div>
 
@@ -203,7 +199,7 @@ function ArtifactCard({
 
       {!preview && artifact.kind === "draft_patch" ? (
         <p className="mt-4 text-sm leading-6 text-white/58">
-          这份结果用于审批通过后的自动回填，前端不直接展开内部补丁结构。
+          这项结果会在确认后应用到草稿中。
         </p>
       ) : null}
 
@@ -237,19 +233,16 @@ function ApprovalCard({
   return (
     <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
-          {approval.action_type}
-        </span>
-        <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">
-          {approval.status}
+        <span className="rounded-full border border-white/10 bg-white/8 px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] text-white/60">
+          {APPROVAL_STATUS_LABELS[approval.status]}
         </span>
       </div>
       <p className="mt-4 text-sm font-semibold text-white">{approval.title}</p>
       <p className="mt-2 text-sm leading-6 text-white/58">
         {approval.status === "pending"
-          ? "这一步需要你做最终决定。批准后如果存在回填 payload，会自动带回对应页面。"
+          ? "这一步需要你做最终决定。确认后会继续应用这轮结果。"
           : approval.status === "approved"
-            ? "这一轮审批已经通过，相关回填动作已经完成。"
+            ? "这一轮审批已经通过，结果已经处理完成。"
             : "你保留了这轮结果，但不会自动执行回填。"}
       </p>
 
@@ -411,11 +404,11 @@ export default function AgentRunDetailPage() {
                 variant="outline"
                 className="rounded-full border-white/16 bg-white/6 text-white hover:bg-white/10 hover:text-white"
               >
-                <Link href="/agent">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  返回 Agent Studio
-                </Link>
-              </Button>
+                  <Link href="/agent">
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    返回工作台
+                  </Link>
+                </Button>
 
               {run ? (
                 <Button
@@ -460,7 +453,7 @@ export default function AgentRunDetailPage() {
                 </p>
 
                 <div className="mt-6 flex flex-wrap gap-3 text-xs text-white/44">
-                  <span>Run ID {run.id}</span>
+                  <span>任务编号 {run.id}</span>
                   <span>创建于 {formatAgentDateTime(run.created_at)}</span>
                   <span>最近更新 {formatAgentDateTime(run.updated_at)}</span>
                   <span>尝试 {run.attempt_count}/{run.max_attempts}</span>
@@ -468,7 +461,7 @@ export default function AgentRunDetailPage() {
 
                 <div className="mt-6 rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-white">Mission Progress</p>
+                    <p className="text-sm font-semibold text-white">当前进度</p>
                     <span className="text-sm text-white/62">{progress}%</span>
                   </div>
                   <AgentProgressBar value={progress} className="mt-3" />
@@ -505,9 +498,9 @@ export default function AgentRunDetailPage() {
 
           <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
             <AgentSectionHeader
-              eyebrow="Telemetry"
-              title="任务遥测"
-              description="把用户最关心的运行状态、连接状态和下一步动作集中到一列，而不是散在四个面板里。"
+              eyebrow="任务状态"
+              title="运行概览"
+              description="集中查看当前进度、时长和下一步操作。"
             />
 
             {run ? (
@@ -531,26 +524,26 @@ export default function AgentRunDetailPage() {
                     icon={Bot}
                     label="工具轨迹"
                     value={toolCalls.length}
-                    meta="系统为本轮任务记录的工具调用。"
+                    meta="本轮任务使用过的工具次数。"
                     tone="slate"
                   />
                   <AgentMetricCard
                     icon={Sparkles}
                     label="产物数"
                     value={artifacts.length}
-                    meta="文本结果、补丁或其他结构化输出。"
+                    meta="当前可查看的结果数量。"
                     tone="emerald"
                   />
                 </div>
 
                 <div className="mt-6 rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
-                  <p className="text-sm font-semibold text-white">实时信号</p>
+                  <p className="text-sm font-semibold text-white">状态更新</p>
                   <p className="mt-3 text-sm leading-6 text-white/58">
                     {streamMode === "live"
-                      ? "当前已接通实时流，页面会优先接受服务器推送。"
+                      ? "当前状态会持续更新。"
                       : streamMode === "fallback"
-                        ? "实时流不可用，当前依赖轮询自动刷新。"
-                        : "正在尝试接通实时流。"}
+                        ? "当前状态会继续更新，可能会有轻微延迟。"
+                        : "正在同步最新状态。"}
                   </p>
                   {liveEvent?.summary ? (
                     <div className="mt-4 rounded-[18px] border border-white/10 bg-slate-950/40 px-3 py-3 text-sm text-white/70">
@@ -622,7 +615,7 @@ export default function AgentRunDetailPage() {
 
                 <TabsContent value="overview" className="mt-6 space-y-6">
                   <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
-                    <p className="text-sm font-semibold text-white">Mission Brief</p>
+                    <p className="text-sm font-semibold text-white">任务目标</p>
                     <p className="mt-3 text-sm leading-7 text-white/66">
                       {run?.goal || "—"}
                     </p>
@@ -632,7 +625,7 @@ export default function AgentRunDetailPage() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-semibold text-white">结果预览</p>
-                        <span className="text-xs text-white/42">Top {artifactPreview.length}</span>
+                        <span className="text-xs text-white/42">前 {artifactPreview.length} 项</span>
                       </div>
                       {artifactPreview.map((artifact) => (
                         <ArtifactCard key={artifact.id} artifact={artifact} compact />
@@ -651,7 +644,7 @@ export default function AgentRunDetailPage() {
                   <div>
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold text-white">步骤时间线</p>
-                      <span className="text-xs text-white/42">{steps.length} steps</span>
+                      <span className="text-xs text-white/42">{steps.length} 条</span>
                     </div>
                     {steps.length ? (
                       <div className="space-y-4">
@@ -663,7 +656,7 @@ export default function AgentRunDetailPage() {
                       <AgentEmptyState
                         icon={Workflow}
                         title="还没有步骤记录"
-                        description="任务一旦真正被 worker 接手，时间线会从这里开始向前推进。"
+                        description="任务开始推进后，时间线会从这里展开。"
                       />
                     )}
                   </div>
@@ -671,7 +664,7 @@ export default function AgentRunDetailPage() {
                   <div>
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold text-white">工具轨迹</p>
-                      <span className="text-xs text-white/42">{toolCalls.length} calls</span>
+                      <span className="text-xs text-white/42">{toolCalls.length} 次</span>
                     </div>
                     {toolCalls.length ? (
                       <div className="space-y-4">
@@ -693,7 +686,7 @@ export default function AgentRunDetailPage() {
                   <div>
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold text-white">结构化产物</p>
-                      <span className="text-xs text-white/42">{artifacts.length} items</span>
+                      <span className="text-xs text-white/42">{artifacts.length} 项</span>
                     </div>
                     {artifacts.length ? (
                       <div className="space-y-4">
@@ -713,7 +706,7 @@ export default function AgentRunDetailPage() {
                   <div>
                     <div className="mb-4 flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold text-white">审批记录</p>
-                      <span className="text-xs text-white/42">{approvals.length} decisions</span>
+                      <span className="text-xs text-white/42">{approvals.length} 条</span>
                     </div>
                     {approvals.length ? (
                       <div className="space-y-4">
@@ -735,7 +728,7 @@ export default function AgentRunDetailPage() {
                       <AgentEmptyState
                         icon={ShieldCheck}
                         title="暂时没有审批节点"
-                        description="如果这轮任务涉及回填或外部动作，系统会在这里等待你拍板。"
+                        description="如果这轮任务需要你确认结果，这里会优先出现相应动作。"
                       />
                     )}
                   </div>
@@ -747,9 +740,9 @@ export default function AgentRunDetailPage() {
           <div className="space-y-6">
             <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
               <AgentSectionHeader
-                eyebrow="Decision Gate"
+                eyebrow="下一步"
                 title="下一步动作"
-                description="把需要用户做决定的节点固定到侧边栏，用户不需要在长页面里找审批按钮。"
+                description="需要你确认的结果会优先出现在这里。"
               />
 
               <div className="mt-6">
@@ -791,16 +784,16 @@ export default function AgentRunDetailPage() {
 
             <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
               <AgentSectionHeader
-                eyebrow="Context Pack"
+                eyebrow="上下文"
                 title="关联上下文"
-                description="把任务为什么会这样执行说清楚，用户才能建立信任。"
+                description="当前任务会参考这些信息。"
               />
 
               <div className="mt-6 rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
                 {run?.context_snapshot ? (
                   <>
                     <p className="text-sm text-white/60">
-                      这轮任务会读取以下上下文线索：
+                      这轮任务会参考以下信息：
                     </p>
                     <AgentContextChips snapshot={run.context_snapshot} className="mt-4" />
                   </>
@@ -814,9 +807,9 @@ export default function AgentRunDetailPage() {
 
             <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
               <AgentSectionHeader
-                eyebrow="Operator Notes"
+                eyebrow="提示"
                 title="当前任务值得注意的点"
-                description="让用户在一眼之内知道这轮任务最重要的状态，而不是自己读原始日志。"
+                description="先看这里，可以更快判断当前情况。"
               />
 
               <div className="mt-6 grid gap-3">

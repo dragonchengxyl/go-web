@@ -506,9 +506,9 @@ export function calculateRunProgress(
 }
 
 export function getRunStatusNarrative(status: AgentRunStatus) {
-  if (status === "queued") return "任务已收下，正在等待 worker 接手。";
-  if (status === "running") return "Agent 正在执行步骤、调用工具并生成产物。";
-  if (status === "waiting_approval") return "Agent 已经完成核心推理，当前等待你的最终决定。";
+  if (status === "queued") return "任务已创建，正在等待开始。";
+  if (status === "running") return "任务正在处理中，结果会逐步更新。";
+  if (status === "waiting_approval") return "结果已准备好，等待你确认下一步。";
   if (status === "completed") return "本轮任务已经交付完成，结果可继续复用。";
   if (status === "failed") return "本轮任务在执行过程中遇到错误，需要查看原因。";
   return "任务已被停止，当前不会继续推进。";

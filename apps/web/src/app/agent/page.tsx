@@ -342,18 +342,17 @@ function AgentWorkspaceContent() {
             <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/70">
-                  Agent Studio
+                  Agent
                 </p>
                 <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  专业的任务型 Agent 前端，不应该长得像后台列表。
+                  用 Agent 推进你的当前任务
                 </h1>
                 <p className="mt-5 max-w-2xl text-base leading-8 text-white/66">
-                  这里会把任务目标、上下文挂载、执行过程、结果审批和回填整合成一条面向用户的工作流。
-                  登录后可以直接启动你的第一轮 Agent 任务。
+                  登录后可以创建任务、查看进度、审阅结果，并在需要时继续完成下一步。
                 </p>
                 <div className="mt-8 flex flex-wrap gap-3">
                   <Button asChild className="h-11 rounded-full bg-white text-slate-950 hover:bg-white/90">
-                    <Link href="/login">登录并进入 Agent Studio</Link>
+                    <Link href="/login">登录后开始</Link>
                   </Button>
                   <Button
                     asChild
@@ -367,30 +366,30 @@ function AgentWorkspaceContent() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <AgentMetricCard
                   icon={Radar}
-                  label="实时执行"
-                  value="Live"
-                  meta="任务会自动刷新，不用盯着请求转圈。"
+                  label="状态同步"
+                  value="自动更新"
+                  meta="你可以随时看到当前进度。"
                   tone="cyan"
                 />
                 <AgentMetricCard
                   icon={Sparkles}
-                  label="审批回填"
-                  value="Human Gate"
-                  meta="Agent 生成结果后，最后一步始终交给用户决定。"
+                  label="结果确认"
+                  value="由你决定"
+                  meta="需要继续应用结果时再确认。"
                   tone="amber"
                 />
                 <AgentMetricCard
                   icon={ShieldCheck}
-                  label="Worker 驱动"
-                  value="Async"
-                  meta="运行不挂在 Web 请求里，页面只是控制台。"
+                  label="快速开始"
+                  value="场景化"
+                  meta="按目标选择合适的 Agent。"
                   tone="emerald"
                 />
                 <AgentMetricCard
                   icon={Workflow}
-                  label="作品集级别"
-                  value="UX First"
-                  meta="界面围绕任务体验组织，而不是后台字段堆叠。"
+                  label="任务记录"
+                  value="集中查看"
+                  meta="最近运行和结果都在这里。"
                   tone="slate"
                 />
               </div>
@@ -414,24 +413,23 @@ function AgentWorkspaceContent() {
             <div className="grid gap-8 xl:grid-cols-[1.02fr_0.98fr]">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200/70">
-                  Autonomous Workflow
+                  当前任务
                 </p>
                 <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  Agent Studio
+                  Agent 工作台
                 </h1>
                 <p className="mt-5 max-w-2xl text-base leading-8 text-white/66">
-                  这里不是“一个后台页加几个状态 badge”。它应该像真正的用户工作台一样，
-                  帮用户发起任务、理解执行进度、看懂结果，并在关键节点做出决定。
+                  选择场景，补充目标，让 Agent 帮你推进当前任务。
                 </p>
                 <div className="mt-6 flex flex-wrap gap-2.5">
                   <span className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs text-white/74">
-                    Worker-backed
+                    创建任务
                   </span>
                   <span className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs text-white/74">
-                    Live Execution Feed
+                    查看进度
                   </span>
                   <span className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs text-white/74">
-                    Human Approval Gate
+                    审阅结果
                   </span>
                 </div>
                 {form.context_snapshot ? (
@@ -480,9 +478,9 @@ function AgentWorkspaceContent() {
 
           <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
             <AgentSectionHeader
-              eyebrow="Portfolio-Ready"
+              eyebrow="可用场景"
               title="当前可调度的 Agent 能力"
-              description="以场景为中心组织，而不是把用户扔进一堆字段。现在先把发帖和圈子体验做深，活动 Agent 预留展示位。"
+              description="根据当前目标选择合适的 Agent。"
             />
             <div className="mt-6 grid gap-3">
               {showcaseItems.map((item) => {
@@ -541,7 +539,7 @@ function AgentWorkspaceContent() {
             <AgentSectionHeader
               eyebrow={selectedScenario.eyebrow}
               title="启动一轮新的 Agent 任务"
-              description="先选场景，再描述你真正想让 Agent 完成什么。界面会把它包装成一份更像任务简报的发起面板。"
+              description="先选场景，再描述你希望 Agent 帮你完成什么。"
             />
 
             <div className="mt-6 grid gap-3 lg:grid-cols-3">
@@ -622,16 +620,16 @@ function AgentWorkspaceContent() {
                 </div>
 
                 <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
-                  <p className="text-sm font-semibold text-white">工作方式</p>
+                  <p className="text-sm font-semibold text-white">进行方式</p>
                   <div className="mt-4 space-y-4">
                     <div className="flex gap-3">
                       <div className="mt-1 rounded-full border border-white/10 bg-white/8 p-2 text-cyan-200">
                         <Bot className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white">1. 接收任务简报</p>
+                        <p className="text-sm font-medium text-white">1. 明确任务目标</p>
                         <p className="mt-1 text-sm leading-6 text-white/56">
-                          读取标题、目标和外部上下文，先确定这一轮的范围和输出。
+                          先确认标题、目标和当前上下文。
                         </p>
                       </div>
                     </div>
@@ -640,9 +638,9 @@ function AgentWorkspaceContent() {
                         <Workflow className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white">2. 后台执行并生成产物</p>
+                        <p className="text-sm font-medium text-white">2. 生成结果</p>
                         <p className="mt-1 text-sm leading-6 text-white/56">
-                          Worker 会持续更新步骤、工具轨迹和结构化结果，而不是卡在一个请求里。
+                          运行过程中会逐步更新状态、步骤和结果。
                         </p>
                       </div>
                     </div>
@@ -651,9 +649,9 @@ function AgentWorkspaceContent() {
                         <ShieldCheck className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white">3. 把最终决定交还给用户</p>
+                        <p className="text-sm font-medium text-white">3. 审阅并确认</p>
                         <p className="mt-1 text-sm leading-6 text-white/56">
-                          结果回填前必须经过用户审阅，这一步是 Agent 体验里最重要的可信度节点。
+                          如果需要继续应用结果，你可以在最后一步确认。
                         </p>
                       </div>
                     </div>
@@ -679,7 +677,7 @@ function AgentWorkspaceContent() {
                   </span>
                 ) : (
                   <span>
-                    任务会进入独立 worker 执行，详情页会持续展示执行过程和下一步动作。
+                    创建后可在详情页查看状态、结果和下一步动作。
                   </span>
                 )}
               </div>
@@ -701,9 +699,9 @@ function AgentWorkspaceContent() {
           <div className="space-y-6">
             <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
               <AgentSectionHeader
-                eyebrow="Run Board"
+                eyebrow="最近任务"
                 title="运行板"
-                description="优先把需要关注的任务放到前面，不让用户在一长串历史记录里找状态。"
+                description="需要处理的任务会优先出现在前面。"
               />
 
               <Tabs defaultValue="attention" className="mt-6">
@@ -759,7 +757,7 @@ function AgentWorkspaceContent() {
                   ) : null}
                   {!isLoading && !archiveRuns.length ? (
                     <div className="rounded-[24px] border border-dashed border-white/12 bg-white/5 px-4 py-5 text-sm text-white/56">
-                      历史运行还很少。完成几轮真实任务之后，这里会成为你的 Agent 工作记录。
+                      还没有历史记录。完成更多任务后可以在这里统一查看。
                     </div>
                   ) : null}
                   {archiveRuns.map((run) => (
@@ -767,34 +765,6 @@ function AgentWorkspaceContent() {
                   ))}
                 </TabsContent>
               </Tabs>
-            </AgentSurface>
-
-            <AgentSurface className="px-6 py-7 sm:px-8 sm:py-8">
-              <AgentSectionHeader
-                eyebrow="Experience Notes"
-                title="为什么这更像专业 Agent"
-                description="界面不再围绕后台字段摆放，而是围绕用户最关心的 3 件事：怎么发起、现在发生了什么、接下来要做什么。"
-              />
-              <div className="mt-6 grid gap-3">
-                <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
-                  <p className="text-sm font-semibold text-white">发起层是任务简报，不是技术字段</p>
-                  <p className="mt-2 text-sm leading-6 text-white/56">
-                    用户看到的是场景、目标、上下文和交付预期，而不是一堆原始参数。
-                  </p>
-                </div>
-                <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
-                  <p className="text-sm font-semibold text-white">执行层是实时可理解的运行板</p>
-                  <p className="mt-2 text-sm leading-6 text-white/56">
-                    当前状态、等待你决策的任务和历史运行分区展示，避免用户在信息噪声里找重点。
-                  </p>
-                </div>
-                <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
-                  <p className="text-sm font-semibold text-white">结果层明确强调审批与回填</p>
-                  <p className="mt-2 text-sm leading-6 text-white/56">
-                    Agent 能自动做很多事，但真正的产品可信度来自“最后一步交给用户决定”。
-                  </p>
-                </div>
-              </div>
             </AgentSurface>
           </div>
         </section>
@@ -813,7 +783,7 @@ export default function AgentWorkspacePage() {
             <AgentSurface className="px-6 py-8 sm:px-8">
               <div className="flex items-center gap-2 text-sm text-white/60">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                正在加载 Agent Studio
+                正在加载
               </div>
             </AgentSurface>
           </div>
